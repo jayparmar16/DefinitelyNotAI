@@ -101,3 +101,31 @@ def test_a_reused_connection_survives_an_early_answer_with_an_unread_body():
         assert second.status == 204
     finally:
         server.shutdown()
+
+
+def test_agent_calls_retry_only_while_the_runtime_is_starting():
+    from botocore.exceptions import ClientError
+
+    from askwri.api.server import invoke_agent
+
+    def error(code, message):
+        return ClientError({"Error": {"Code": code, "Message": message}}, "InvokeAgentRuntime")
+
+    class Runtime:
+        def __init__(self, failures):
+            self.failures, self.calls = list(failures), 0
+
+        def invoke_agent_runtime(self, **request):
+            self.calls += 1
+            if self.failures:
+                raise self.failures.pop(0)
+            return {"ok": request}
+
+    starting = error("RuntimeClientError", "Received error (502) from runtime.")
+    runtime = Runtime([starting, starting])
+    assert invoke_agent(runtime, sleep=lambda s: None, x=1) == {"ok": {"x": 1}}
+    assert runtime.calls == 3
+    with pytest.raises(ClientError):  # anything else fails at once
+        invoke_agent(Runtime([error("AccessDeniedException", "no")]), sleep=lambda s: None)
+    with pytest.raises(ClientError):  # and starting gives up after a few tries
+        invoke_agent(Runtime([starting] * 9), sleep=lambda s: None)

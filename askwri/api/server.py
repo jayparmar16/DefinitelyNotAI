@@ -11,17 +11,40 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 import boto3
+from botocore.exceptions import ClientError
 
 DOWNLOAD_SECONDS = 300  # the design's 5-minute presigned link
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{33,100}$")  # AgentCore runtime session IDs: 33+ chars
 PDF_KEY = re.compile(r"^raw/[^/]+\.pdf$")
 MODES, FORMATS = {"quick", "deep"}, {"summary", "issue-brief", "talking-points"}
 log = logging.getLogger("askwri.api")
+STARTING_RETRIES, STARTING_WAIT_SECONDS = 4, 2
+
+
+def invoke_agent(agentcore, *, sleep=time.sleep, **request) -> dict:
+    """InvokeAgentRuntime, retried while the session's runtime is still starting.
+
+    A call that arrives while another call (the UI's warm-up) is starting the same session's
+    runtime gets a 502 from it. Nothing has been sent to the browser yet, so retrying is safe.
+    """
+    for attempt in range(STARTING_RETRIES):
+        try:
+            return agentcore.invoke_agent_runtime(**request)
+        except ClientError as error:
+            starting = error.response["Error"]["Code"] == "RuntimeClientError" and "(502)" in str(
+                error
+            )
+            if not starting or attempt == STARTING_RETRIES - 1:
+                raise
+            log.info("runtime still starting; retry %d", attempt + 1)
+            sleep(STARTING_WAIT_SECONDS)
+    raise AssertionError("unreachable")
 
 
 class BadRequest(Exception):
@@ -175,11 +198,18 @@ class Handler(BaseHTTPRequestHandler):
         except (BadRequest, ValueError) as error:
             self._json(400, {"error": str(error)})
             return
-        response = self.api.agentcore.invoke_agent_runtime(
-            agentRuntimeArn=self.api.runtime_arn,
-            runtimeSessionId=payload["sessionId"],
-            payload=json.dumps(payload).encode(),
-        )
+        try:
+            response = invoke_agent(
+                self.api.agentcore,
+                agentRuntimeArn=self.api.runtime_arn,
+                runtimeSessionId=payload["sessionId"],
+                payload=json.dumps(payload).encode(),
+            )
+        except ClientError as error:
+            # Answer with CORS headers, or the browser only reports "Failed to fetch".
+            log.error("agent call failed: %s", error)
+            self._json(502, {"error": "The AskWRI agent didn't answer. Please try again."})
+            return
         self.send_response(200)
         self._cors()
         self.send_header("Content-Type", "text/event-stream")
@@ -207,11 +237,17 @@ class Handler(BaseHTTPRequestHandler):
         except (BadRequest, ValueError) as error:
             self._json(400, {"error": str(error)})
             return
-        response = self.api.agentcore.invoke_agent_runtime(
-            agentRuntimeArn=self.api.runtime_arn,
-            runtimeSessionId=session,
-            payload=json.dumps({"warmup": True}).encode(),
-        )
+        try:
+            response = invoke_agent(
+                self.api.agentcore,
+                agentRuntimeArn=self.api.runtime_arn,
+                runtimeSessionId=session,
+                payload=json.dumps({"warmup": True}).encode(),
+            )
+        except ClientError as error:
+            log.error("warm-up failed: %s", error)
+            self._json(502, {"error": "warm-up failed"})
+            return
         response["response"].read()
         self._json(200, {"status": "warm"})
 
