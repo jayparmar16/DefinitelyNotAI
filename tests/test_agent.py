@@ -279,3 +279,40 @@ def iter_return(value):
     """A generator that yields nothing and returns value (stands in for a loop step)."""
     return value
     yield
+
+
+class FakeGuardrail:
+    """Intervenes on any answer text containing 'diseases'."""
+
+    def apply_guardrail(self, **request):
+        answer = request["content"][2]["text"]["text"]
+        return {"action": "GUARDRAIL_INTERVENED" if "diseases" in answer else "NONE"}
+
+
+def test_grounding_check_drops_only_the_failing_paragraph(monkeypatch):
+    draft = {
+        "answerable": True,
+        "paragraphs": [
+            {"sentences": [{"text": "Cool roofs lowered surface heat.", "passages": ["P1"]}]},
+            {"sentences": [{"text": "They also cured all diseases.", "passages": ["P1"]}]},
+        ],
+    }
+    fake_models(monkeypatch, draft, {0, 1})
+    settings = Settings(
+        relevance_threshold=0.1,
+        quick_rounds=2,
+        deep_rounds=3,
+        guardrail_id="g",
+        guardrail_version="2",
+    )
+    agent = Agent(
+        Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=FakeGuardrail()), settings
+    )
+    events = list(agent.run({"question": "q"}))
+    answer = events[-1]["answer"]
+    assert answer["paragraphs"] == ["Cool roofs lowered surface heat [1]."]
+    assert (answer["claimsTotal"], answer["claimsVerified"]) == (2, 1)
+    verify = next(
+        e for e in events if e["type"] == "step" and e["id"] == "verify" and e["status"] == "done"
+    )
+    assert verify["detail"] == "1 part removed by the grounding check"

@@ -8,6 +8,7 @@ planning and retries once; Deep research plans sub-questions and retries up to i
 import os
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from askwri.agent import llm
@@ -486,15 +487,29 @@ class Agent:
                 "verify", f"Verified 0 of {len(claims)} claims", "done", "nothing to answer with"
             )
             return groups
-        if self.settings.guardrail_id and not self._grounded(question, groups, labels):
+        dropped = 0
+        if self.settings.guardrail_id:
+            # Each paragraph or key point is checked against its own passages, so one loosely
+            # worded part can't sink every verified one with it.
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                grounded = list(pool.map(lambda g: self._grounded(question, [g], labels), groups))
+            dropped = grounded.count(False)
+            groups = [g for g, ok in zip(groups, grounded, strict=True) if ok]
+            kept = sum(len(g) for g in groups)
+        if not groups:
             yield step(
                 "verify",
-                f"Verified {kept} of {len(claims)} claims",
+                f"Verified 0 of {len(claims)} claims",
                 "done",
                 "grounding check failed: answer not shown",
             )
-            return []
-        yield step("verify", f"Verified {kept} of {len(claims)} claims", "done")
+            return groups
+        detail = (
+            f"{dropped} part{'s' if dropped != 1 else ''} removed by the grounding check"
+            if dropped
+            else None
+        )
+        yield step("verify", f"Verified {kept} of {len(claims)} claims", "done", detail)
         return groups
 
     def _grounded(self, question, groups, labels) -> bool:
