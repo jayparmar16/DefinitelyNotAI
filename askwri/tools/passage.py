@@ -9,7 +9,7 @@ SQL = """
 SELECT c.chunk_id, c.seq, c.page, c.page_end, c.printed_page, c.printed_page_end, c.section,
        c.kind, c.quotable, c.content, d.doc_id, d.title, d.url, d.doi, d.year,
        d.date_confidence, d.pub_type, d.office, d.authors, d.language
-FROM chunks c JOIN documents d USING (doc_id)
+FROM chunks_v c JOIN documents_v d USING (doc_id)
 WHERE c.doc_id = (SELECT doc_id FROM chunks WHERE chunk_id = %(chunk_id)s)
   AND c.seq BETWEEN (SELECT seq FROM chunks WHERE chunk_id = %(chunk_id)s) - %(n)s
                 AND (SELECT seq FROM chunks WHERE chunk_id = %(chunk_id)s) + %(n)s

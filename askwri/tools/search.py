@@ -21,8 +21,8 @@ RRF_K = 60  # reciprocal rank fusion constant: score = sum of 1 / (RRF_K + rank)
 # work in progress. Small enough to break near-ties, never to beat a clearly better passage.
 TYPE_WEIGHTS = {"Report": 1.10, "Technical note": 1.05, "Working paper": 0.95}
 
-# Both searches apply the same document filters. Keyword terms are OR-ed: the 'simple'
-# configuration keeps every word, so AND-ing a question's words would rarely match anything.
+# Both searches apply the same document filters. Keyword terms are OR-ed: AND-ing every word of
+# a question would rarely match anything. 'english' matches the pipeline's tsv (stemmed).
 FILTERS = """
   AND (%(year_from)s::int IS NULL OR d.year >= %(year_from)s OR (%(include_undated)s AND d.year IS NULL))
   AND (%(year_to)s::int IS NULL OR d.year <= %(year_to)s OR (%(include_undated)s AND d.year IS NULL))
@@ -36,17 +36,17 @@ FILTERS = """
 SQL = f"""
 WITH q AS (
   SELECT CAST(%(embedding)s AS vector) AS e,
-         replace(plainto_tsquery('simple', %(query)s)::text, '&', '|')::tsquery AS t
+         replace(plainto_tsquery('english', %(query)s)::text, '&', '|')::tsquery AS t
 ),
 vec AS (
   SELECT c.chunk_id, row_number() OVER (ORDER BY c.embedding <=> q.e) AS r
-  FROM chunks c JOIN documents d USING (doc_id), q
+  FROM chunks c JOIN documents_v d USING (doc_id), q
   WHERE true {FILTERS}
   ORDER BY c.embedding <=> q.e LIMIT {CANDIDATES}
 ),
 kw AS (
   SELECT c.chunk_id, row_number() OVER (ORDER BY ts_rank_cd(c.tsv, q.t) DESC) AS r
-  FROM chunks c JOIN documents d USING (doc_id), q
+  FROM chunks c JOIN documents_v d USING (doc_id), q
   WHERE c.tsv @@ q.t {FILTERS}
   ORDER BY ts_rank_cd(c.tsv, q.t) DESC LIMIT {CANDIDATES}
 ),
@@ -59,12 +59,12 @@ fused AS (
 )
 SELECT f.fused_score, f.by_meaning, f.by_keyword,
        c.chunk_id, c.doc_id, c.page, c.page_end, c.printed_page, c.printed_page_end, c.section,
-       c.kind, c.quotable, c.address, c.content,
-       ts_headline('simple', c.content, (SELECT t FROM q),
+       c.kind, c.quotable, c.address, c.content, c.description,
+       ts_headline('english', c.content, (SELECT t FROM q),
                    'MaxFragments=0, StartSel=«, StopSel=»') AS matched,
        d.title, d.url, d.doi, d.year, d.date_source, d.date_confidence, d.pub_type, d.office,
        d.topic, d.label_source, d.language, d.pdf_key
-FROM fused f JOIN chunks c USING (chunk_id) JOIN documents d USING (doc_id)
+FROM fused f JOIN chunks_v c USING (chunk_id) JOIN documents_v d USING (doc_id)
 ORDER BY f.fused_score DESC
 LIMIT {RERANK_POOL}
 """
@@ -151,7 +151,13 @@ def rerank(query: str, rows: list[dict], k: int, client=None) -> list[tuple[dict
                 "type": "INLINE",
                 "inlineDocumentSource": {
                     "type": "TEXT",
-                    "textDocument": {"text": f"{row['address']}\n\n{row['content']}"},
+                    "textDocument": {
+                        "text": "\n\n".join(
+                            part
+                            for part in (row["address"], row.get("description"), row["content"])
+                            if part
+                        )
+                    },
                 },
             }
             for row in rows

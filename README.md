@@ -219,15 +219,21 @@ terraform plan -out=plan.tfplan && terraform apply plan.tfplan
 cd .. && uv run python db/apply_schema.py     # tables, indexes and database users
 ```
 
-**Load documents.** `askwri.load` reads the ingestion pipeline's output folder (the one
-`python -m askwri.ingest ... --out <dir>` writes), stores each PDF in the corpus bucket under
-`raw/`, embeds every chunk and writes documents and chunks through the Data API. Rerunning
-replaces a document's chunks, so after an ingestion change, re-ingest and load again.
+**Load documents.** The ingestion pipeline loads the corpus (see "Load the corpus into
+Aurora" above). In the team account, run its loader directly rather than
+`scripts/run-pipeline.sh`, which runs `terraform apply` without a plan when it thinks
+resources are missing:
 
 ```sh
-ASKWRI_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0 \
-  uv run python -m askwri.load <ingest out dir> --pdfs <folder with the source PDFs>
+uv run python db/apply_schema.py
+CORPUS_BUCKET=askwri-corpus-<account id> uv run python -m askwri.ingest.load <pdf folders>
 ```
+
+The agent's tools read the pipeline's tables through two views in `db/schema.sql`
+(`documents_v`, `chunks_v`) that add the page, the "title › section" address, the publication
+type (from the WRI DOI, else the sorter's type) and the date confidence. Questions are embedded
+with Cohere Embed v4 (`ASKWRI_EMBEDDING_MODEL=us.cohere.embed-v4:0`), as the pipeline embeds
+passages.
 
 **Link documents.** After loading, rebuild the citation links between documents (a document's
 DOI, wri.org address or title found in another's text, with the sentence, page and a relation

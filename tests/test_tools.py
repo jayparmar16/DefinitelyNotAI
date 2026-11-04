@@ -162,3 +162,27 @@ def test_number_check_catches_changed_and_dropped_numbers():
 def test_cache_key_depends_on_language_and_text():
     assert cache_key("hello", "es") != cache_key("hello", "pt")
     assert cache_key("hello", "es") == cache_key("hello", "es")
+
+
+def test_query_embeddings_ask_cohere_for_search_queries_in_batches_of_96(monkeypatch):
+    import io
+    import json
+
+    from askwri.embed import embed
+
+    monkeypatch.setenv("ASKWRI_EMBEDDING_MODEL", "us.cohere.embed-v4:0")
+    calls = []
+
+    class Bedrock:
+        def invoke_model(self, modelId, body):
+            request = json.loads(body)
+            calls.append((modelId, request["input_type"], len(request["texts"])))
+            vectors = [[float(len(text))] for text in request["texts"]]
+            return {"body": io.BytesIO(json.dumps({"embeddings": {"float": vectors}}).encode())}
+
+    vectors = embed([f"q{i}" for i in range(100)], Bedrock())
+    assert calls == [
+        ("us.cohere.embed-v4:0", "search_query", 96),
+        ("us.cohere.embed-v4:0", "search_query", 4),
+    ]
+    assert len(vectors) == 100 and vectors[0] == [2.0]

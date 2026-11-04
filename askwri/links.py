@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import boto3
 
 from askwri.agent import llm
-from askwri.load import CLUSTER, DATABASE, SECRET, data_api_parameters
+from askwri.ingest.load import CLUSTER, DATABASE, SECRET
 
 RELATIONS = ("extends", "uses_data_or_method", "supports", "contrasts", "updates", "background")
 MIN_TITLE_WORDS = 3  # "Roots of Prosperity" is distinctive; two words would match by chance
@@ -156,6 +156,19 @@ def label_links(client, links: list[Link], titles: dict[str, str]) -> list[dict]
     return labels
 
 
+def data_api_parameters(row: dict) -> list[dict]:
+    """Encode a row as RDS Data API parameters: None is SQL NULL, ints keep their type."""
+
+    def value(item):
+        if item is None:
+            return {"isNull": True}
+        if isinstance(item, int) and not isinstance(item, bool):
+            return {"longValue": item}
+        return {"stringValue": str(item)}
+
+    return [{"name": name, "value": value(item)} for name, item in row.items()]
+
+
 def select(data_api, arns: dict, sql: str) -> list[dict]:
     """Run a query and return its rows as dicts, by column name."""
     response = data_api.execute_statement(**arns, sql=sql, includeResultMetadata=True)
@@ -186,7 +199,7 @@ def main() -> int:
         page = select(
             data_api,
             arns,
-            "SELECT chunk_id, doc_id, page, section, content FROM chunks "
+            "SELECT chunk_id, doc_id, page, section, content FROM chunks_v "
             f"ORDER BY chunk_id LIMIT 300 OFFSET {offset}",
         )
         chunks += page

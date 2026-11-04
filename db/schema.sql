@@ -1,73 +1,64 @@
 -- AskWRI tables and indexes on askwri-db. Safe to rerun: python3 db/apply_schema.py
 -- Statements end with ";" at the end of a line; the apply script splits on that.
--- Columns follow the ingestion pipeline's records (askwri/ingest: Chunk and the catalog row),
--- so its output loads without renaming; db/load.py does the mapping.
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS documents (
-  doc_id text PRIMARY KEY,            -- the ingestion pipeline's document ID
+  doc_id text PRIMARY KEY,            -- slug of the PDF's file name, e.g. "critical-minerals-india"
+  file_sha256 text UNIQUE NOT NULL,
+  pdf_key text NOT NULL,              -- S3 key of the stored PDF: the citation fallback
   title text NOT NULL,
-  url text,                           -- wri.org page, checked to resolve ("link" in ingestion)
-  doi text,                           -- the document's own WRI DOI, when it prints one
-  file_sha256 text UNIQUE NOT NULL,   -- always stored, to catch the same PDF arriving twice
-  pdf_key text NOT NULL,              -- S3 key of the stored PDF in the corpus bucket (raw/...)
-  year int,
-  pub_date date,
-  date_source text NOT NULL CHECK (date_source IN ('wri.org', 'manifest', 'printed', 'file_metadata', 'none')),
-  date_confidence text NOT NULL CHECK (date_confidence IN ('high', 'low', 'undated')),
-  pub_type text,                      -- WRI's type (Report, Issue brief, ...) or the labeler's reading
-  office text,                        -- WRI (global), WRI Brasil, WRI México, ...
-  topic text,                         -- one of WRI's 11 topics, or 'none'
+  label_source text NOT NULL,         -- 'wri.org', 'model' or 'no page'
+  url text,                           -- checked wri.org page
+  doi text,
+  topic text,                         -- one of the 11 topics, 'none', or null
   topic_source text,                  -- 'wri.org' or 'model'
-  label_source text NOT NULL,         -- where the labels came from: 'wri.org', 'model' or 'no page'
-  tags text[] NOT NULL DEFAULT '{}',  -- secondary tags: search filters, never counts
-  countries text[] NOT NULL DEFAULT '{}',
-  authors text[] NOT NULL DEFAULT '{}',
+  wri_type text,                      -- WRI's own type (Research, Data)
+  doc_type text NOT NULL,             -- the sorter's type
+  pub_date date,
+  year int,
+  authors text[],
+  tags text[],
+  countries text[],
   summary text,
-  language text                       -- ISO 639-1, e.g. 'en', 'es', 'pt'; null until detected
+  deadline date,                      -- RFPs
+  language text,
+  replaces text[]                     -- older versions the sorter dropped
 );
 
 CREATE TABLE IF NOT EXISTS chunks (
-  chunk_id text PRIMARY KEY,          -- "<doc_id>#p<pdf page>-<position on page>"
+  chunk_id text PRIMARY KEY,          -- "<doc_id>#p<start page>-<n>"
   doc_id text NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,
-  seq int NOT NULL,                   -- position in the document's chunk order, from 1
-  page int NOT NULL,                  -- PDF page where the chunk starts (opens the PDF there)
-  page_end int NOT NULL,
-  printed_page text NOT NULL,         -- number printed on the page ("iv", "12"), for display
+  seq int NOT NULL,                   -- position in the document, for neighbour fetches
+  kind text NOT NULL,                 -- 'source_text', 'table', 'chart' or 'image'
+  pdf_page int NOT NULL,
+  pdf_page_end int NOT NULL,
+  printed_page text NOT NULL,         -- text: front matter uses Roman numerals
   printed_page_end text NOT NULL,
-  printed_page_fallback boolean NOT NULL DEFAULT false,  -- true: no printed number was found
-  section text NOT NULL DEFAULT '',   -- section path, e.g. "Supply risks › Lithium"
-  kind text NOT NULL DEFAULT 'source_text',  -- source_text, table, chart or image
-  quotable boolean NOT NULL DEFAULT true,    -- false: cite the page, never quote verbatim
-  address text NOT NULL,              -- "document title › section", so a passage stands alone
-  content text NOT NULL,              -- the passage itself: what citations quote
-  embedding vector(1024),             -- of address + content; must equal embedding_dim
-  -- Keyword search covers the address too, so title and section words match.
-  tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple', address || ' ' || content)) STORED,
-  UNIQUE (doc_id, seq)
+  printed_page_fallback boolean NOT NULL,
+  section text,
+  content text NOT NULL,              -- the passage; table rows for tables
+  description text,                   -- model-written summary: searchable, never quoted
+  number text,                        -- table or figure number
+  figure_key text,                    -- S3 key of the figure image
+  quotable boolean NOT NULL,          -- false: cite the page, never quote verbatim
+  embedding vector(1024) NOT NULL,    -- Cohere Embed v4 of "title > section" + content/description
+  tsv tsvector GENERATED ALWAYS AS (
+    setweight(to_tsvector('english', content || ' ' || coalesce(description, '')), 'A') ||
+    setweight(to_tsvector('english', coalesce(section, '')), 'B')
+  ) STORED
 );
 
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING gin (tsv);
-CREATE INDEX IF NOT EXISTS documents_filters_idx ON documents (year, pub_type, topic, language);
-CREATE INDEX IF NOT EXISTS documents_countries_idx ON documents USING gin (countries);
+CREATE INDEX IF NOT EXISTS chunks_doc_seq_idx ON chunks (doc_id, seq);
+CREATE INDEX IF NOT EXISTS documents_filters_idx ON documents (year, topic, doc_type);
 
 CREATE TABLE IF NOT EXISTS translations (
   hash text PRIMARY KEY,              -- SHA-256 of target language + source text
   lang text NOT NULL,
   text text NOT NULL
 );
-
--- Fields from the ingestion pipeline (askwri.ingest), added to the tables above. Nullable, so
--- rows loaded before the pipeline gained them stay valid.
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS wri_type text;      -- wri.org's own type (Research, Data)
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_type text;      -- the sorter's type (working paper, report, ...)
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS deadline date;      -- RFPs
-ALTER TABLE documents ADD COLUMN IF NOT EXISTS replaces text[];    -- older versions the sorter dropped
-ALTER TABLE chunks ADD COLUMN IF NOT EXISTS description text;      -- model-written table/figure summary: searchable, never quoted
-ALTER TABLE chunks ADD COLUMN IF NOT EXISTS number text;           -- table or figure number
-ALTER TABLE chunks ADD COLUMN IF NOT EXISTS figure_key text;       -- S3 key of the figure image
 
 -- Which WRI documents in the collection cite which others, found by python -m askwri.links:
 -- a DOI, wri.org link or title of one document appearing in another's text.
@@ -85,12 +76,40 @@ CREATE TABLE IF NOT EXISTS citations (
 );
 CREATE INDEX IF NOT EXISTS citations_dst_idx ON citations (dst_doc_id);
 
+-- What the agent's tools read: the pipeline's rows plus the fields they derive. Views, so the
+-- ingestion pipeline's tables stay exactly as askwri.ingest.load writes them.
+CREATE OR REPLACE VIEW documents_v AS
+SELECT d.*,
+  -- WRI DOIs name the publication type: 10.46830/wriwp.25.00035 is a working paper.
+  CASE
+    WHEN d.doi ~ '^10\.46830/wrirpt\.' THEN 'Report'
+    WHEN d.doi ~ '^10\.46830/wriwp\.' THEN 'Working paper'
+    WHEN d.doi ~ '^10\.46830/writn\.' THEN 'Technical note'
+    WHEN d.doi ~ '^10\.46830/wriib\.' THEN 'Issue brief'
+    WHEN d.doc_type = 'research report' THEN 'Report'
+    WHEN d.doc_type IS NOT NULL AND d.doc_type <> 'other' THEN upper(left(d.doc_type, 1)) || substr(d.doc_type, 2)
+    ELSE d.wri_type
+  END AS pub_type,
+  CASE WHEN d.pub_date IS NULL THEN 'none' ELSE d.label_source END AS date_source,
+  CASE
+    WHEN d.pub_date IS NULL THEN 'undated'
+    WHEN d.label_source = 'wri.org' THEN 'high'
+    ELSE 'low'
+  END AS date_confidence,
+  NULL::text AS office
+FROM documents d;
+
+CREATE OR REPLACE VIEW chunks_v AS
+SELECT c.*, c.pdf_page AS page, c.pdf_page_end AS page_end,
+  d.title || CASE WHEN coalesce(c.section, '') = '' THEN '' ELSE ' › ' || c.section END AS address
+FROM chunks c JOIN documents d USING (doc_id);
+
 -- App users sign in with IAM database authentication, so no app password exists anywhere.
 DO $$ BEGIN CREATE ROLE askwri_ingest LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE ROLE askwri_tools LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 GRANT rds_iam TO askwri_ingest, askwri_tools;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON documents, chunks TO askwri_ingest;
-GRANT SELECT ON documents, chunks, citations TO askwri_tools;
+GRANT SELECT ON documents, chunks, citations, documents_v, chunks_v TO askwri_tools;
 GRANT SELECT, INSERT, UPDATE, DELETE ON citations TO askwri_ingest;
 GRANT SELECT, INSERT, UPDATE ON translations TO askwri_tools;

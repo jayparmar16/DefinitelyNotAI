@@ -46,10 +46,15 @@ data "aws_iam_policy_document" "tools" {
     actions   = ["rds-db:connect"]
     resources = ["arn:aws:rds-db:${var.region}:${var.account_id}:dbuser:${var.db_cluster_resource_id}/askwri_tools"]
   }
+  # Cohere Embed v4 runs through the "us." cross-region inference profile, which may serve a
+  # call from any of the profile's regions: allow the profile and the model in each of them.
   statement {
-    sid       = "EmbedQueries"
-    actions   = ["bedrock:InvokeModel"]
-    resources = ["arn:aws:bedrock:${var.region}::foundation-model/${var.embedding_model_id}"]
+    sid     = "EmbedQueries"
+    actions = ["bedrock:InvokeModel"]
+    resources = concat(
+      ["arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/${var.embedding_model_id}"],
+      [for r in ["us-east-1", "us-east-2", "us-west-2"] : "arn:aws:bedrock:${r}::foundation-model/${trimprefix(var.embedding_model_id, "us.")}"],
+    )
   }
   statement {
     sid       = "Rerank"

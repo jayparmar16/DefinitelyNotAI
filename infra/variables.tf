@@ -53,9 +53,9 @@ variable "db_seconds_until_auto_pause" {
 # Model IDs live here, not in code. Claude models in us-west-2 run only through inference
 # profiles; the embedding and rerank models run in-region.
 variable "embedding_model_id" {
-  description = "Multilingual embedding model; its vector size must match vector(1024) in db/schema.sql."
+  description = "Query embedding model (a us. inference profile); must match the model askwri.ingest.load embeds passages with, and vector(1024) in db/schema.sql."
   type        = string
-  default     = "amazon.titan-embed-text-v2:0"
+  default     = "us.cohere.embed-v4:0"
 }
 
 variable "rerank_model_id" {

@@ -28,7 +28,7 @@ def coverage_sql(dimension: str) -> str:
         raise ValueError(f"dimension must be one of {sorted(DIMENSIONS)}, not {dimension!r}")
     return f"""
     SELECT coalesce(value, 'unknown') AS value, count(DISTINCT doc_id) AS documents
-    FROM (SELECT d.doc_id, {DIMENSIONS[dimension]} AS value FROM documents d {FILTER}) v
+    FROM (SELECT d.doc_id, {DIMENSIONS[dimension]} AS value FROM documents_v d {FILTER}) v
     GROUP BY 1 ORDER BY documents DESC, value
     """
 
@@ -39,7 +39,7 @@ def handler(event: dict, context) -> dict:
     params = {"topic": event.get("topic"), "country": event.get("country")}
     with connect() as connection:
         counts = connection.execute(coverage_sql(dimension), params).fetchall()
-        total = connection.execute(f"SELECT count(*) AS n FROM documents d {FILTER}", params)
+        total = connection.execute(f"SELECT count(*) AS n FROM documents_v d {FILTER}", params)
         documents = total.fetchone()["n"]
         collection = connection.execute("SELECT count(*) AS n FROM documents").fetchone()["n"]
     return {
