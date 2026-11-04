@@ -242,3 +242,40 @@ def test_every_step_that_starts_also_finishes(monkeypatch):
     done = {e["id"] for e in steps if e["status"] == "done"}
     assert started == done
     assert loop.PASSAGES["quick"] >= 1
+
+
+class TranslatingGateway(FakeGateway):
+    def call(self, tool, arguments):
+        if tool == "translate":
+            return {"translation": f"ES: {arguments['text']}", "numbers_preserved": True}
+        return super().call(tool, arguments)
+
+
+def test_a_translated_report_translates_its_title_and_gaps_too(monkeypatch):
+    draft = {
+        "answerable": True,
+        "title": "Cooling cities",
+        "thin_evidence": ["No cost data."],
+        "key_points": [{"text": "Cool roofs lowered surface heat.", "passages": ["P1"]}],
+    }
+    monkeypatch.setattr(
+        loop.Agent, "_plan", lambda self, q, m: iter_return([{"question": q, "search_query": q}])
+    )
+    fake_models(monkeypatch, draft, {0})
+    agent = Agent(
+        Deps(llm=None, gateway=TranslatingGateway(0.3), memory=None, bedrock=None), SETTINGS
+    )
+    answer = list(agent.run({"question": "q", "mode": "deep", "language": "es"}))[-1]["answer"]
+    report = answer["report"]
+    assert answer["machineTranslated"] and answer["language"] == "es"
+    assert report["title"] == "ES: Cooling cities"
+    assert report["thinEvidence"] == ["ES: No cost data."]
+    assert (
+        report["keyPoints"] == answer["paragraphs"] == ["ES: Cool roofs lowered surface heat [1]."]
+    )
+
+
+def iter_return(value):
+    """A generator that yields nothing and returns value (stands in for a loop step)."""
+    return value
+    yield

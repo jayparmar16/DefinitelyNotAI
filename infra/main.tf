@@ -59,3 +59,20 @@ module "gateway" {
   account_id         = var.team_account_id
   tool_function_arns = module.tools.function_arns
 }
+
+module "agent" {
+  source                        = "./modules/agent"
+  region                        = var.region
+  account_id                    = var.team_account_id
+  package_path                  = "${path.root}/../build/agent.zip"
+  gateway_url                   = module.gateway.gateway_url
+  gateway_secret_name           = module.gateway.gateway_client_secret_name
+  gateway_secret_arn            = module.gateway.gateway_client_secret_arn
+  small_model_id                = var.small_model_id
+  large_model_id                = var.large_model_id
+  relevance_threshold           = var.relevance_threshold
+  quick_max_rounds              = var.quick_max_rounds
+  deep_max_rounds               = var.deep_max_rounds
+  grounding_threshold           = var.grounding_threshold
+  relevance_grounding_threshold = var.relevance_grounding_threshold
+}

@@ -65,7 +65,45 @@ variable "rerank_model_id" {
 }
 
 variable "small_model_id" {
-  description = "Haiku-class model (inference profile) for translation, routing and checks."
+  description = "Haiku-class model (inference profile) for translation, planning, rewrites and checks."
   type        = string
-  default     = "global.anthropic.claude-haiku-5-5"
+  # shortcut: Haiku 4.5 - Claude Haiku 5.5 is blocked in the team sandbox (needs an AWS
+  # Marketplace subscription the sandbox role can't make). Switch back when it is enabled.
+  default = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
+variable "large_model_id" {
+  description = "Sonnet-class model (inference profile) for the final answer and reports."
+  type        = string
+  default     = "global.anthropic.claude-sonnet-5-5"
+}
+
+variable "relevance_threshold" {
+  description = "Best rerank score that counts as strong evidence. Measured on the sample: answerable questions scored 0.018+, unanswerable 0.002 or less. Re-tune with the test set."
+  type        = number
+  default     = 0.01
+}
+
+variable "quick_max_rounds" {
+  description = "Search rounds per question in Quick answer."
+  type        = number
+  default     = 2
+}
+
+variable "deep_max_rounds" {
+  description = "Search rounds per sub-question in Deep research."
+  type        = number
+  default     = 3
+}
+
+variable "grounding_threshold" {
+  description = "Bedrock Guardrails contextual grounding threshold for answers (0-0.99)."
+  type        = number
+  default     = 0.5
+}
+
+variable "relevance_grounding_threshold" {
+  description = "Bedrock Guardrails relevance threshold for answers (0-0.99)."
+  type        = number
+  default     = 0.5
 }

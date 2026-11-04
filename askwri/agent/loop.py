@@ -251,8 +251,6 @@ class Agent:
             source_entry(i + 1, labels[label], authors.get(labels[label]["doc_id"], []))
             for i, label in enumerate(order)
         ]
-        texts, translated = yield from self._translate(texts, language)
-        verified = sum(len(g) for g in groups)
         report = None
         if mode == "deep":
             report = {
@@ -261,6 +259,8 @@ class Agent:
                 "keyPoints": texts,
                 "thinEvidence": draft["thin_evidence"],
             }
+        texts, report, translated = yield from self._translate_answer(texts, report, language)
+        verified = sum(len(g) for g in groups)
         answer = {
             "mode": mode,
             "language": language if translated else "en",
@@ -568,14 +568,23 @@ class Agent:
             return reply["language"]
         return None
 
+    def _translate_answer(self, texts: list[str], report: dict | None, language: str):
+        """Translate the answer texts and, for a report, its title and gaps in the same pass.
+        Key points are the answer texts, so they stay identical to the paragraphs."""
+        extra = [report["title"], *report["thinEvidence"]] if report else []
+        out, translated = yield from self._translate([*texts, *extra], language)
+        texts, extra = out[: len(texts)], out[len(texts) :]
+        if report:
+            report = {**report, "keyPoints": texts, "title": extra[0], "thinEvidence": extra[1:]}
+        return texts, report, translated
+
     def _translate_previous(self, previous, language, question, session, started):
         yield step(
             "reuse", "Reusing the evidence from your previous answer", "done", "no new search"
         )
-        texts, translated = yield from self._translate(previous["paragraphs"], language)
-        report = previous.get("report")
-        if report:
-            report = {**report, "keyPoints": texts}
+        texts, report, translated = yield from self._translate_answer(
+            previous["paragraphs"], previous.get("report"), language
+        )
         answer = {
             **previous,
             "language": language if translated else previous["language"],

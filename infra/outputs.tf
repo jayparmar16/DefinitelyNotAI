@@ -17,3 +17,8 @@ output "gateway_client_secret" {
   description = "Secrets Manager secret holding the gateway's client credentials and token URL."
   value       = module.gateway.gateway_client_secret_name
 }
+
+output "agent_runtime_name" {
+  description = "AgentCore Runtime agent: ask it with `uv run python -m askwri.agent.ask \"question\"`."
+  value       = module.agent.runtime_name
+}

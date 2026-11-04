@@ -64,6 +64,7 @@ export TF_VAR_team_account_id=$(aws sts get-caller-identity --query Account --ou
 infra/bootstrap/create-state-bucket.sh        # once: S3 state bucket, writes infra/backend.hcl
 cp infra/terraform.tfvars.example infra/terraform.tfvars   # once: set the Team and Owner tags
 infra/build/tools.sh                          # package the tool Lambdas into build/tools.zip
+infra/build/agent.sh                          # package the agent for AgentCore Runtime (build/agent.zip)
 cd infra && terraform init -backend-config=backend.hcl
 terraform plan -out=plan.tfplan && terraform apply plan.tfplan
 cd .. && uv run python db/apply_schema.py     # tables, indexes and database users
@@ -79,8 +80,15 @@ ASKWRI_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0 \
   uv run python -m askwri.load <ingest out dir> --pdfs <folder with the source PDFs>
 ```
 
+**Ask the agent.** `uv run python -m askwri.agent.ask "How do cities protect people from extreme heat?"`
+prints its progress and the cited answer (`--deep` for Deep research, `--language es` for a
+translated answer, `--session <id>` to ask a follow-up such as "now in Spanish"). To run the
+agent on your machine instead, start `uv run python -m askwri.agent` with the `ASKWRI_*`
+variables the runtime gets (see `infra/modules/agent/main.tf`) and add `--local`.
+
 `ASKWRI_EMBEDDING_MODEL` must be the same model as Terraform's `embedding_model_id`. Model IDs
-are Terraform variables (`embedding_model_id`, `rerank_model_id`, `small_model_id`), never
+are Terraform variables (`embedding_model_id`, `rerank_model_id`, `small_model_id`,
+`large_model_id`), never
 constants in code; the Lambdas get them as environment variables.
 
 `backend.hcl` and `terraform.tfvars` hold account-specific values and are gitignored; never
@@ -100,6 +108,8 @@ It is safe to rerun.
 | Secret | `askwri/db` | Master credentials, used only by the Data API. Lambdas sign in with IAM database auth as `askwri_ingest` or `askwri_tools` |
 | Tool Lambdas | `askwri-tool-search`, `-passage`, `-coverage`, `-authors`, `-translate` | In the app subnets; role `askwri-tools-role` (database as `askwri_tools`, the embedding, rerank and small models). Search is hybrid: pgvector + full text, fused, then reranked |
 | Gateway | `askwri-gateway` | AgentCore Gateway: the five tools over MCP. Callers need a token from Cognito `askwri-auth` (client `askwri-gateway-client`, credentials in secret `askwri/gateway-client`); the gateway invokes the tools as `askwri-gateway-role` |
+| Agent | `askwri_agent` (AgentCore Runtime) | One agent, deployed as a code package from `askwri-artifacts-<account-id>` (no Docker). Role `askwri-agent-role`; memory `askwri_memory` (7-day session events); guardrail `askwri-guardrail` (contextual grounding). Runtime and memory names use `_` because they can't contain `-` |
+| Tracing | CloudWatch Transaction Search | Account-wide: X-Ray sends spans to CloudWatch Logs, so agent traces appear under CloudWatch GenAI Observability |
 | Resource group | `askwri-rg` | Lists every resource tagged `Project = AskWRI` |
 
 Interface endpoints and Aurora bill by the hour. After the event, tear everything down with
