@@ -149,8 +149,8 @@ export function Composer(props: ComposerProps) {
               </select>
             </label>
           )}
-          <span className="spacer" />
-
+          {/* Lens, filters and send stay together at the right end, so Send never wraps away. */}
+          <div className="aw-composer-end">
           {props.tool === "ask" && !props.lens && !editingLens && (
             <button type="button" className="aw-btn ghost sm" onClick={() => setEditingLens(true)} title="Summarise every paper for your goal and aspects">
               <Icon name="filter" small /> Lens
@@ -207,6 +207,7 @@ export function Composer(props: ComposerProps) {
           <button type="submit" className="aw-btn brand icon" disabled={!canSend} title={TOOLS.find((tool) => tool.value === props.tool)!.name}>
             <Icon name="send" label={TOOLS.find((tool) => tool.value === props.tool)!.name} />
           </button>
+          </div>
         </div>
       </form>
       <div className="aw-hint">Searches public WRI publications only. Answers are generated; check the cited page.</div>

@@ -76,8 +76,9 @@ export function ProgressTrace({ turn, onStop }: { turn: Turn; onStop: () => void
       )}
       {open && turn.found.length > 0 && (
         <div className="aw-found">
-          {turn.found.map((source) => (
-            <span key={source.title}>
+          {turn.found.map((source, index) => (
+            // Two versions of a document can share a title, so the position keeps keys unique.
+            <span key={`${index}-${source.title}`}>
               {source.title}
               {source.year ? ` ${source.year}` : ""}
             </span>

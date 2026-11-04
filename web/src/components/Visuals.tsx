@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * Infographics for an answer or an Explore topic: key figures, a publication timeline, the
- * citation flow between reports (which reports a report builds on, and which build on it), and
- * the evidence matrix when the answer has one. Each visual stands alone and says when it's empty.
+ * Infographics for an answer or an Explore topic: key figures, a citation map (reports by year,
+ * arrows from each report to the later ones that build on it), and the evidence matrix. Each
+ * visual stands alone and says when it's empty.
  */
 
 import { useState } from "react";
 
 import type { CitationFlow, Empty, FlowLink, KeyFigure, LensResult, Relation, Source, Timeline, Visuals } from "@/lib/agent";
+import { CARD_H, CARD_W, WIDTH, citationMap } from "@/lib/citationMap";
 import { type ClaimsMatrix, claimsMatrix } from "@/lib/matrix";
 import { LensTable } from "./LensTable";
 
@@ -54,178 +55,118 @@ function KeyFigures({ cards, onMarker }: { cards: KeyFigure[]; onMarker: (marker
   );
 }
 
-function TimelineChart({ timeline }: { timeline: Timeline }) {
-  const [picked, setPicked] = useState<string | null>(null);
-  const years = timeline.points.map((p) => p.year!);
-  const first = Math.min(...years);
-  const last = Math.max(...years);
-  const span = Math.max(1, last - first);
-  const x = (year: number) => 24 + ((year - first) / span) * 552;
-  // Reports in the same year stack upwards so none hides another.
-  const stack = new Map<number, number>();
-  const placed = timeline.points.map((point) => {
-    const level = stack.get(point.year!) ?? 0;
-    stack.set(point.year!, level + 1);
-    return { point, cx: x(point.year!), cy: 62 - level * 16 };
-  });
-  const ticks = [...new Set([first, Math.round((first + last) / 2), last])];
-  const shown = timeline.points.find((p) => p.docId === picked) ?? timeline.points.find((p) => p.docId === timeline.newest);
+const RELATION_COLORS: Record<Relation, string> = {
+  updates: "var(--rel-updates)",
+  uses_data_or_method: "var(--rel-uses)",
+  extends: "var(--rel-extends)",
+  contrasts: "var(--rel-contrasts)",
+  supports: "var(--rel-supports)",
+  background: "var(--rel-mentions)",
+};
+
+type MapProps = {
+  timeline: Timeline;
+  flow?: CitationFlow;
+  onOpenPage: (link: FlowLink) => void;
+};
+
+/** One citation map: rows of years, report cards, arrows from a report to those that cite it. */
+function CitationMapView({ timeline, flow, onOpenPage }: MapProps) {
+  const map = citationMap(timeline, flow);
+  const linked = new Set(map.edges.flatMap((e) => [e.from, e.to]));
+  const [picked, setPicked] = useState<string | null>(map.edges[0]?.to ?? timeline.newest);
+  const node = map.nodes.find((n) => n.docId === picked);
+  const at = (id: string) => map.nodes.find((n) => n.docId === id)!;
+  const cites = map.edges.filter((e) => e.to === picked);
+  const citedBy = map.edges.filter((e) => e.from === picked);
+  const title = (id: string) => at(id).title;
 
   return (
-    <div className="aw-timeline">
-      <svg viewBox="0 0 600 96" role="img" aria-label={timeline.caption}>
-        <line x1="16" x2="584" y1="72" y2="72" className="axis" />
-        {ticks.map((year) => (
-          <g key={year}>
-            <line x1={x(year)} x2={x(year)} y1="70" y2="76" className="axis" />
-            <text x={x(year)} y="90" textAnchor="middle">{year}</text>
-          </g>
-        ))}
-        {placed.map(({ point, cx, cy }) => (
-          <circle
-            key={point.docId}
-            cx={cx}
-            cy={cy}
-            r={point.docId === picked ? 8 : 6}
-            className={point.citedInAnswer ? "dot cited" : "dot"}
-            onClick={() => setPicked(point.docId)}
-            tabIndex={0}
-            role="button"
-            aria-label={`${point.title}, ${point.year}`}
-          >
-            <title>{`${point.title} (${point.year})`}</title>
-          </circle>
-        ))}
-      </svg>
-      {shown && (
-        <p className="aw-timeline-pick">
-          <b>{shown.year}</b> · {shown.title}
-          {shown.docId === timeline.newest && <span className="aw-chip">newest</span>}
-          {shown.citedBy > 0 && <span className="aw-chip">cited by {shown.citedBy}</span>}
-          {!shown.citedInAnswer && <span className="aw-chip">linked by citation</span>}
-        </p>
-      )}
-      <p className="aw-meta aw-legend">
-        <span className="dot cited" /> cited in the answer <span className="dot" /> linked by citation · click a dot
-      </p>
-      {timeline.undated.length > 0 && (
-        <p className="aw-meta">Undated: {timeline.undated.map((p) => p.title).join(" · ")}</p>
-      )}
-    </div>
-  );
-}
-
-function LinkCard({ link, active, onPick }: { link: FlowLink; active: boolean; onPick: () => void }) {
-  return (
-    <button className={active ? "aw-flow-card on" : "aw-flow-card"} onClick={onPick}>
-      <span className={`aw-rel ${link.relation}`}>{RELATION_LABELS[link.relation]}</span>
-      <span className="t">{link.title}</span>
-      <span className="aw-meta">{link.year ?? "n.d."}</span>
-    </button>
-  );
-}
-
-type FlowProps = { flow: CitationFlow; onOpenPage: (link: FlowLink) => void; onMarker: (marker: number) => void };
-
-function CitationFlowView({ flow, onOpenPage, onMarker }: FlowProps) {
-  const [focusId, setFocusId] = useState(flow.defaultFocus);
-  const [picked, setPicked] = useState<{ link: FlowLink; direction: "cites" | "citedBy" } | null>(null);
-  const current = focusId ? flow.flows[focusId] : null;
-  if (!current) return null;
-  const pick = (link: FlowLink, direction: "cites" | "citedBy") => setPicked(picked?.link === link ? null : { link, direction });
-
-  return (
-    <div className="aw-flow">
-      {flow.focusOptions.length > 1 && (
-        <div className="aw-flow-focus" role="tablist" aria-label="Report to centre on">
-          {flow.focusOptions.map((option) => (
-            <button
-              key={option.docId}
-              role="tab"
-              aria-selected={option.docId === focusId}
-              className={option.docId === focusId ? "aw-chip on" : "aw-chip"}
-              onClick={() => {
-                setFocusId(option.docId);
-                setPicked(null);
-              }}
-              title={option.title}
+    <div className="aw-map">
+      <div className="aw-map-scroll">
+        <svg viewBox={`0 0 ${WIDTH} ${map.height}`} role="img" aria-label="Citation map of the reports">
+          <defs>
+            {(Object.keys(RELATION_COLORS) as Relation[]).map((relation) => (
+              <marker key={relation} id={`arrow-${relation}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" fill={RELATION_COLORS[relation]} />
+              </marker>
+            ))}
+          </defs>
+          {map.rows.map((row) => (
+            <text key={row.label} x="0" y={row.y + CARD_H / 2 + 4} className="aw-map-year">{row.label}</text>
+          ))}
+          {map.edges.map((edge) => {
+            const a = at(edge.from), b = at(edge.to);
+            const x1 = a.x + CARD_W / 2, y1 = a.y + CARD_H, x2 = b.x + CARD_W / 2, y2 = b.y;
+            const bend = Math.max(24, (y2 - y1) / 2);
+            const on = picked === edge.from || picked === edge.to;
+            return (
+              <path
+                key={`${edge.from}>${edge.to}`}
+                d={`M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2 - 2}`}
+                fill="none"
+                stroke={RELATION_COLORS[edge.relation]}
+                strokeWidth={on ? 2.5 : 1.5}
+                strokeDasharray={edge.relation === "contrasts" ? "5 4" : undefined}
+                opacity={picked && !on ? 0.25 : 1}
+                markerEnd={`url(#arrow-${edge.relation})`}
+              />
+            );
+          })}
+          {map.nodes.map((n) => (
+            <g
+              key={n.docId}
+              className={`aw-map-node${n.citedInAnswer ? " cited" : ""}${n.docId === picked ? " on" : ""}${linked.has(n.docId) ? "" : " alone"}`}
+              transform={`translate(${n.x},${n.y})`}
+              onClick={() => setPicked(n.docId)}
+              onKeyDown={(event) => event.key === "Enter" && setPicked(n.docId)}
+              tabIndex={0}
+              role="button"
+              aria-label={`${n.title}${n.year ? `, ${n.year}` : ""}`}
             >
-              {option.title.length > 34 ? `${option.title.slice(0, 32)}…` : option.title}
-            </button>
+              <title>{n.title}</title>
+              <rect width={CARD_W} height={CARD_H} rx="8" />
+              {n.lines.map((line, i) => (
+                <text key={i} x="10" y={20 + i * 16}>{line}</text>
+              ))}
+              {n.citedBy > 0 && (
+                <g transform={`translate(${CARD_W - 12},-6)`}>
+                  <circle r="9" className="aw-map-badge" />
+                  <text textAnchor="middle" y="4" className="aw-map-badge-n">{n.citedBy}</text>
+                </g>
+              )}
+            </g>
+          ))}
+        </svg>
+      </div>
+      <p className="aw-meta aw-legend">
+        <span className="aw-key cited" /> cited in the answer <span className="aw-key" /> linked by citation · numbers: cited by N reports
+      </p>
+      {node && (
+        <div className="aw-flow-detail">
+          <b>{node.title}</b>
+          <span className="aw-meta">{node.year ?? "Undated"}{node.citedInAnswer ? " · cited in the answer" : ""}</span>
+          {cites.length + citedBy.length === 0 && (
+            <span className="aw-meta">No citation links to other reports in AskWRI&apos;s collection.</span>
+          )}
+          {[...cites.map((e) => ({ e, other: e.from, verb: "builds on" })), ...citedBy.map((e) => ({ e, other: e.to, verb: "is built on by" }))].map(({ e, other, verb }) => (
+            <div key={`${e.from}>${e.to}`} className="aw-map-link">
+              <div>
+                <span className={`aw-rel ${e.relation}`}>{RELATION_LABELS[e.relation]}</span> {verb} <b>{title(other)}</b>
+              </div>
+              {e.sentence && <blockquote>&ldquo;{e.sentence}&rdquo;</blockquote>}
+              {e.pdfKey && e.page && (
+                <button
+                  className="aw-btn sm"
+                  onClick={() => onOpenPage({ docId: e.to, title: title(e.to), year: null, relation: e.relation, aspect: e.aspect, sentence: e.sentence, page: e.page, pdfKey: e.pdfKey, confidence: null })}
+                >
+                  Open page {e.page} of the citing report
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
-
-      <div className="aw-flow-col">
-        <div className="aw-flow-row">
-          <span className="lbl">Builds on</span>
-          {current.cites.length ? (
-            current.cites.map((link) => (
-              <LinkCard key={link.docId} link={link} active={picked?.link === link} onPick={() => pick(link, "cites")} />
-            ))
-          ) : (
-            <span className="aw-meta">No other report in AskWRI&apos;s collection</span>
-          )}
-          {current.moreCites > 0 && <span className="aw-chip">+{current.moreCites} more</span>}
-        </div>
-        <div className="aw-flow-arrow" aria-hidden>↓</div>
-        <div className="aw-flow-focus-card">
-          <b>{current.focus.title}</b>
-          <span className="aw-meta">
-            {current.focus.year ?? "n.d."}
-            {current.focus.markers.length > 0 && ` · cited in the answer as ${current.focus.markers.map((m) => `[${m}]`).join("")}`}
-          </span>
-        </div>
-        <div className="aw-flow-arrow" aria-hidden>↓</div>
-        <div className="aw-flow-row">
-          <span className="lbl">Built on by</span>
-          {current.citedBy.length ? (
-            current.citedBy.map((link) => (
-              <LinkCard key={link.docId} link={link} active={picked?.link === link} onPick={() => pick(link, "citedBy")} />
-            ))
-          ) : (
-            <span className="aw-meta">No later report in AskWRI&apos;s collection</span>
-          )}
-          {current.moreCitedBy > 0 && <span className="aw-chip">+{current.moreCitedBy} more</span>}
-        </div>
-        {current.mainPoint && (
-          <>
-            <div className="aw-flow-arrow" aria-hidden>↓</div>
-            <button
-              className="aw-flow-point"
-              onClick={() => current.focus.markers[0] && onMarker(current.focus.markers[0])}
-              title="Open this source"
-            >
-              <span className="lbl">Supports in the answer</span>
-              {current.mainPoint}
-            </button>
-          </>
-        )}
-      </div>
-
-      {picked && (
-        <div className="aw-flow-detail">
-          <div>
-            {picked.direction === "cites" ? (
-              <><b>{current.focus.title}</b> {RELATION_LABELS[picked.link.relation]} <b>{picked.link.title}</b></>
-            ) : (
-              <><b>{picked.link.title}</b> {RELATION_LABELS[picked.link.relation]} <b>{current.focus.title}</b></>
-            )}
-          </div>
-          {picked.link.aspect && <div className="aw-meta">About: {picked.link.aspect}</div>}
-          {picked.link.sentence && <blockquote>&ldquo;{picked.link.sentence}&rdquo;</blockquote>}
-          {picked.link.pdfKey && picked.link.page && (
-            <button className="aw-btn sm" onClick={() => onOpenPage(picked.link)}>
-              Open page {picked.link.page} of the citing report
-            </button>
-          )}
-        </div>
-      )}
-      <p className="aw-meta aw-legend">
-        {(["updates", "uses_data_or_method", "extends", "contrasts", "supports", "background"] as Relation[]).map((relation) => (
-          <span key={relation} className={`aw-rel ${relation}`}>{RELATION_LABELS[relation]}</span>
-        ))}
-      </p>
     </div>
   );
 }
@@ -284,12 +225,14 @@ export function VisualsView({ visuals, answer, lens, matrix, activeMarker, onMar
           <KeyFigures cards={figures.cards} onMarker={onMarker} />
         </Section>
       )}
-      <Section title="Publication timeline" caption={isEmpty(visuals.timeline) ? visuals.timeline?.reason : visuals.timeline.caption}>
-        {!isEmpty(visuals.timeline) && <TimelineChart timeline={visuals.timeline} />}
-      </Section>
-      {visuals.citationFlow && visuals.citationFlow.focusOptions.length > 0 && (
-        <Section title="Citation flow" caption={visuals.citationFlow.caption}>
-          <CitationFlowView flow={visuals.citationFlow} onOpenPage={onOpenPage} onMarker={onMarker} />
+      {isEmpty(visuals.timeline) ? (
+        <Section title="Citation map" caption={visuals.timeline?.reason} >{null}</Section>
+      ) : (
+        <Section
+          title="Citation map"
+          caption={`${visuals.timeline.caption}. ${visuals.citationFlow?.caption ?? ""}. Click a report to see what it builds on and what builds on it.`}
+        >
+          <CitationMapView timeline={visuals.timeline} flow={visuals.citationFlow} onOpenPage={onOpenPage} />
         </Section>
       )}
       {lens ? (
