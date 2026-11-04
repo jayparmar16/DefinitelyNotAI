@@ -380,7 +380,11 @@ class Agent:
         )
         with ThreadPoolExecutor(max_workers=3) as pool:
             people = pool.submit(self.deps.gateway.call, "authors", {"doc_ids": drafted_docs})
-            linked = pool.submit(self.deps.gateway.call, "links", {"doc_ids": drafted_docs})
+            linked = (
+                pool.submit(self.deps.gateway.call, "links", {"doc_ids": drafted_docs})
+                if drafted_docs
+                else None
+            )
             collection = pool.submit(self._collection_size)
             groups, total, removed = yield from self._checked(question, draft, labels, "verify")
             if total >= 2 and claim_count(groups) * 2 < total:
@@ -393,7 +397,7 @@ class Agent:
                     if claim_count(checked[0]) > claim_count(groups):
                         draft, (groups, total, removed) = retry, checked
             authors = {d["doc_id"]: d["authors"] for d in people.result()["documents"]}
-            cited_by = linked.result()["cited_by"]
+            cited_by = linked.result()["cited_by"] if linked else {}
             size = collection.result()
         if not groups:
             yield decline(
@@ -408,6 +412,11 @@ class Agent:
         dossier = mode == "deep" and request.get("format") == "dossier"
         lens = {"goal": question, "aspects": DOSSIER_ASPECTS} if dossier else lens_from(request)
         lens_rows, compared = [], None
+        if dossier:
+            # A dossier covers the collection's documents on the topic, not only those the
+            # answer's searches happened to surface.
+            for result in self._documents_on(question, request.get("filters") or {}):
+                evidence.setdefault(result["chunk_id"], result)
         if lens:
             lens_rows, labels = yield from self._read_through_lens(
                 question, lens, labels, evidence, groups, DOSSIER_PAPERS if dossier else None
@@ -609,16 +618,23 @@ class Agent:
         yield step("visuals", "Drew the visuals", "done")
         yield {"type": "visuals", "visuals": visuals}
 
+    def _documents_on(self, topic: str, filters: dict) -> list[dict]:
+        """The collection's documents on a topic, one best passage each, most relevant first.
+        A search's top passages bunch up in a few documents, so older and newer work are also
+        searched on their own; that also spreads a timeline over the years."""
+        base = {**search_arguments(topic, "deep", filters), "k": 20}
+        eras = [base, {**base, "year_to": 2018}, {**base, "year_from": 2019}]
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            found = list(pool.map(lambda a: self.deps.gateway.call("search", a)["results"], eras))
+        best: dict[str, dict] = {}
+        for result in sorted((r for f in found for r in f), key=lambda r: -r["relevance"]):
+            best.setdefault(result["doc_id"], result)
+        return list(best.values())
+
     def _explore(self, topic: str, filters: dict):
         """Explore: the visuals for a topic's best documents, with no answer written."""
         yield step("explore", f'Finding WRI publications on "{topic}"', "now")
-        results = self.deps.gateway.call(
-            "search", {**search_arguments(topic, "deep", filters), "k": 20}
-        )["results"]
-        best: dict[str, dict] = {}
-        for result in results:  # one passage per document: its best match for the topic
-            best.setdefault(result["doc_id"], result)
-        top = list(best.values())[:12]
+        top = self._documents_on(topic, filters)[:12]
         sources = [source_entry(i + 1, r, []) for i, r in enumerate(top)]
         yield step("explore", f"Found {len(top)} publications", "done")
         if not sources:

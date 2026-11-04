@@ -27,7 +27,7 @@ def handler(event: dict, context) -> dict:
     """Return the citation links touching these documents and how often each is cited."""
     doc_ids = list(event.get("doc_ids") or [])[:MAX_DOCUMENTS]
     if not doc_ids:
-        raise ValueError("links needs 'doc_ids'")
+        return {"links": [], "cited_by": {}}
     with connect() as connection:
         links = connection.execute(SQL, {"doc_ids": doc_ids}).fetchall()
         counts = connection.execute(CITED_BY, {"doc_ids": doc_ids}).fetchall()

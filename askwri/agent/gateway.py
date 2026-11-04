@@ -86,7 +86,16 @@ class Gateway:
         return self._token
 
     def call(self, tool: str, arguments: dict) -> dict:
-        """Call one tool (search, get_passage, coverage, authors, translate); returns its JSON."""
+        """Call one tool (search, get_passage, coverage, authors, translate, links); returns its
+        JSON. The gateway's own transient "internal error, retry later" is retried once."""
+        try:
+            return self._call(tool, arguments)
+        except ToolError as error:
+            if "retry later" not in str(error):
+                raise
+            return self._call(tool, arguments)
+
+    def _call(self, tool: str, arguments: dict) -> dict:
         self._next_id += 1
         body = json.dumps(
             {
