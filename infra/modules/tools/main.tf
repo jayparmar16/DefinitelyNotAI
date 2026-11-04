@@ -1,4 +1,4 @@
-# The five tool Lambdas (askwri-tool-*) and askwri-tools-role. They run in the private app
+# The six tool Lambdas (askwri-tool-*) and askwri-tools-role. They run in the private app
 # subnets and reach Aurora (IAM database auth as askwri_tools) and Bedrock through endpoints.
 
 locals {
@@ -8,6 +8,7 @@ locals {
     coverage  = { handler = "askwri.tools.coverage.handler", memory = 512 }
     authors   = { handler = "askwri.tools.authors.handler", memory = 512 }
     translate = { handler = "askwri.tools.translate.handler", memory = 512 }
+    links     = { handler = "askwri.tools.links.handler", memory = 512 }
   }
   # A global inference profile routes to the model in any region, so both ARNs are needed.
   translate_profile_arn = "arn:aws:bedrock:${var.region}:${var.account_id}:inference-profile/${var.translate_model_id}"

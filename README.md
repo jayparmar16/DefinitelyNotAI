@@ -80,6 +80,14 @@ ASKWRI_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0 \
   uv run python -m askwri.load <ingest out dir> --pdfs <folder with the source PDFs>
 ```
 
+**Link documents.** After loading, rebuild the citation links between documents (a document's
+DOI, wri.org address or title found in another's text, with the sentence, page and a relation
+label from the small model). They feed the `links` tool and the citation flow visual.
+
+```sh
+ASKWRI_SMALL_MODEL=global.anthropic.claude-haiku-4-5-20251001-v1:0 uv run python -m askwri.links
+```
+
 **Ask the agent.** `uv run python -m askwri.agent.ask "How do cities protect people from extreme heat?"`
 prints its progress and the cited answer (`--deep` for Deep research, `--language es` for a
 translated answer, `--session <id>` to ask a follow-up such as "now in Spanish"). To run the
@@ -107,7 +115,7 @@ It is safe to rerun.
 | Database | `askwri-db` | Aurora PostgreSQL 18 Serverless v2 with pgvector; Data API on; pauses after an hour idle (resume takes 15 s or more; set `db_min_capacity = 0.5` for demos) |
 | Secret | `askwri/db` | Master credentials, used only by the Data API. Lambdas sign in with IAM database auth as `askwri_ingest` or `askwri_tools` |
 | Tool Lambdas | `askwri-tool-search`, `-passage`, `-coverage`, `-authors`, `-translate` | In the app subnets; role `askwri-tools-role` (database as `askwri_tools`, the embedding, rerank and small models). Search is hybrid: pgvector + full text, fused, then reranked |
-| Gateway | `askwri-gateway` | AgentCore Gateway: the five tools over MCP. Callers need a token from Cognito `askwri-auth` (client `askwri-gateway-client`, credentials in secret `askwri/gateway-client`); the gateway invokes the tools as `askwri-gateway-role` |
+| Gateway | `askwri-gateway` | AgentCore Gateway: the six tools over MCP (search, get_passage, coverage, authors, translate, links). Callers need a token from Cognito `askwri-auth` (client `askwri-gateway-client`, credentials in secret `askwri/gateway-client`); the gateway invokes the tools as `askwri-gateway-role` |
 | Agent | `askwri_agent` (AgentCore Runtime) | One agent, deployed as a code package from `askwri-artifacts-<account-id>` (no Docker). Role `askwri-agent-role`; memory `askwri_memory` (7-day session events); guardrail `askwri-guardrail` (contextual grounding). Runtime and memory names use `_` because they can't contain `-` |
 | Tracing | CloudWatch Transaction Search | Account-wide: X-Ray sends spans to CloudWatch Logs, so agent traces appear under CloudWatch GenAI Observability |
 | Resource group | `askwri-rg` | Lists every resource tagged `Project = AskWRI` |

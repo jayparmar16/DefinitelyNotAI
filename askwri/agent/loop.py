@@ -25,6 +25,7 @@ from askwri.agent.citations import (
 from askwri.agent.factcheck import fact_check
 from askwri.agent.lens import lens_from, lens_papers, search_papers, summarise_paper
 from askwri.agent.tracing import agent_span, finish_agent_span
+from askwri.agent.visuals import build_visuals
 
 PASSAGES = {"quick": 8, "deep": 14}  # passages given to the draft step
 # How much the large model thinks before drafting: measured 1.6 s at low vs 2.4-3.2 s by
@@ -273,12 +274,14 @@ class Agent:
         with agent_span(question, session) as span:
             final = None
             for event in self._run(question, request, session):
-                if event["type"] in ("answer", "decline", "factcheck"):
+                if event["type"] in ("answer", "decline", "factcheck", "visuals"):
                     final = event
                 yield event
             if final:
                 if final["type"] == "answer":
                     shown = final["answer"]["paragraphs"]
+                elif final["type"] == "visuals":
+                    shown = [final["visuals"].get("timeline", {}).get("caption", "visuals")]
                 elif final["type"] == "factcheck":
                     shown = [f"{c['verdict']}: {c['claim']}" for c in final["factcheck"]["claims"]]
                 else:
@@ -288,6 +291,12 @@ class Agent:
     def _run(self, question: str, request: dict, session: str) -> Iterator[dict]:
         started = time.monotonic()
         mode = request.get("mode", "quick")
+        if mode == "visuals":
+            yield from self._visuals(question, request.get("answer") or {})
+            return
+        if mode == "explore":
+            yield from self._explore(question, request.get("filters") or {})
+            return
         if mode == "factcheck":
             yield from fact_check(
                 self.deps, question, request.get("filters") or {}, request.get("deep") is True
@@ -369,8 +378,9 @@ class Agent:
                 if p in labels
             }
         )
-        with ThreadPoolExecutor(max_workers=2) as pool:
+        with ThreadPoolExecutor(max_workers=3) as pool:
             people = pool.submit(self.deps.gateway.call, "authors", {"doc_ids": drafted_docs})
+            linked = pool.submit(self.deps.gateway.call, "links", {"doc_ids": drafted_docs})
             collection = pool.submit(self._collection_size)
             groups, total, removed = yield from self._checked(question, draft, labels, "verify")
             if total >= 2 and claim_count(groups) * 2 < total:
@@ -383,6 +393,7 @@ class Agent:
                     if claim_count(checked[0]) > claim_count(groups):
                         draft, (groups, total, removed) = retry, checked
             authors = {d["doc_id"]: d["authors"] for d in people.result()["documents"]}
+            cited_by = linked.result()["cited_by"]
             size = collection.result()
         if not groups:
             yield decline(
@@ -412,6 +423,7 @@ class Agent:
         compare_texts = numbered[len(groups) + len(lens_groups) :]
         sources = [
             source_entry(i + 1, labels[label], authors.get(labels[label]["doc_id"], []))
+            | {"citedBy": cited_by.get(labels[label]["doc_id"], 0)}
             for i, label in enumerate(order)
         ]
         given = " ".join(r["passage"] for r in labels.values())
@@ -586,6 +598,38 @@ class Agent:
             "differ": [s for s in differ if s in survivors],
             "missing": reply["missing"][:4],
         }
+
+    def _visuals(self, question: str, answer: dict):
+        """Infographics for an answer the UI already shows (it sends the answer back)."""
+        yield step("visuals", "Drawing the timeline, citation flow and key figures", "now")
+        sources = answer.get("sources") or []
+        visuals = build_visuals(
+            self.deps.gateway, self.deps.llm, question, sources, answer.get("paragraphs") or []
+        )
+        yield step("visuals", "Drew the visuals", "done")
+        yield {"type": "visuals", "visuals": visuals}
+
+    def _explore(self, topic: str, filters: dict):
+        """Explore: the visuals for a topic's best documents, with no answer written."""
+        yield step("explore", f'Finding WRI publications on "{topic}"', "now")
+        results = self.deps.gateway.call(
+            "search", {**search_arguments(topic, "deep", filters), "k": 20}
+        )["results"]
+        best: dict[str, dict] = {}
+        for result in results:  # one passage per document: its best match for the topic
+            best.setdefault(result["doc_id"], result)
+        top = list(best.values())[:12]
+        sources = [source_entry(i + 1, r, []) for i, r in enumerate(top)]
+        yield step("explore", f"Found {len(top)} publications", "done")
+        if not sources:
+            yield decline(
+                "No WRI publication in the collection matches this topic.", [topic], "1 search", {}
+            )
+            return
+        yield step("visuals", "Drawing the timeline, citation flow and key figures", "now")
+        visuals = build_visuals(self.deps.gateway, self.deps.llm, topic, sources, [])
+        yield step("visuals", "Drew the visuals", "done")
+        yield {"type": "visuals", "visuals": visuals, "sources": sources, "topic": topic}
 
     def _collection_size(self) -> int:
         """How many documents AskWRI has indexed (asked once per runtime, then remembered)."""

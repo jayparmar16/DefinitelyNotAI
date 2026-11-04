@@ -22,7 +22,9 @@ def lens_from(request: dict) -> dict | None:
     if not isinstance(lens, dict):
         return None
     goal = str(lens.get("goal") or "").strip()[:200]
-    aspects = [str(a).strip()[:60] for a in lens.get("aspects") or [] if str(a).strip()]
+    # A comma list typed as one aspect ("cost, equity") is several aspects.
+    parts = [part for a in lens.get("aspects") or [] for part in str(a).split(",")]
+    aspects = list(dict.fromkeys(p.strip()[:60] for p in parts if p.strip()))
     if not goal or not aspects:
         return None
     return {"goal": goal, "aspects": aspects[:MAX_ASPECTS]}

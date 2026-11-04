@@ -22,7 +22,7 @@ from botocore.exceptions import ClientError
 DOWNLOAD_SECONDS = 300  # the design's 5-minute presigned link
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{33,100}$")  # AgentCore runtime session IDs: 33+ chars
 PDF_KEY = re.compile(r"^raw/[^/]+\.pdf$")
-MODES = {"quick", "deep", "factcheck"}
+MODES = {"quick", "deep", "factcheck", "visuals", "explore"}
 FORMATS = {"summary", "issue-brief", "talking-points", "dossier"}
 log = logging.getLogger("askwri.api")
 STARTING_RETRIES, STARTING_WAIT_SECONDS = 4, 2
@@ -74,6 +74,18 @@ def chat_payload(body: dict) -> dict:
         "sessionId": session,
         "deep": body.get("deep") is True,  # fact-check: search harder
         "lens": research_lens(body.get("lens")),
+        # Visuals for an answer already shown: the UI sends back its sources and paragraphs.
+        "answer": shown_answer(body.get("answer")) if body.get("mode") == "visuals" else None,
+    }
+
+
+def shown_answer(answer) -> dict | None:
+    """The parts of a shown answer the visuals need: its paragraphs and sources."""
+    if not isinstance(answer, dict):
+        return None
+    return {
+        "paragraphs": [str(p) for p in answer.get("paragraphs") or []][:20],
+        "sources": [s for s in answer.get("sources") or [] if isinstance(s, dict)][:30],
     }
 
 
@@ -204,7 +216,7 @@ class Handler(BaseHTTPRequestHandler):
             self._warm(body)
             return
         try:
-            if length > 100_000:
+            if length > 300_000:  # visuals requests carry an answer's sources
                 raise BadRequest("request body too large")
             payload = chat_payload(json.loads(body or b"{}"))
         except (BadRequest, ValueError) as error:

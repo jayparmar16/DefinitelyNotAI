@@ -191,6 +191,8 @@ class FakeGateway:
             return {"documents": [{"doc_id": "heat", "authors": ["Ana Silva"]}], "people": []}
         if tool == "coverage":
             return {"documents_matching_filters": 5}
+        if tool == "links":
+            return {"links": [], "cited_by": {"heat": 2}}
         raise AssertionError(tool)
 
 
@@ -711,6 +713,8 @@ def test_lens_is_cleaned_and_papers_put_the_cited_ones_first():
     assert lens_from({"lens": {"goal": " ", "aspects": ["cost"]}}) is None
     lens = lens_from({"lens": {"goal": "Heat plan", "aspects": ["cost", " ", "a", "b", "c", "d"]}})
     assert lens == {"goal": "Heat plan", "aspects": ["cost", "a", "b", "c"]}
+    pasted = lens_from({"lens": {"goal": "Heat plan", "aspects": ["finance, costs, who pays"]}})
+    assert pasted["aspects"] == ["finance", "costs", "who pays"]
     evidence = {
         "x#1": {"chunk_id": "x#1", "doc_id": "x", "relevance": 0.9},
         "y#1": {"chunk_id": "y#1", "doc_id": "y", "relevance": 0.5},
@@ -867,3 +871,104 @@ def test_reader_facing_text_never_says_passages():
     )
     assert readers_words("A passage says so.") == "A cited WRI publication says so."
     assert "passage" not in readers_words("Two passages agree; one passage differs.").lower()
+
+
+# --- visuals ---
+
+LINK = {
+    "src_doc_id": "new",
+    "src_title": "From Tracking to Action",
+    "src_year": 2015,
+    "src_pdf_key": "raw/new.pdf",
+    "dst_doc_id": "old",
+    "dst_title": "Tracking Adaptation Finance",
+    "dst_year": 2012,
+    "dst_pdf_key": "raw/old.pdf",
+    "relation": "extends",
+    "aspect": "tracking method",
+    "confidence": 0.8,
+    "match_method": "title",
+    "context_sentence": "We build on Tracking Adaptation Finance.",
+    "context_page": 9,
+}
+
+
+def visual_source(marker, doc, year, passage="Funds reached 120 projects in 2014."):
+    return {
+        "marker": marker,
+        "docId": doc,
+        "title": doc.title(),
+        "year": year,
+        "pubType": "Report",
+        "dateConfidence": "high" if year else "undated",
+        "passage": passage,
+        "quotable": True,
+    }
+
+
+def test_timeline_and_citation_flow_are_built_from_the_answer_and_its_links():
+    from askwri.agent.visuals import citation_flow, documents, timeline
+
+    sources = [visual_source(1, "new", 2015), visual_source(2, "other", None)]
+    docs = documents(sources)
+    line = timeline(docs, [LINK], {"old": 1})
+    assert [p["docId"] for p in line["points"]] == ["old", "new"]  # the cited report joins the axis
+    assert line["points"][0]["citedInAnswer"] is False and line["points"][0]["citedBy"] == 1
+    assert [p["docId"] for p in line["undated"]] == ["other"]
+    assert line["caption"] == "2 dated WRI publications, 2012 to 2015, and 1 undated"
+
+    flow = citation_flow(docs, [LINK], ["Tracking moved to action [1]. Other work agrees [2]."])
+    new = flow["flows"]["new"]
+    assert flow["defaultFocus"] == "new"
+    assert new["cites"][0]["docId"] == "old" and new["cites"][0]["relation"] == "extends"
+    assert (new["cites"][0]["page"], new["cites"][0]["pdfKey"]) == (9, "raw/new.pdf")  # citing page
+    assert new["mainPoint"] == "Tracking moved to action [1]."
+    assert flow["caption"] == "1 of 2 reports link to other reports in AskWRI's collection"
+
+
+def test_key_figures_keep_only_values_found_word_for_word_one_per_document():
+    from askwri.agent.visuals import checked_figures
+
+    sources = [
+        visual_source(1, "a", 2015, "In 2024, 181 of 394 cities missed it."),
+        visual_source(2, "b", 2016, "Returns reached 23 percent."),
+    ]
+    figures = [
+        {
+            "value": "181",
+            "unit": "cities",
+            "what": "missed the standard",
+            "place": "",
+            "year": "2024",
+            "marker": 1,
+        },
+        {
+            "value": "394",
+            "unit": "cities",
+            "what": "studied",
+            "place": "",
+            "year": "",
+            "marker": 1,
+        },  # same doc
+        {
+            "value": "18",
+            "unit": "",
+            "what": "inside 181, not a figure",
+            "place": "",
+            "year": "",
+            "marker": 2,
+        },
+        {
+            "value": "25",
+            "unit": "%",
+            "what": "rounded, not in the passage",
+            "place": "",
+            "year": "",
+            "marker": 2,
+        },
+        {"value": "23", "unit": "%", "what": "returns", "place": "", "year": "", "marker": 2},
+    ]
+    assert [(c["value"], c["docId"]) for c in checked_figures(figures, sources)] == [
+        ("181", "a"),
+        ("23", "b"),
+    ]

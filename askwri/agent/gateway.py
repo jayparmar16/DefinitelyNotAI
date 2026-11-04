@@ -22,6 +22,7 @@ TOOL_NAMES = {
     "coverage": "coverage___coverage",
     "authors": "authors___authors",
     "translate": "translate___translate",
+    "links": "links___links",
 }
 TIMEOUT = 120  # seconds; a tool may wait for Aurora to resume from auto-pause
 

@@ -1,4 +1,4 @@
-# askwri-gateway: AgentCore Gateway exposing the five tool Lambdas as MCP tools.
+# askwri-gateway: AgentCore Gateway exposing the six tool Lambdas as MCP tools.
 # Who may call it: a Cognito client-credentials token (askwri-auth). What it may call:
 # askwri-gateway-role, limited to invoking the five askwri-tool-* functions.
 
@@ -42,6 +42,12 @@ locals {
         { name = "doc_ids", type = "array", required = true, description = "Document IDs from search results.", items = { type = "string" } },
       ]
     }
+    links = {
+      description = "Citation links between WRI documents in the collection: which documents cite the given ones and which they cite, with the citing sentence, page and relation."
+      properties = [
+        { name = "doc_ids", type = "array", required = true, description = "Document IDs from search results.", items = { type = "string" } },
+      ]
+    }
     translate = {
       description = "Machine-translate text, keeping every number and [n] citation marker. Returns numbers_preserved; never show a translation whose numbers_preserved is false."
       properties = [
@@ -57,6 +63,7 @@ locals {
     coverage    = "coverage"
     authors     = "authors"
     translate   = "translate"
+    links       = "links"
   }
 }
 
@@ -147,7 +154,7 @@ resource "aws_iam_role_policy" "gateway" {
 
 resource "aws_bedrockagentcore_gateway" "askwri" {
   name            = "askwri-gateway"
-  description     = "AskWRI tools over MCP: search, get_passage, coverage, authors, translate"
+  description     = "AskWRI tools over MCP: search, get_passage, coverage, authors, translate, links"
   role_arn        = aws_iam_role.gateway.arn
   protocol_type   = "MCP"
   authorizer_type = "CUSTOM_JWT"
