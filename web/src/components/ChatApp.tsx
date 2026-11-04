@@ -8,6 +8,7 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { type Audience, type Filters, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
+import { type SavedChat, readChats, upsertChat, writeChats } from "@/lib/chats";
 import { unmatchedMarkers } from "@/lib/citations";
 import { answerMarkdown, formatCitation, saveFile, sourcesBibtex, sourcesCsv } from "@/lib/exports";
 import { AnswerCard } from "./AnswerCard";
@@ -48,6 +49,7 @@ export function ChatApp() {
   const [panelWidth, setPanelWidth] = useState(480);
   const [active, setActive] = useState<{ turnId: string; marker: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [recent, setRecent] = useState<SavedChat[]>([]);
   const abort = useRef<AbortController | null>(null);
   const warmed = useRef<string | null>(null);
   const warming = useRef<Promise<void> | null>(null);
@@ -57,6 +59,26 @@ export function ChatApp() {
   const running = turns.some((turn) => turn.status === "running");
   const lastAnswered = [...turns].reverse().find((turn) => turn.answer);
   const panelTurn = panel ? turns.find((turn) => turn.id === panel.turnId) : undefined;
+
+  // Reopen the chat that was open before a refresh. Read after the first render: the page is
+  // pre-rendered without browser storage.
+  useEffect(() => {
+    const { chats, current } = readChats();
+    setRecent(chats);
+    const chat = chats.find((c) => c.sessionId === current);
+    if (chat) {
+      setTurns(chat.turns);
+      setSessionId(chat.sessionId);
+    }
+  }, []);
+
+  // Save the chat whenever a turn finishes.
+  useEffect(() => {
+    if (!turns.length || turns.some((turn) => turn.status === "running")) return;
+    const chats = upsertChat(readChats().chats, sessionId, turns, Date.now());
+    writeChats(chats, sessionId);
+    setRecent(chats);
+  }, [turns, sessionId]);
 
   // Start this conversation's agent at the first keystroke: a new session's runtime takes 6-9 s
   // to start, and that time passes while the user is still typing.
@@ -144,9 +166,26 @@ export function ChatApp() {
     setPanel(null);
     setActive(null);
     setDraft("");
-    setSessionId(crypto.randomUUID());
+    const next = crypto.randomUUID();
+    setSessionId(next);
     warming.current = null;
+    writeChats(readChats().chats, next);
     input.current?.focus();
+  }
+
+  function openChat(chat: SavedChat) {
+    abort.current?.abort();
+    setTurns(chat.turns);
+    setSessionId(chat.sessionId);
+    setPanel(null);
+    setActive(null);
+    warming.current = null;
+    writeChats(readChats().chats, chat.sessionId);
+  }
+
+  function clearChats() {
+    writeChats([], null);
+    setRecent([]);
   }
 
   function openMarker(turnId: string, marker: number) {
@@ -221,6 +260,10 @@ async function downloadPdf(source: Source) {
         hasReport={Boolean(lastAnswered?.answer?.report)}
         onDownload={(choice) => lastAnswered && download(lastAnswered, choice)}
         onNewChat={newChat}
+        recent={recent}
+        currentChat={sessionId}
+        onOpenChat={openChat}
+        onClearChats={clearChats}
       />
       <div className={panelTurn ? "aw-body" : "aw-body no-panel"} style={bodyStyle}>
         <main className="aw-main">

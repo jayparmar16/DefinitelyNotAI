@@ -352,3 +352,9 @@ a.aw-btn{text-decoration:none}
 .aw-pdfpage .textLayer .markedContent{display:contents}
 .aw-pdfpage .textLayer ::selection{background:rgba(0,0,255,.25)}
 .aw-pdfpage .textLayer mark.cite-highlight{color:transparent;background:rgba(255,213,0,.45);border-radius:2px;padding:0;margin:0}
+
+/* Recent chats menu */
+.aw-recent{display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:320px}
+.aw-recent .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.aw-recent .w{font-size:12px;color:var(--ink-muted)}
+.aw-recent.on .t{color:var(--link)}

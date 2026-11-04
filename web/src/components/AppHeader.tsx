@@ -3,6 +3,7 @@
 /** The dark header band: mark, audience (Auto by default), language, Download, New chat. */
 
 import type { Audience } from "@/lib/agent";
+import { type SavedChat, whenLabel } from "@/lib/chats";
 import { Icon } from "./Icon";
 import { Menu } from "./Menu";
 
@@ -32,6 +33,10 @@ type AppHeaderProps = {
   hasReport: boolean;
   onDownload: (choice: DownloadChoice) => void;
   onNewChat: () => void;
+  recent: SavedChat[];
+  currentChat: string;
+  onOpenChat: (chat: SavedChat) => void;
+  onClearChats: () => void;
 };
 
 export function AppHeader(props: AppHeaderProps) {
@@ -113,6 +118,43 @@ export function AppHeader(props: AppHeaderProps) {
             </>
           );
         }}
+      </Menu>
+
+      <Menu
+        trigger={({ open, toggle }) => (
+          <button className="aw-btn on-dark icon" onClick={toggle} aria-expanded={open} title="Recent chats">
+            <Icon name="history" small label="Recent chats" />
+          </button>
+        )}
+      >
+        {(close) => (
+          <>
+            <div className="cap">Recent chats on this browser</div>
+            {props.recent.length === 0 && <div className="cap">None yet</div>}
+            {props.recent.map((chat) => (
+              <button
+                key={chat.sessionId}
+                className={chat.sessionId === props.currentChat ? "row aw-recent on" : "row aw-recent"}
+                role="menuitem"
+                onClick={() => {
+                  props.onOpenChat(chat);
+                  close();
+                }}
+              >
+                <span className="t">{chat.title}</span>
+                <span className="w">{chat.turns.length} · {whenLabel(chat.updatedAt, Date.now())}</span>
+              </button>
+            ))}
+            {props.recent.length > 0 && (
+              <>
+                <div className="sep" />
+                <button className="row" role="menuitem" onClick={() => { props.onClearChats(); close(); }}>
+                  <Icon name="close" small /> Clear recent chats
+                </button>
+              </>
+            )}
+          </>
+        )}
       </Menu>
 
       <button className="aw-btn on-dark icon" onClick={props.onNewChat} title="New chat">
