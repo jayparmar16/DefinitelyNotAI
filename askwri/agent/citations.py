@@ -11,7 +11,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Sentence:
-    """One drafted claim and the passages (by P-label) it cites."""
+    """One drafted sentence and the passages (by P-label) it cites. A sentence with no passages
+    is a connective: framing or a transition between claims that states no fact of its own."""
 
     text: str
     passages: tuple[str, ...]
@@ -23,17 +24,32 @@ def label_passages(results: list[dict]) -> dict[str, dict]:
 
 
 def cited_sentences(sentences: list[Sentence], labels: dict[str, dict]) -> list[Sentence]:
-    """Keep only sentences that cite at least one real passage; unknown labels are dropped."""
-    kept = []
+    """Keep sentences that cite at least one real passage (unknown labels are dropped), plus
+    connectives that lead into one. A connective with a number, or one citing only unknown
+    labels, is a claim in disguise and is dropped."""
+    kept: list[Sentence] = []
     for sentence in sentences:
+        text = sentence.text.strip()
         known = tuple(label for label in sentence.passages if label in labels)
-        if sentence.text.strip() and known:
-            kept.append(Sentence(sentence.text.strip(), known))
-    return kept
+        if text and known:
+            kept.append(Sentence(text, known))
+        elif text and not sentence.passages and not NUMBER.search(text):
+            kept.append(Sentence(text, ()))
+    return trim_connectives(kept)
+
+
+def trim_connectives(sentences: list[Sentence]) -> list[Sentence]:
+    """Drop connectives that no longer lead into a claim (trailing ones, or all of them when
+    the group has no claim left), so no transition is left pointing at nothing."""
+    while sentences and not sentences[-1].passages:
+        sentences = sentences[:-1]
+    return sentences
 
 
 def with_markers(text: str, markers: list[int]) -> str:
     """Put [n] markers at the end of a sentence, before its final punctuation."""
+    if not markers:
+        return text
     tags = "".join(f"[{m}]" for m in markers)
     if text and text[-1] in ".!?":
         return f"{text[:-1]} {tags}{text[-1]}"
@@ -85,7 +101,8 @@ def source_entry(marker: int, result: dict, authors: list[str]) -> dict:
 
 
 def drop_unsupported(groups: list[list[Sentence]], supported: set[int]) -> list[list[Sentence]]:
-    """Keep only sentences whose position (counted across all groups, from 0) is supported.
+    """Keep only claims whose position (counted across all groups' claims, from 0, skipping
+    connectives) is supported, and the connectives still leading into one.
 
     Groups left empty are removed, so no blank paragraph or key point reaches the user.
     """
@@ -93,9 +110,13 @@ def drop_unsupported(groups: list[list[Sentence]], supported: set[int]) -> list[
     for group in groups:
         survivors = []
         for sentence in group:
+            if not sentence.passages:
+                survivors.append(sentence)
+                continue
             if position in supported:
                 survivors.append(sentence)
             position += 1
+        survivors = trim_connectives(survivors)
         if survivors:
             kept.append(survivors)
     return kept

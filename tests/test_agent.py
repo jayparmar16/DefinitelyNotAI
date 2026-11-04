@@ -48,6 +48,48 @@ def test_sentences_without_a_real_passage_are_dropped():
     assert kept == [Sentence("Cited.", ("P1",))]
 
 
+def test_connectives_are_kept_only_when_factless_and_leading_into_a_claim():
+    labels = label_passages([{"chunk_id": "a"}])
+    kept = cited_sentences(
+        [
+            Sentence("Several laws matter here.", ()),
+            Sentence("The directive applies from 2026.", ("P1",)),
+            Sentence("Roughly 400 cities are covered.", ()),  # a number: a claim in disguise
+            Sentence("Beyond deadlines, it also changes who acts.", ()),
+            Sentence("Cities lead most measures.", ("P1",)),
+            Sentence("That is the whole story.", ()),  # trailing: leads into nothing
+        ],
+        labels,
+    )
+    assert [s.text for s in kept] == [
+        "Several laws matter here.",
+        "The directive applies from 2026.",
+        "Beyond deadlines, it also changes who acts.",
+        "Cities lead most measures.",
+    ]
+    texts, _ = number_markers([kept])
+    assert texts == [
+        (
+            "Several laws matter here. The directive applies from 2026 [1]. "
+            "Beyond deadlines, it also changes who acts. Cities lead most measures [1]."
+        )
+    ]
+
+
+def test_verification_counts_claims_only_and_drops_connectives_left_dangling():
+    groups = [
+        [
+            Sentence("Intro.", ()),
+            Sentence("A.", ("P1",)),
+            Sentence("Then.", ()),
+            Sentence("B.", ("P1",)),
+        ],
+        [Sentence("Lead-in.", ()), Sentence("C.", ("P2",))],
+    ]
+    # claims are A=0, B=1, C=2; B and C fail, so "Then." would lead into nothing
+    assert drop_unsupported(groups, {0}) == [[Sentence("Intro.", ()), Sentence("A.", ("P1",))]]
+
+
 def test_unsupported_claims_are_dropped_and_empty_paragraphs_removed():
     groups = [[Sentence("A.", ("P1",)), Sentence("B.", ("P1",))], [Sentence("C.", ("P2",))]]
     assert drop_unsupported(groups, {0}) == [[Sentence("A.", ("P1",))]]
