@@ -1,4 +1,5 @@
-"""HTTP routes: POST /chat (server-sent events), GET /sources/download?key=..., GET /ping.
+"""HTTP routes: POST /chat (server-sent events), POST /warm, GET /sources/download?key=...,
+GET /ping. /warm starts a session's agent runtime while the user is still typing.
 
 Environment: ASKWRI_RUNTIME_ARN (the agent), ASKWRI_CORPUS_BUCKET (stored PDFs),
 ASKWRI_ALLOWED_ORIGINS (comma-separated browser origins for CORS), ASKWRI_API_KEY_SECRET
@@ -48,6 +49,14 @@ def chat_payload(body: dict) -> dict:
         "filters": {k: filters[k] for k in ("yearFrom", "pubType") if filters.get(k)},
         "sessionId": session,
     }
+
+
+def warm_session(body: dict) -> str:
+    """The session ID to warm up; it must already be a valid runtime session ID."""
+    session = body.get("sessionId") or ""
+    if not SESSION_ID.match(session):
+        raise BadRequest("sessionId must be 33 to 100 letters, digits, '-' or '_'")
+    return session
 
 
 def download_key(query: str) -> str:
@@ -138,10 +147,14 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"url": link, "expiresIn": DOWNLOAD_SECONDS})
 
     def do_POST(self):
-        if urlsplit(self.path).path != "/chat":
+        path = urlsplit(self.path).path
+        if path not in ("/chat", "/warm"):
             self._json(404, {"error": "not found"})
             return
         if not self._authorized():
+            return
+        if path == "/warm":
+            self._warm()
             return
         try:
             length = int(self.headers.get("Content-Length", 0))
@@ -173,6 +186,22 @@ class Handler(BaseHTTPRequestHandler):
         if event:
             self._chunk(event)
         self._chunk(b"")  # the empty chunk ends the response
+
+    def _warm(self) -> None:
+        """Start the agent runtime for a session; answers once it is up (cold start ~6-9 s)."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            session = warm_session(json.loads(self.rfile.read(min(length, 10_000)) or b"{}"))
+        except (BadRequest, ValueError) as error:
+            self._json(400, {"error": str(error)})
+            return
+        response = self.api.agentcore.invoke_agent_runtime(
+            agentRuntimeArn=self.api.runtime_arn,
+            runtimeSessionId=session,
+            payload=json.dumps({"warmup": True}).encode(),
+        )
+        response["response"].read()
+        self._json(200, {"status": "warm"})
 
     def _chunk(self, data: bytes) -> None:
         """Send one chunk of a chunked response; empty data ends it."""

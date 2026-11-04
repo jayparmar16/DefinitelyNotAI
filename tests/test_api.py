@@ -55,3 +55,12 @@ def test_api_key_is_required_only_when_configured():
     assert key_matches("k1", "k1")
     assert not key_matches("k1", None)
     assert not key_matches("k1", "k2")
+
+
+def test_warm_up_needs_a_valid_session_id():
+    from askwri.api.server import warm_session
+
+    assert warm_session({"sessionId": "s" * 36}) == "s" * 36
+    for bad in [{}, {"sessionId": "short"}, {"sessionId": "x" * 36 + "/../"}]:
+        with pytest.raises(BadRequest):
+            warm_session(bad)

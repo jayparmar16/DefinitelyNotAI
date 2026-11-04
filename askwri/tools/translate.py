@@ -22,9 +22,10 @@ LANGUAGES = {
     "hi": "Hindi",
 }
 PROMPT = (
-    "Translate the text below into {language}. Keep every number, year, percentage and unit "
-    "exactly as written, keep [n] citation markers where they are, and reply with only the "
-    "translation.\n\n{text}"
+    "Translate the text below into {language}. Keep every digit exactly as written (numbers, "
+    "years, percentages) and keep [n] citation markers where they are, but translate every word, "
+    "including units and words such as 'percent' or 'million'. Reply with only the translation."
+    "\n\n{text}"
 )
 # Spaces are not separators here: "in 2019 15 cities" is two numbers. A French "1 000" then
 # reads as two numbers and fails the check, which is the safe direction.

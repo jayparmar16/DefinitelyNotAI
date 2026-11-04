@@ -316,3 +316,9 @@ def test_grounding_check_drops_only_the_failing_paragraph(monkeypatch):
         e for e in events if e["type"] == "step" and e["id"] == "verify" and e["status"] == "done"
     )
     assert verify["detail"] == "1 part removed by the grounding check"
+
+
+def test_built_from_shows_a_single_year_once():
+    assert built_from([{"docId": "a", "year": 2026}, {"docId": "b", "year": 2026}]) == (
+        "Built from 2 WRI publications, 2026"
+    )

@@ -16,6 +16,7 @@ from askwri.agent.loop import Agent, Deps, Settings
 from askwri.agent.memory import Memory
 
 SESSION_HEADER = "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id"
+PADDING = 4096  # bytes of SSE comment after each "now" step (see _event)
 log = logging.getLogger("askwri.agent")
 
 
@@ -47,6 +48,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        if request.get("warmup"):
+            # Sent while the user is still typing, so this session's runtime is up before they ask.
+            self._json(200, {"status": "warm"})
+            return
         if not (request.get("question") or "").strip():
             self._json(400, {"error": "question is required"})
             return
@@ -66,6 +71,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _event(self, event: dict) -> None:
         self._chunk(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
+        if event["type"] == "step" and event["status"] == "now":
+            # shortcut: an SSE comment as padding - AgentCore Runtime appears to hold small
+            # writes until more data follows, so a step's "now" arrived only with its "done".
+            self._chunk(b":" + b" " * PADDING + b"\n\n")
 
     def _chunk(self, data: bytes) -> None:
         """Send one chunk of a chunked response; empty data ends it."""
