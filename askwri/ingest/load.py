@@ -15,6 +15,7 @@ from functools import cache
 from pathlib import Path
 
 import boto3
+from botocore.config import Config
 
 from askwri.ingest.chunks import Chunk
 from askwri.ingest.document import IngestResult, ingest_document
@@ -31,6 +32,9 @@ ROW_BATCH = 40  # chunk rows per Data API call: each carries a 1,024-float vecto
 # Parallel documents: PyMuPDF isn't thread-safe, so these are processes. Most time is spent
 # waiting on Bedrock, so more workers than cores is fine; 8 stays well inside Bedrock quotas.
 WORKERS = 8
+# Cohere Embed v4 allows 300,000 tokens a minute, about a third of what the corpus needs: the
+# embed calls of 8 workers get throttled, and adaptive retries wait instead of failing the run.
+EMBED_RETRIES = Config(retries={"mode": "adaptive", "max_attempts": 10})
 
 ARRAY_COLUMNS = (
     "authors", "tags", "countries", "replaces", "initiatives", "programs", "topics", "concepts",
@@ -214,7 +218,7 @@ def _aws() -> dict:
     rds_arn = boto3.client("rds").describe_db_clusters(DBClusterIdentifier=CLUSTER)
     return {
         "data_api": boto3.client("rds-data"),
-        "bedrock": boto3.client("bedrock-runtime"),
+        "bedrock": boto3.client("bedrock-runtime", config=EMBED_RETRIES),
         "s3": boto3.client("s3"),
         "target": {
             "resourceArn": rds_arn["DBClusters"][0]["DBClusterArn"],
