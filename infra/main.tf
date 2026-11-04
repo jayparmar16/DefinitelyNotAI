@@ -12,9 +12,10 @@ module "network" {
 }
 
 module "storage" {
-  source       = "./modules/storage"
-  account_id   = var.team_account_id
-  deployer_arn = data.aws_iam_session_context.deployer.issuer_arn
+  source          = "./modules/storage"
+  account_id      = var.team_account_id
+  deployer_arn    = data.aws_iam_session_context.deployer.issuer_arn
+  allowed_origins = var.allowed_origins
 }
 
 module "database" {
