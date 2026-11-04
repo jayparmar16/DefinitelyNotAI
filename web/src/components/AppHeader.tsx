@@ -142,7 +142,9 @@ export function AppHeader(props: AppHeaderProps) {
                 }}
               >
                 <span className="t">{chat.title}</span>
-                <span className="w">{chat.turns.length} · {whenLabel(chat.updatedAt, Date.now())}</span>
+                <span className="w">
+                  {chat.turns.length} question{chat.turns.length === 1 ? "" : "s"} · {whenLabel(chat.updatedAt, Date.now())}
+                </span>
               </button>
             ))}
             {props.recent.length > 0 && (
