@@ -227,9 +227,14 @@ def _aws() -> dict:
 
 
 def _loaded_hashes() -> dict[str, str]:
+    """File hashes of the documents loaded with a card; rows from before the card load again.
+
+    So a plain rerun after an interrupted reload picks up only the documents it had not reached.
+    """
     aws = _aws()
     result = aws["data_api"].execute_statement(
-        **aws["target"], sql="SELECT doc_id, file_sha256 FROM documents"
+        **aws["target"],
+        sql="SELECT doc_id, file_sha256 FROM documents WHERE card_embedding IS NOT NULL",
     )
     return {row[0]["stringValue"]: row[1]["stringValue"] for row in result["records"]}
 
@@ -242,6 +247,8 @@ def _load_one(job: tuple[KeptDocument, str]) -> str:
         result = ingest_document(kept.path, aws["site"], aws["claude"])
     except ModelError as error:
         return f"SKIPPED {kept.doc_id}: model error: {error}"
+    except ValueError as error:  # an off-list label: this document only, not the whole run
+        return f"SKIPPED {kept.doc_id}: bad label: {error}"
     if not result.audit.passed:
         return f"SKIPPED {kept.doc_id}: audit failed: {result.audit.failures[0]}"
     aws["s3"].upload_file(str(kept.path), os.environ["CORPUS_BUCKET"], pdf_key(result.doc_id))
@@ -260,8 +267,9 @@ def _load_one(job: tuple[KeptDocument, str]) -> str:
 def main() -> int:
     """Load every kept PDF under the given folders; loaded, unchanged PDFs are skipped.
 
-    `--reload` loads those too, so a change to ingestion reaches every document.
-    Returns 1 if any document was skipped (model error or failed audit), else 0.
+    A document loaded before the richer labels (no card) counts as not loaded. `--reload`
+    loads every document again, so a change to ingestion reaches all of them.
+    Returns 1 if any document was skipped (model error, bad label or failed audit), else 0.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folders", nargs="+", type=Path, help="corpus folders, e.g. 2024 2025 2026")

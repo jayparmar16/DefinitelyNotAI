@@ -165,9 +165,10 @@ scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: r
   sort the corpus, ingest each kept PDF, upload it to `s3://$CORPUS_BUCKET/raw/<doc_id>.pdf`,
   embed its chunks with Cohere Embed v4 and replace the document's rows in `documents` and
   `chunks` in one transaction.
-- **Reruns** skip documents already loaded with the same file hash; `--reload` loads them
-  again, which a change to ingestion needs. A document whose audit fails or whose model call
-  is refused is reported as `SKIPPED` and not written (its earlier rows stay).
+- **Reruns** skip documents already loaded with the same file hash and a document card, so
+  rerunning after an interruption resumes; `--reload` loads them again, which a change to
+  ingestion needs. A document whose audit fails, whose model call is refused or whose label
+  is off-list is reported as `SKIPPED` and not written (its earlier rows stay).
 - **Folder names** start with the publication year (`2025` or `2025_publications`): an
   undated document takes its folder's year.
 - Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.

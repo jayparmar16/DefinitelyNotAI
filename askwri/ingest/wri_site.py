@@ -27,7 +27,8 @@ SLUG_STOP_WORDS = {
 MAX_SITEMAP_CANDIDATES = 3
 # A research page's taxonomy line: "This Working Paper is part of <a>Ocean Climate
 # Diplomacy</a> within <a>Energy</a> and <a>Clean Energy</a>. Reach out to <a>...</a>"
-TAXONOMY_LINE = re.compile(r'<div class="narrative-taxonomy">\s*<p>(.*?)</p>', re.DOTALL)
+# The site writes the tag as `<div  class=...>`, with two spaces.
+TAXONOMY_LINE = re.compile(r'<div\s+class="narrative-taxonomy">\s*<p>(.*?)</p>', re.DOTALL)
 LINK_TEXT = re.compile(r"<a\b[^>]*>(.*?)</a>", re.DOTALL)
 
 

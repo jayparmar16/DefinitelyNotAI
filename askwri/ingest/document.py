@@ -44,6 +44,7 @@ def ingest_document(pdf_path: Path, site: WriSite | None = None, client=None) ->
     """Turn one PDF into chunks, its labels, and the audit that gates indexing.
 
     Labels come from the wri.org page, and from the labeler model (`client`) where there is none.
+    Their title (not the PDF's metadata title) is each chunk's `doc_title`.
     With no site, nothing is looked up; with no client, the model is never called and a document
     without a page is labelled "no page". The same model writes each table chunk's description,
     but only once the audit has passed, so a document that will not be indexed costs no calls.
@@ -58,14 +59,16 @@ def ingest_document(pdf_path: Path, site: WriSite | None = None, client=None) ->
     doc_id = doc_id_for(pdf_path)
     chunks = build_chunks(doc_id, title, parsed.blocks, parsed.printed_pages)
     audit = audit_chunks(pdf_path, chunks)
-    if client and audit.passed:
-        chunks = summarize_tables(client, chunks)
     unquotable = set(audit.unquotable)
     labels = with_year(label_document(pdf_path, title, site, client), pdf_path)
     labels = dataclasses.replace(
         labels, acronyms=find_acronyms("\n\n".join(chunk.text for chunk in chunks))
     )
+    # The PDF's own title is often junk ("Aspose", "draft_v6.indd"); the page's or the
+    # labeler's goes into every chunk's address, which is embedded.
+    chunks = [dataclasses.replace(chunk, doc_title=labels.title) for chunk in chunks]
     if client and audit.passed:
+        chunks = summarize_tables(client, chunks)
         reading = _enrichment_text(labels, chunks)
         labels = with_enrichment(labels, enrichment_from_text(client, pdf_path.name, reading))
     chunks = [

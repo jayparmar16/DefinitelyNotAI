@@ -1,6 +1,21 @@
 """A stand-in for the Anthropic client, so tests never call Bedrock."""
 
+import json
 from types import SimpleNamespace
+
+# A reply to the enrichment request (model_labels.enrichment_from_text) that adds nothing.
+NO_ENRICHMENT = json.dumps(
+    {
+        "topics": [],
+        "concepts": [],
+        "keywords": [],
+        "countries": [],
+        "regions": [],
+        "key_findings": [],
+        "genre": "other",
+        "coverage": "",
+    }
+)
 
 
 class FakeClaude:

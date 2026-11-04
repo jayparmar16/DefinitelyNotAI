@@ -29,8 +29,8 @@ topics, concepts and places are not in what search embeds. This task adds rule-b
       (`card_embedding`) of its title, abstract or summary, labels and key findings.
 - [ ] `db/schema.sql` upgrades the existing database in place, and `--reload` reloads
       PDFs whose files have not changed.
-- [ ] No test code (decided with the user); `docs/richer-metadata.md` says how to check
-      each item by hand.
+- [ ] No new tests for the labels (decided with the user), beyond the wri.org taxonomy line;
+      `docs/richer-metadata.md` says how to check each item by hand.
 
 ## Handoff
 

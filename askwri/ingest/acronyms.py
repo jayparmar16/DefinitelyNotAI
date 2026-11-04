@@ -40,5 +40,5 @@ def _long_form(short: str, window: str) -> str | None:
             return None
         w -= 1
         s -= 1
-    long = window[window.rfind(" ", 0, w + 1) + 1 :].strip(" ,;:\"'(")
+    long = window[window.rfind(" ", 0, w + 1) + 1 :].strip(" ,;:\"'(\u201c\u2018")
     return long if len(long.split()) >= MIN_LONG_WORDS else None

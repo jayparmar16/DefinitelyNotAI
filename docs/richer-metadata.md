@@ -1,7 +1,8 @@
 # Richer document metadata: what changed and how to test it
 
 Branch `richer-metadata` (task: [docs/tasks/richer-metadata.md](tasks/richer-metadata.md)).
-No test code was added and the test suite was not run, as agreed. This page is the manual
+The existing tests were updated for the new model calls, and one test covers the wri.org
+taxonomy line; the labels themselves have no tests, as agreed. This page is the manual
 test plan.
 
 ## Why
@@ -58,11 +59,12 @@ else in search reads the new fields yet (see "Not in this branch").
    also works; the name has to start with the year). A folder named anything else leaves
    undated documents undated.
 
-4. Cost of a full reload. Nothing is cached, so `--reload` repeats every existing model
+4. Cost of a full reload. Nothing is cached, so the reload repeats every existing model
    call and adds one more per document. With today's corpus that is about 562 enrichment
-   calls, about 3,157 table summaries and about 386 fallback-label calls, all on the
-   `labeler` (Haiku). It also makes about 694 Cohere embedding calls (batches of 96 per
-   document, now including its card) and fetches the wri.org pages again.
+   calls, about 3,070 table summaries (tables with a role are no longer summarized) and
+   about 386 fallback-label calls, all on the `labeler` (Haiku, at effort `low`). Table
+   summaries run 4 at a time per document. It also makes about 694 Cohere embedding calls
+   (batches of 96 per document, now including its card) and fetches the wri.org pages again.
 
 ## Step 1: one PDF locally, no Aurora
 
@@ -113,14 +115,17 @@ shorter until the full reload.
 ## Step 3: the whole corpus
 
 ```sh
-scripts/run-pipeline.sh --reload 2024 2025 2026
+scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
 ```
 
+No `--reload` is needed: a document loaded before this branch has no `card_embedding`, so it
+counts as not loaded. If the run stops (expired session credentials, a closed laptop),
+refresh `.env` and run the same command again: it loads only the documents not yet done.
+
 Each document is replaced in its own transaction, so search keeps working during the
-reload, over a mix of old and new rows until it ends. A document whose model call fails is
-`SKIPPED` and keeps its old rows. A topic, concept, region or genre outside its list raises
-`ValueError` and stops the run, as an off-list topic already did. Structured output should
-prevent it.
+reload, over a mix of old and new rows until it ends. A document whose model call fails, or
+whose topic, concept, region or genre is outside its list, is `SKIPPED` and keeps its old
+rows; the run goes on. Rerun the same command to retry the skipped documents.
 
 ## SQL checks
 
@@ -255,18 +260,6 @@ What to expect: no References, Contents or Endnotes chunks, and more 2025 docume
 year-filtered run. The keyword half of search still requires every word of the question,
 so it still matches nothing for this wording. Any gain on this question comes from the
 context line in the embeddings. The query-side fixes are not in this branch.
-
-## Existing tests that will fail
-
-No test code was changed. Reading the tests, these two will fail:
-
-- `tests/test_fallback_labels.py::test_ingest_records_the_model_as_the_source_in_the_catalog_and_on_every_chunk`:
-  its fake model has one canned reply, and ingestion now makes a second call (enrichment).
-- `tests/test_table_chunks.py::test_description_is_for_search_only`: its fake answers every
-  call with a table summary, so the enrichment call gets text that isn't JSON. Its
-  `indexed_text` and request-count assertions also change.
-
-I didn't find others that pass a model client to `ingest_document`, but I didn't run the suite.
 
 ## Not in this branch
 

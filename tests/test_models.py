@@ -59,7 +59,8 @@ def test_schema_constrains_the_reply_and_json_is_parsed():
 
     assert label == {"topic": "forests"}
     assert client.requests[0]["output_config"] == {
-        "format": {"type": "json_schema", "schema": SCHEMA}
+        "effort": "low",
+        "format": {"type": "json_schema", "schema": SCHEMA},
     }
 
 

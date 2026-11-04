@@ -83,9 +83,11 @@ Ingestion runs on a laptop or in CloudShell with AWS credentials, 8 documents at
 
 ## Reruns and failures
 
-- A PDF already loaded with the same file hash is skipped. `--reload` loads it again, which
-  a change to ingestion needs.
-- A failed audit or model call reports the document as `SKIPPED`, and its earlier rows stay.
+- A PDF already loaded with the same file hash and a document card is skipped, so a rerun
+  after an interrupted load picks up where it stopped. `--reload` loads every PDF again,
+  which a change to ingestion needs.
+- A failed audit, model call or off-list label reports the document as `SKIPPED`, and its
+  earlier rows stay.
 - Each document is replaced in its own transaction, so search keeps working during a load.
 - To check one PDF without Aurora: `uv run python -m askwri.ingest <pdf> --out <folder>`
   writes the chunks and `catalog.json` locally.

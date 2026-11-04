@@ -21,6 +21,9 @@ MODELS = {
     "reranker": "amazon.rerank-v1:0",
 }
 CLAUDE_ROLES = ("vision", "labeler", "answerer")
+# Labels and table summaries are extraction: at "low" a table summary used about 45% fewer
+# output tokens than the default "medium", with summaries as good (3 tables, 4 Nov).
+EFFORT = {"labeler": "low"}
 # Room for the adaptive thinking these models always do, plus the reply.
 MAX_TOKENS = 8192
 
@@ -59,6 +62,7 @@ def call_claude(
     """Send one prompt (with optional images) to the model for `role` and return its text.
 
     With `schema` (a JSON Schema), the reply is constrained to match it and is JSON text.
+    A role in EFFORT is sent that thinking effort.
     `document` names what the call is about; it is the first thing in every error.
     Raises ModelError if the API call fails or the model does not finish normally
     (a refusal, or running out of max_tokens).
@@ -67,9 +71,10 @@ def call_claude(
         raise ValueError(f"{role!r} is not a Claude role; use one of {CLAUDE_ROLES}")
     content = [_image_block(image) for image in images]
     content.append({"type": "text", "text": prompt})
-    options = (
-        {"output_config": {"format": {"type": "json_schema", "schema": schema}}} if schema else {}
-    )
+    output_config = {"effort": EFFORT[role]} if role in EFFORT else {}
+    if schema:
+        output_config["format"] = {"type": "json_schema", "schema": schema}
+    options = {"output_config": output_config} if output_config else {}
     try:
         response = client.messages.create(
             model=MODELS[role],

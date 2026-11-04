@@ -9,7 +9,7 @@ import pytest
 from askwri.ingest.__main__ import write_catalog, write_chunks
 from askwri.ingest.document import ingest_document
 from askwri.ingest.labels import label_document
-from askwri.ingest.wri_site import Response, WriSite
+from askwri.ingest.wri_site import Response, WriSite, part_of
 
 OWN_DOI = "10.46830/wrirpt.24.00006"
 CITED_DOI = "10.46830/wrirpt.21.00145"
@@ -292,3 +292,16 @@ def test_a_document_without_a_page_cites_its_pdf_and_records_why(tmp_path):
     assert not {"topic", "year", "link", "tags"} & attributes.keys()
     (row,) = json.loads((tmp_path / "out" / "catalog.json").read_text())
     assert (row["label_source"], row["link"], row["pdf_file"]) == ("no page", None, "r.pdf")
+
+
+def test_part_of_reads_initiatives_and_programs_from_the_taxonomy_line():
+    # As wri.org writes it, with two spaces after "div".
+    page = (
+        '<div  class="narrative-taxonomy">\n  <p>This Working Paper is part of '
+        '<a href="/initiatives/ocean-climate-diplomacy">Ocean Climate Diplomacy</a> within '
+        '<a href="/energy">Energy</a> and <a href="/initiatives/clean-energy-supply">Clean '
+        'Energy</a>. Reach out to <a href="/project-experts/1">an Initiative Expert</a>.</p>'
+    )
+
+    assert part_of(page) == (("Ocean Climate Diplomacy",), ("Energy", "Clean Energy"))
+    assert part_of("<p>No taxonomy line here.</p>") == ((), ())
