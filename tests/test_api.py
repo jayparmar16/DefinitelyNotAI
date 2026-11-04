@@ -64,3 +64,40 @@ def test_warm_up_needs_a_valid_session_id():
     for bad in [{}, {"sessionId": "short"}, {"sessionId": "x" * 36 + "/../"}]:
         with pytest.raises(BadRequest):
             warm_session(bad)
+
+
+def test_a_reused_connection_survives_an_early_answer_with_an_unread_body():
+    """An early 401 or 404 must still consume the request body, or the leftover bytes are
+    parsed as the start of the next request on the same keep-alive connection."""
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from askwri.api.server import Handler
+
+    class FakeApi:
+        origins = frozenset({"http://localhost:3000"})
+        api_key = "k1"
+
+    Handler.api = FakeApi()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        body = '{"sessionId": "' + "s" * 36 + '"}'
+        connection.request(
+            "POST", "/nowhere", body=body, headers={"Content-Type": "application/json"}
+        )
+        unknown = connection.getresponse()
+        unknown.read()
+        assert unknown.status == 404  # answered before any route looked at the body
+        connection.request("POST", "/warm", body=body, headers={"Content-Type": "application/json"})
+        first = connection.getresponse()
+        first.read()
+        assert first.status == 401  # no key: answered before the route read the body
+        connection.request("OPTIONS", "/chat", headers={"Origin": "http://localhost:3000"})
+        second = connection.getresponse()
+        second.read()
+        assert second.status == 204
+    finally:
+        server.shutdown()

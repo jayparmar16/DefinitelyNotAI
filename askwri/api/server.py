@@ -147,6 +147,10 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"url": link, "expiresIn": DOWNLOAD_SECONDS})
 
     def do_POST(self):
+        # Read the body before any early answer: connections are reused (HTTP/1.1 keep-alive),
+        # and an unread body would be parsed as the start of the next request.
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        body = self.rfile.read(length)
         path = urlsplit(self.path).path
         if path not in ("/chat", "/warm"):
             self._json(404, {"error": "not found"})
@@ -154,11 +158,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return
         if path == "/warm":
-            self._warm()
+            self._warm(body)
             return
         try:
-            length = int(self.headers.get("Content-Length", 0))
-            payload = chat_payload(json.loads(self.rfile.read(min(length, 100_000)) or b"{}"))
+            if length > 100_000:
+                raise BadRequest("request body too large")
+            payload = chat_payload(json.loads(body or b"{}"))
         except (BadRequest, ValueError) as error:
             self._json(400, {"error": str(error)})
             return
@@ -187,11 +192,10 @@ class Handler(BaseHTTPRequestHandler):
             self._chunk(event)
         self._chunk(b"")  # the empty chunk ends the response
 
-    def _warm(self) -> None:
+    def _warm(self, body: bytes) -> None:
         """Start the agent runtime for a session; answers once it is up (cold start ~6-9 s)."""
         try:
-            length = int(self.headers.get("Content-Length", 0))
-            session = warm_session(json.loads(self.rfile.read(min(length, 10_000)) or b"{}"))
+            session = warm_session(json.loads(body or b"{}"))
         except (BadRequest, ValueError) as error:
             self._json(400, {"error": str(error)})
             return

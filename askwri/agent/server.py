@@ -44,10 +44,13 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"status": "Healthy"})
 
     def do_POST(self):
+        # Read the body first: on a reused (keep-alive) connection an unread body would be parsed
+        # as the start of the next request.
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0) or 0))
         if self.path != "/invocations":
             self.send_error(404)
             return
-        request = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        request = json.loads(body or b"{}")
         if request.get("warmup"):
             # Sent while the user is still typing, so this session's runtime is up before they ask.
             self._json(200, {"status": "warm"})
