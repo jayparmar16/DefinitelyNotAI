@@ -58,7 +58,3 @@ variable "grounding_threshold" {
   type        = number
 }
 
-variable "relevance_grounding_threshold" {
-  description = "Guardrails relevance threshold (0-0.99): is the answer relevant to the question."
-  type        = number
-}

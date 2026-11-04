@@ -18,6 +18,7 @@ from askwri.agent.citations import (
     drop_unsupported,
     label_passages,
     number_markers,
+    numbers_not_in,
     source_entry,
 )
 from askwri.agent.tracing import agent_span, finish_agent_span
@@ -35,6 +36,7 @@ LANGUAGE_NAMES = {
     "id": "Indonesian",
     "hi": "Hindi",
 }
+TRANSLATED_FIELDS = ("paragraphs", "implications", "limits", "questions")
 FORMATS = {
     "summary": "a researcher summary",
     "issue-brief": "a policymaker issue brief",
@@ -49,6 +51,46 @@ RULES = (
     "If the passages do not answer the question, set answerable to false. Write each "
     "sentence so a reader could check it against its cited passages alone: one claim per "
     "sentence, paraphrased closely, never combining facts from passages it does not cite."
+)
+
+# How the same evidence is framed for each kind of WRI user (the personas in WRI's vision).
+AUDIENCES = {
+    "researcher": (
+        "Write for a WRI researcher: precise and technical. Give specific figures, methods, study "
+        "scope, sample sizes and caveats where the passages state them. Give implications only "
+        "if the question asks for advice or recommendations."
+    ),
+    "policymaker": (
+        "Write for a policymaker: plain language without jargon, bottom line first, focused on "
+        "what the evidence means for decisions. Always give 1 to 3 implications for policy."
+    ),
+    "partnerships": (
+        "Write for WRI partnerships and fundraising staff preparing a conversation: short, "
+        "memorable points that lead with the strongest figures. Always give 1 to 3 implications "
+        "framed as conversation openers, and make the follow-up questions ones to ask a partner."
+    ),
+}
+# Nobody picks a persona when typing a question, so by default the drafter reads who is asking
+# from the question itself, inside the draft call it already makes (no extra model call).
+AUTO = (
+    "Nobody told you who is asking: work it out from the question and set audience to the "
+    "closest fit, then write for that reader as described below.\n"
+    "- policymaker: the asker is shaping a decision - building a policy, initiative, programme "
+    "or plan; asking what to target, prioritise, fund, regulate, adopt or do; or asking what "
+    "the evidence means for a law or policy. 'Which laws should we target?' is policymaker.\n"
+    "- partnerships: the question is about talking to or persuading a partner, funder or "
+    "the public - pitches, talking points, key messages.\n"
+    "- researcher: anything else - facts, findings, methods, data.\n"
+    "For any decision-oriented question, lead with the bottom line the evidence supports, "
+    "always give implications, and use limits to say plainly what the evidence can't settle.\n\n"
+    + "\n\n".join(f"{name}: {guide}" for name, guide in AUDIENCES.items())
+)
+EXTRAS = (
+    "Also give: implications - 0 to 3 sentences of your own interpretation of what the cited "
+    "findings could mean for the user's goal; they carry no passage IDs and add no new facts or "
+    "numbers. limits - 0 to 3 things the question asks that these passages don't cover "
+    "(describe only these passages, not all of WRI's work); empty when the passages cover it. "
+    "questions - 2 or 3 short follow-up questions the user could ask next."
 )
 
 
@@ -175,6 +217,7 @@ class Agent:
 
     def __init__(self, deps: Deps, settings: Settings):
         self.deps, self.settings = deps, settings
+        self._collection: int | None = None  # documents indexed, asked once
 
     def run(self, request: dict) -> Iterator[dict]:
         """Answer one request. Keys follow the UI's AskRequest: question, mode, language,
@@ -228,7 +271,8 @@ class Agent:
 
         ranked = sorted(evidence.values(), key=lambda r: r["relevance"], reverse=True)
         labels = label_passages(ranked[: PASSAGES[mode]])
-        draft = yield from self._draft(question, mode, labels, request)
+        audience = request.get("audience") if request.get("audience") in AUDIENCES else "auto"
+        draft = yield from self._draft(question, mode, labels, request, audience)
         if not draft["answerable"]:
             yield decline(
                 "The passages found don't answer this question directly, so AskWRI won't "
@@ -239,15 +283,32 @@ class Agent:
             )
             return
 
-        groups = [cited_sentences(g, labels) for g in draft["groups"]]
-        groups = [g for g in groups if g]
-        total = sum(len(g) for g in groups)
-        # Authors depend only on which documents the draft cites: fetch them while verifying.
-        drafted_docs = sorted({labels[p]["doc_id"] for g in groups for s in g for p in s.passages})
-        with ThreadPoolExecutor(max_workers=1) as pool:
+        # Authors depend only on which documents the draft cites, and the collection size never
+        # depends on the question: fetch both while claims are verified.
+        drafted_docs = sorted(
+            {
+                labels[p]["doc_id"]
+                for g in draft["groups"]
+                for s in g
+                for p in s.passages
+                if p in labels
+            }
+        )
+        with ThreadPoolExecutor(max_workers=2) as pool:
             people = pool.submit(self.deps.gateway.call, "authors", {"doc_ids": drafted_docs})
-            groups = yield from self._verify(question, groups, labels)
+            collection = pool.submit(self._collection_size)
+            groups, total, removed = yield from self._checked(question, draft, labels, "verify")
+            if total >= 2 and sum(len(g) for g in groups) * 2 < total:
+                # Most claims failed: redraft once, more strictly, and keep the better version.
+                retry = yield from self._draft(
+                    question, mode, labels, request, draft["audience"], removed
+                )
+                if retry["answerable"]:
+                    checked = yield from self._checked(question, retry, labels, "verify-2")
+                    if sum(len(g) for g in checked[0]) > sum(len(g) for g in groups):
+                        draft, (groups, total, removed) = retry, checked
             authors = {d["doc_id"]: d["authors"] for d in people.result()["documents"]}
+            size = collection.result()
         if not groups:
             yield decline(
                 "AskWRI drafted an answer but could not verify its claims against the passages, "
@@ -263,30 +324,55 @@ class Agent:
             source_entry(i + 1, labels[label], authors.get(labels[label]["doc_id"], []))
             for i, label in enumerate(order)
         ]
+        given = " ".join(r["passage"] for r in labels.values())
+        implications = [t for t in draft["implications"] if not numbers_not_in(t, given)]
+        cited_docs = len({s["docId"] for s in sources})
         report = None
         if mode == "deep":
             report = {
                 "title": draft["title"],
                 "builtFrom": built_from(sources),
                 "keyPoints": texts,
-                "thinEvidence": draft["thin_evidence"],
+                "thinEvidence": draft["limits"],
             }
-        texts, report, translated = yield from self._translate_answer(texts, report, language)
-        verified = sum(len(g) for g in groups)
         answer = {
             "mode": mode,
-            "language": language if translated else "en",
-            "machineTranslated": translated,
+            "language": "en",
+            "machineTranslated": False,
+            "audience": draft["audience"],
+            "scope": f"Based on {cited_docs} of the {size} WRI publications indexed in AskWRI",
             "paragraphs": texts,
+            "implications": implications,
+            "limits": [] if report else draft["limits"],
+            "questions": draft["questions"],
             "sources": sources,
             "claimsTotal": total,
-            "claimsVerified": verified,
+            "claimsVerified": sum(len(g) for g in groups),
+            "removedClaims": removed,
             "elapsedSeconds": round(time.monotonic() - started),
             "report": report,
         }
+        answer = yield from self._translate_answer(answer, language)
+        answer["elapsedSeconds"] = round(time.monotonic() - started)
         if self.deps.memory and session:
             self.deps.memory.save_turn(session, question, answer)
         yield {"type": "answer", "answer": answer}
+
+    def _collection_size(self) -> int:
+        """How many documents AskWRI has indexed (asked once per runtime, then remembered)."""
+        if self._collection is None:
+            counts = self.deps.gateway.call("coverage", {"dimension": "topic"})
+            self._collection = counts["documents_matching_filters"]
+        return self._collection
+
+    def _checked(self, question, draft, labels, step_id):
+        """Drop uncited sentences, then verify the rest. Returns the surviving groups, how many
+        claims were drafted, and the text of every claim that was removed."""
+        groups = [g for g in (cited_sentences(g, labels) for g in draft["groups"]) if g]
+        drafted = [s.text for g in groups for s in g]
+        groups = yield from self._verify(question, groups, labels, step_id)
+        kept = {s.text for g in groups for s in g}
+        return groups, len(drafted), [text for text in drafted if text not in kept]
 
     # --- steps ---
 
@@ -364,10 +450,14 @@ class Agent:
             if strong:
                 return {"rounds": round_number, "covered": 1}
             if round_number < rounds:
-                query = self._rewrite(sub["question"], tried)
+                query = self._rewrite(sub["question"], tried, results)
         return {"rounds": rounds, "covered": 0}
 
-    def _rewrite(self, question: str, tried: list[str]) -> str:
+    def _rewrite(self, question: str, tried: list[str], closest: list[dict]) -> str:
+        """A new search query. The reranker scores a broad question low against a specific
+        document ("environmental laws" vs an air quality report), so the closest passages
+        found so far are shown: their wording usually names what the collection really has."""
+        seen = "\n".join(f"- {r['title']}: {r['passage'][:160]}" for r in closest[:5])
         reply = llm.ask_json(
             self.deps.llm,
             llm.SMALL,
@@ -375,8 +465,12 @@ class Agent:
             system="You rewrite search queries for WRI's publication archive. Earlier queries "
             "found only weak evidence. Write one new query with different wording: "
             "synonyms, broader terms, or older terminology (WRI has published since the "
-            "1980s, e.g. 'global warming' before 'climate change').",
-            prompt=f"Question: {question}\nQueries already tried: {tried}",
+            "1980s, e.g. 'global warming' before 'climate change'). Search ranking rewards "
+            "specific terms, not broad ones: when the closest passages found are on a narrower "
+            "topic that bears on the question, write the query in their words - the specific "
+            "law, programme, sector or place they name - rather than listing more broad topics.",
+            prompt=f"Question: {question}\nQueries already tried: {tried}\n"
+            f"Closest passages found so far:\n{seen}",
             schema={
                 "type": "object",
                 "properties": {"query": {"type": "string"}},
@@ -386,78 +480,90 @@ class Agent:
         )
         return reply["query"]
 
-    def _draft(self, question, mode, labels, request):
-        yield step("draft", "Drafting a cited answer", "now")
+    def _draft(self, question, mode, labels, request, audience, removed=()):
+        """Draft a cited answer for the audience ("auto": the model infers it from the question
+        and returns its choice). With `removed` (claims a first draft could not
+        support) it redrafts more strictly."""
+        step_id = "redraft" if removed else "draft"
+        yield step(
+            step_id, "Redrafting more strictly" if removed else "Drafting a cited answer", "now"
+        )
         claims = {"type": "array", "items": sentence_schema()}
+        texts = {"type": "array", "items": {"type": "string"}}
         if mode == "deep":
-            audience = request.get("audience", "researcher")
             form = FORMATS.get(request.get("format", "summary"), FORMATS["summary"])
-            schema = {
-                "type": "object",
-                "properties": {
-                    "answerable": {"type": "boolean"},
-                    "title": {"type": "string"},
-                    "key_points": claims,
-                    "thin_evidence": {"type": "array", "items": {"type": "string"}},
-                },
-                "required": ["answerable", "title", "key_points", "thin_evidence"],
-                "additionalProperties": False,
+            properties = {
+                "answerable": {"type": "boolean"},
+                "title": {"type": "string"},
+                "key_points": claims,
             }
             task = (
-                f"Write {form} for a {audience}: a short title, 3 to 7 key points (each one or "
-                "two sentences with its passage IDs), and the gaps: what the question asks "
-                "that these passages do not cover (no citations; describe only this set of "
-                "passages, not all of WRI's work)."
+                f"Write {form}: a short neutral title naming the topic (not a conclusion), and 3 to "
+                "7 key points, each one or two sentences with its passage IDs."
             )
         else:
-            schema = {
-                "type": "object",
-                "properties": {
-                    "answerable": {"type": "boolean"},
-                    "paragraphs": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {"sentences": claims},
-                            "required": ["sentences"],
-                            "additionalProperties": False,
-                        },
+            properties = {
+                "answerable": {"type": "boolean"},
+                "paragraphs": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {"sentences": claims},
+                        "required": ["sentences"],
+                        "additionalProperties": False,
                     },
                 },
-                "required": ["answerable", "paragraphs"],
-                "additionalProperties": False,
             }
             task = (
-                "Write a short answer: 1 or 2 paragraphs of 2 to 4 sentences. Each sentence "
-                "lists the IDs of the passages that support it."
+                "Write a short answer: 1 or 2 paragraphs of 2 to 4 sentences. Each sentence lists "
+                "the IDs of the passages that support it."
+            )
+        properties |= {"implications": texts, "limits": texts, "questions": texts}
+        if audience == "auto":
+            # First in the reply, so the model settles the reader before it writes for them.
+            properties = {"audience": {"type": "string", "enum": list(AUDIENCES)}} | properties
+        strict = ""
+        if removed:
+            strict = (
+                "\nA previous draft had sentences the passages did not support: "
+                + " | ".join(removed[:6])
+                + ". This time write only what the passages state, staying close to their wording."
             )
         reply = llm.ask_json(
             self.deps.llm,
             llm.LARGE,
-            step="draft",
+            step=step_id,
             effort=DRAFT_EFFORT[mode],
-            system=RULES,
-            prompt=f"Question: {question}\n\n{task}\n\nPassages:\n\n{passages_block(labels)}",
-            schema=schema,
+            system=f"{RULES}\n\n{AUTO if audience == 'auto' else AUDIENCES[audience]}",
+            prompt=f"Question: {question}\n\n{task}\n{EXTRAS}{strict}\n\nPassages:\n\n"
+            f"{passages_block(labels)}",
+            schema={
+                "type": "object",
+                "properties": properties,
+                "required": list(properties),
+                "additionalProperties": False,
+            },
         )
-        yield step("draft", "Drafted a cited answer", "done")
-        if mode == "deep":
-            return {
-                "answerable": reply["answerable"],
-                "title": reply["title"],
-                "thin_evidence": reply["thin_evidence"],
-                "groups": [[s] for s in to_sentences(reply["key_points"])],
-            }
-        return {
+        yield step(step_id, "Redrafted" if removed else "Drafted a cited answer", "done")
+        draft = {
             "answerable": reply["answerable"],
-            "groups": [to_sentences(p["sentences"]) for p in reply["paragraphs"]],
+            "implications": reply["implications"][:3],
+            "limits": reply["limits"][:3],
+            "questions": reply["questions"][:3],
+            "audience": reply.get("audience", audience),
         }
+        if mode == "deep":
+            draft["title"] = reply["title"]
+            draft["groups"] = [[s] for s in to_sentences(reply["key_points"])]
+        else:
+            draft["groups"] = [to_sentences(p["sentences"]) for p in reply["paragraphs"]]
+        return draft
 
-    def _verify(self, question, groups, labels):
+    def _verify(self, question, groups, labels, step_id="verify"):
         """Claim check (each sentence against its own passages), then the Guardrails
         contextual grounding check on the whole answer. Returns the surviving groups."""
         claims = [s for g in groups for s in g]
-        yield step("verify", f"Verifying {len(claims)} claims against their passages", "now")
+        yield step(step_id, f"Verifying {len(claims)} claims against their passages", "now")
         listed = "\n\n".join(
             f"Claim {i}: {s.text}\nPassages:\n"
             + "\n".join(labels[p]["passage"] for p in s.passages)
@@ -496,7 +602,7 @@ class Agent:
         kept = sum(len(g) for g in groups)
         if not groups:
             yield step(
-                "verify", f"Verified 0 of {len(claims)} claims", "done", "nothing to answer with"
+                step_id, f"Verified 0 of {len(claims)} claims", "done", "nothing to answer with"
             )
             return groups
         dropped = 0
@@ -510,7 +616,7 @@ class Agent:
             kept = sum(len(g) for g in groups)
         if not groups:
             yield step(
-                "verify",
+                step_id,
                 f"Verified 0 of {len(claims)} claims",
                 "done",
                 "grounding check failed: answer not shown",
@@ -521,11 +627,11 @@ class Agent:
             if dropped
             else None
         )
-        yield step("verify", f"Verified {kept} of {len(claims)} claims", "done", detail)
+        yield step(step_id, f"Verified {kept} of {len(claims)} claims", "done", detail)
         return groups
 
     def _grounded(self, question, groups, labels) -> bool:
-        """Bedrock Guardrails contextual grounding: is the whole answer grounded in its sources?"""
+        """Bedrock Guardrails contextual grounding: are these parts grounded in their passages?"""
         cited = {p for g in groups for s in g for p in s.passages}
         response = self.deps.bedrock.apply_guardrail(
             guardrailIdentifier=self.settings.guardrail_id,
@@ -595,31 +701,42 @@ class Agent:
             return reply["language"]
         return None
 
-    def _translate_answer(self, texts: list[str], report: dict | None, language: str):
-        """Translate the answer texts and, for a report, its title and gaps in the same pass.
-        Key points are the answer texts, so they stay identical to the paragraphs."""
-        extra = [report["title"], *report["thinEvidence"]] if report else []
-        out, translated = yield from self._translate([*texts, *extra], language)
-        texts, extra = out[: len(texts)], out[len(texts) :]
+    def _translate_answer(self, answer: dict, language: str):
+        """Translate every text section of an answer in one pass (key points are the answer's
+        paragraphs, so they stay identical). English, or no change in language, returns it as is."""
+        if language == answer.get("language", "en"):
+            return answer
+        report = answer.get("report")
+        parts = [(field, list(answer.get(field) or [])) for field in TRANSLATED_FIELDS]
+        parts.append(("scope", [answer["scope"]] if answer.get("scope") else []))
         if report:
-            report = {**report, "keyPoints": texts, "title": extra[0], "thinEvidence": extra[1:]}
-        return texts, report, translated
+            parts += [("title", [report["title"]]), ("thinEvidence", list(report["thinEvidence"]))]
+        flat = [text for _, items in parts for text in items]
+        out, translated = yield from self._translate(flat, language)
+        new, position = {}, 0
+        for field, items in parts:
+            new[field] = out[position : position + len(items)]
+            position += len(items)
+        result = {**answer, **{field: new[field] for field in TRANSLATED_FIELDS}}
+        if new["scope"]:
+            result["scope"] = new["scope"][0]
+        if report:
+            result["report"] = {
+                **report,
+                "keyPoints": new["paragraphs"],
+                "title": new["title"][0],
+                "thinEvidence": new["thinEvidence"],
+            }
+        result["language"] = language if translated else answer.get("language", "en")
+        result["machineTranslated"] = translated or answer.get("machineTranslated", False)
+        return result
 
     def _translate_previous(self, previous, language, question, session, started):
         yield step(
             "reuse", "Reusing the evidence from your previous answer", "done", "no new search"
         )
-        texts, report, translated = yield from self._translate_answer(
-            previous["paragraphs"], previous.get("report"), language
-        )
-        answer = {
-            **previous,
-            "language": language if translated else previous["language"],
-            "machineTranslated": translated,
-            "paragraphs": texts,
-            "report": report,
-            "elapsedSeconds": round(time.monotonic() - started),
-        }
+        answer = yield from self._translate_answer(previous, language)
+        answer = {**answer, "elapsedSeconds": round(time.monotonic() - started)}
         if self.deps.memory and session:
             self.deps.memory.save_turn(session, question, answer)
         yield {"type": "answer", "answer": answer}

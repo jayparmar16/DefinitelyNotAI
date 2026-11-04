@@ -44,7 +44,7 @@ def chat_payload(body: dict) -> dict:
         "question": question,
         "mode": body.get("mode") if body.get("mode") in MODES else "quick",
         "language": str(body.get("language") or "en")[:5],
-        "audience": str(body.get("audience") or "researcher")[:40],
+        "audience": str(body.get("audience") or "auto")[:40],
         "format": body.get("format") if body.get("format") in FORMATS else "summary",
         "filters": {k: filters[k] for k in ("yearFrom", "pubType") if filters.get(k)},
         "sessionId": session,

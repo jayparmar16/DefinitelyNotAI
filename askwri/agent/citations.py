@@ -5,6 +5,7 @@ become [n] markers numbered by first use, a sources list with one entry per cite
 the deterministic checks that run before any model-based verification.
 """
 
+import re
 from dataclasses import dataclass
 
 
@@ -98,3 +99,13 @@ def drop_unsupported(groups: list[list[Sentence]], supported: set[int]) -> list[
         if survivors:
             kept.append(survivors)
     return kept
+
+
+NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def numbers_not_in(text: str, source: str) -> list[str]:
+    """Numbers in `text` that never appear in `source`, compared as digits only (so "1,000"
+    matches "1000"). An implication that introduces one states a fact no passage gave."""
+    known = {re.sub(r"\D", "", n) for n in NUMBER.findall(source)}
+    return [n for n in NUMBER.findall(text) if re.sub(r"\D", "", n) not in known]

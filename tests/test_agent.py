@@ -146,6 +146,8 @@ class FakeGateway:
             return {"results": [{**RESULT, "relevance": self.relevance}]}
         if tool == "authors":
             return {"documents": [{"doc_id": "heat", "authors": ["Ana Silva"]}], "people": []}
+        if tool == "coverage":
+            return {"documents_matching_filters": 5}
         raise AssertionError(tool)
 
 
@@ -160,10 +162,19 @@ class FakeMemory:
         self.saved.append((session, question, answer))
 
 
-def fake_models(monkeypatch, draft, supported):
+DRAFT_EXTRAS = {"implications": [], "limits": [], "questions": []}
+PROMPTS = []
+
+
+def fake_models(monkeypatch, draft, supported, redraft=None):
+    PROMPTS.clear()
+
     def ask_json(client, size, *, step, **kwargs):
+        PROMPTS.append((step, kwargs))
         if step == "draft":
-            return draft
+            return {**DRAFT_EXTRAS, **draft}
+        if step == "redraft":
+            return {**DRAFT_EXTRAS, **(redraft or draft)}
         if step == "verify":
             return {"verdicts": [{"index": i, "supported": i in supported} for i in range(10)]}
         if step == "rewrite":
@@ -222,6 +233,8 @@ def test_weak_evidence_retries_then_declines_with_what_was_searched(monkeypatch)
     assert final["decline"]["searched"][:2] == ["How do cities cool down?", "urban heat"]
     assert final["decline"]["related"][0]["title"] == "Heat-resilient cities"
     assert not memory.saved
+    rewrite = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "rewrite")
+    assert "Heat-resilient cities" in rewrite  # searches in the words of what it already found
 
 
 def test_answer_with_no_verified_claims_is_declined_not_shown(monkeypatch):
@@ -255,7 +268,7 @@ def test_a_translated_report_translates_its_title_and_gaps_too(monkeypatch):
     draft = {
         "answerable": True,
         "title": "Cooling cities",
-        "thin_evidence": ["No cost data."],
+        "limits": ["No cost data."],
         "key_points": [{"text": "Cool roofs lowered surface heat.", "passages": ["P1"]}],
     }
     monkeypatch.setattr(
@@ -322,3 +335,94 @@ def test_built_from_shows_a_single_year_once():
     assert built_from([{"docId": "a", "year": 2026}, {"docId": "b", "year": 2026}]) == (
         "Built from 2 WRI publications, 2026"
     )
+
+
+def test_numbers_not_in_flags_figures_no_passage_gave():
+    from askwri.agent.citations import numbers_not_in
+
+    source = "In 2024, 181 of 394 cities missed the 1,000 limit."
+    assert numbers_not_in("Focus on the 181 cities that missed it in 2024.", source) == []
+    assert numbers_not_in("About 1000 cities, not 250, are affected.", source) == ["250"]
+
+
+def test_answer_has_scope_audience_sections_and_drops_implications_with_new_numbers(monkeypatch):
+    draft = {
+        **DRAFT,
+        "implications": ["Target cool roofs first.", "Fund 300 new parks."],
+        "limits": ["No cost data."],
+        "questions": ["What do cool roofs cost?"],
+    }
+    fake_models(monkeypatch, draft, {0})
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "q", "audience": "policymaker"}))
+    answer = events[-1]["answer"]
+    assert answer["audience"] == "policymaker"
+    assert answer["scope"] == "Based on 1 of the 5 WRI publications indexed in AskWRI"
+    assert answer["implications"] == ["Target cool roofs first."]  # "300" is in no passage
+    assert (answer["limits"], answer["questions"]) == (
+        ["No cost data."],
+        ["What do cool roofs cost?"],
+    )
+    assert answer["removedClaims"] == ["They also cured all diseases."]
+    system = next(kwargs["system"] for step, kwargs in PROMPTS if step == "draft")
+    assert "Write for a policymaker" in system
+
+
+def test_without_a_chosen_audience_the_drafter_infers_it_from_the_question(monkeypatch):
+    fake_models(monkeypatch, {**DRAFT, "audience": "policymaker"}, {0})
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    for request in [
+        {"question": "Which laws should we target?"},
+        {"question": "q", "audience": "x"},
+    ]:
+        PROMPTS.clear()
+        answer = list(agent.run(request))[-1]["answer"]
+        assert answer["audience"] == "policymaker"
+        system = next(kwargs["system"] for step, kwargs in PROMPTS if step == "draft")
+        assert "work it out from the question" in system
+
+
+def test_most_claims_failing_triggers_one_stricter_redraft_and_keeps_the_better(monkeypatch):
+    first = {
+        "answerable": True,
+        "paragraphs": [
+            {
+                "sentences": [
+                    {"text": "Claim A.", "passages": ["P1"]},
+                    {"text": "Claim B.", "passages": ["P1"]},
+                    {"text": "Claim C.", "passages": ["P1"]},
+                ]
+            }
+        ],
+    }
+    better = {
+        "answerable": True,
+        "paragraphs": [
+            {
+                "sentences": [
+                    {"text": "Close claim one.", "passages": ["P1"]},
+                    {"text": "Close claim two.", "passages": ["P1"]},
+                ]
+            }
+        ],
+    }
+    fake_models(monkeypatch, first, {0}, redraft=better)  # first draft: 1 of 3 kept
+    calls = []
+    real = loop.llm.ask_json
+
+    def counting(client, size, *, step, **kwargs):
+        calls.append(step)
+        # The redraft's verify step keeps both claims.
+        if step == "verify" and calls.count("verify") == 2:
+            return {"verdicts": [{"index": 0, "supported": True}, {"index": 1, "supported": True}]}
+        return real(client, size, step=step, **kwargs)
+
+    monkeypatch.setattr(loop.llm, "ask_json", counting)
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "q"}))
+    answer = events[-1]["answer"]
+    assert calls.count("redraft") == 1
+    assert answer["paragraphs"] == ["Close claim one [1]. Close claim two [1]."]
+    assert (answer["claimsTotal"], answer["claimsVerified"]) == (2, 2)
+    redraft_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "redraft")
+    assert "Claim B." in redraft_prompt and "staying close to their wording" in redraft_prompt

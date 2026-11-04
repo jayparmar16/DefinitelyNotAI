@@ -102,12 +102,6 @@ variable "grounding_threshold" {
   default     = 0.5
 }
 
-variable "relevance_grounding_threshold" {
-  description = "Bedrock Guardrails relevance threshold for answers (0-0.99). Its score is noisy (0.51 on a good answer), so it is low; grounding does the real work."
-  type        = number
-  default     = 0.2
-}
-
 variable "allowed_origins" {
   description = "Browser origins allowed to call askwri-api. Add the CloudFront domain when the UI is hosted."
   type        = list(string)

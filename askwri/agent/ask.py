@@ -65,10 +65,23 @@ def show(event: dict) -> None:
             f"claims verified, {answer['elapsedSeconds']} s"
             f"{', machine-translated' if answer['machineTranslated'] else ''})\n"
         )
+        print(f"  {answer.get('scope', '')}  [for: {answer.get('audience')}]\n")
         if answer.get("report"):
             print(f"  {answer['report']['title']}\n  {answer['report']['builtFrom']}\n")
         for paragraph in answer["paragraphs"]:
             print(f"  {paragraph}\n")
+        sections = [
+            ("POSSIBLE IMPLICATIONS (AskWRI's interpretation, not WRI findings)", "implications"),
+            ("WHAT THIS CAN'T TELL YOU", "limits"),
+            ("QUESTIONS TO EXPLORE", "questions"),
+            ("REMOVED (not supported by the sources)", "removedClaims"),
+        ]
+        for heading, field in sections:
+            if answer.get(field):
+                print(heading)
+                for item in answer[field]:
+                    print(f"  - {item}")
+                print()
         print("SOURCES")
         for s in answer["sources"]:
             print(
@@ -96,6 +109,12 @@ def main() -> int:
     parser.add_argument("--deep", action="store_true", help="Deep research instead of Quick answer")
     parser.add_argument("--language", default="en")
     parser.add_argument("--session", default=None, help="reuse to ask a follow-up")
+    parser.add_argument(
+        "--audience",
+        default="auto",
+        choices=["auto", "researcher", "policymaker", "partnerships"],
+        help="auto (default): the agent infers the reader from the question",
+    )
     parser.add_argument("--local", action="store_true", help="call a server on localhost:8080")
     args = parser.parse_args()
 
@@ -104,7 +123,7 @@ def main() -> int:
         "question": args.question,
         "mode": "deep" if args.deep else "quick",
         "language": args.language,
-        "audience": "researcher",
+        "audience": args.audience,
         "format": "summary",
         "filters": {},
         "sessionId": session,

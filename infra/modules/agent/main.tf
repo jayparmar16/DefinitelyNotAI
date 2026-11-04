@@ -60,14 +60,13 @@ resource "aws_bedrock_guardrail" "askwri" {
   blocked_input_messaging   = "AskWRI can't help with that request."
   blocked_outputs_messaging = "AskWRI couldn't verify this answer against WRI's publications."
 
+  # Grounding only. Its relevance filter scores each part of an answer against the whole
+  # question, and a Deep research key point answers one sub-question: a fully grounded point
+  # scored 0.06. Relevance is settled earlier, by the reranker and the drafter.
   contextual_grounding_policy_config {
     filters_config {
       type      = "GROUNDING"
       threshold = var.grounding_threshold
-    }
-    filters_config {
-      type      = "RELEVANCE"
-      threshold = var.relevance_grounding_threshold
     }
   }
 }
