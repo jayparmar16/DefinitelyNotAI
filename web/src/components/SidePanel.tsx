@@ -5,14 +5,14 @@
  * tab per opened source showing the cited page with the passage highlighted.
  */
 
-import { type PointerEvent as ReactPointerEvent, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "react";
 
 import type { ReportFormat, Source } from "@/lib/agent";
 import { citationYear, pageLink } from "@/lib/citations";
 import { AnswerSections, VerifiedChip, readerName } from "./AnswerSections";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
-import { Passage } from "./SourceCards";
+import { Passage, sourceMeta } from "./SourceCards";
 import { type Turn, shownAnswer } from "./turn";
 
 export type PanelTab = "report" | "sources" | number; // a number is an open source's marker
@@ -42,6 +42,8 @@ type SidePanelProps = {
   onWidth: (width: number) => void;
   onClose: () => void;
   onFollowUp: (question: string) => void;
+  /** A short-lived link to the stored PDF, or null when there is none (the mock). */
+  pdfUrl: (source: Source) => Promise<string | null>;
 };
 
 function ResizeHandle({ width, onWidth }: { width: number; onWidth: (width: number) => void }) {
@@ -141,25 +143,51 @@ function ReportView(props: SidePanelProps) {
   );
 }
 
-function SourceView({ source }: { source: Source }) {
-  // shortcut: a page preview drawn from the passage. The real viewer renders the stored PDF with
-  // PDF.js over the presigned URL (design doc, source viewer), once the API serves downloads.
+function whyLine(source: Source): string | null {
+  const why = source.why;
+  if (!why) return null;
+  const how = [why.by_meaning && "meaning", why.by_keyword && "keywords"].filter(Boolean).join(" and ");
+  const terms = why.matched_terms.length ? ` (${why.matched_terms.slice(0, 6).join(", ")})` : "";
+  return how ? `Found by ${how}${terms}.` : null;
+}
+
+/** The cited passage, why it was found, then the stored PDF opened at the cited page. */
+function SourceView({ source, pdfUrl }: { source: Source; pdfUrl: SidePanelProps["pdfUrl"] }) {
+  const [pdf, setPdf] = useState<{ chunkId: string; url: string | null; failed: boolean } | null>(null);
+  useEffect(() => {
+    let current = true;
+    pdfUrl(source)
+      .then((url) => current && setPdf({ chunkId: source.chunkId, url, failed: false }))
+      .catch(() => current && setPdf({ chunkId: source.chunkId, url: null, failed: true }));
+    return () => {
+      current = false;
+    };
+  }, [source, pdfUrl]);
+  const loaded = pdf?.chunkId === source.chunkId ? pdf : null;
+  const why = whyLine(source);
   return (
-    <div className="aw-pdf">
-      <div className="pg">
-        <span>{source.title}</span>
-        <span>{source.page}</span>
+    <div className="aw-doc">
+      <div className="aw-doc-head">
+        <h3>{source.title}</h3>
       </div>
-      <div className="aw-bar dark" style={{ width: "60%" }} />
-      <div className="aw-bar" /><div className="aw-bar" style={{ width: "94%" }} /><div className="aw-bar" style={{ width: "88%" }} />
-      {source.quotable ? (
-        <div className="aw-hl">&hellip;<b>{source.passage}</b>&hellip;</div>
-      ) : (
+      <div className="aw-doc-cited">
+        <div className="cap">Cited passage</div>
         <Passage source={source} />
+        {why && <div className="aw-meta">{why}</div>}
+      </div>
+      {!loaded ? (
+        <div className="aw-empty">Loading the PDF…</div>
+      ) : loaded.url ? (
+        <iframe
+          className="aw-doc-pdf"
+          title={`${source.title}, page ${source.page}`}
+          src={`${loaded.url}#page=${source.page}&view=FitH`}
+        />
+      ) : (
+        <div className="aw-empty">
+          {loaded.failed ? "The PDF couldn't be loaded. Try the PDF button above." : "No stored PDF for this source."}
+        </div>
       )}
-      <div className="aw-bar" /><div className="aw-bar" style={{ width: "90%" }} /><div className="aw-bar" style={{ width: "96%" }} />
-      <div className="aw-bar dark" style={{ width: "40%", marginTop: 8 }} />
-      <div className="aw-bar" /><div className="aw-bar" style={{ width: "85%" }} /><div className="aw-bar" style={{ width: "70%" }} />
     </div>
   );
 }
@@ -244,28 +272,28 @@ export function SidePanel(props: SidePanelProps) {
       )}
       {openSource && <SourceBar source={openSource} onPdf={props.onPdf} />}
 
-      <div className="aw-panel-body" style={tab === "report" ? { padding: 0 } : undefined}>
+      <div className="aw-panel-body" style={tab === "report" || openSource ? { padding: 0 } : undefined}>
         {tab === "report" && <ReportView {...props} />}
         {tab === "sources" && (
           sources.length === 0 ? (
             <div className="aw-empty">Sources appear here once the answer is ready.</div>
           ) : (
-            <div className="aw-src-list">
+            <ol className="aw-src-rows">
               {sources.map((source) => (
-                <div key={source.marker} className="aw-card">
-                  <div className="aw-card-top">
-                    <button className="aw-mk" onClick={() => props.onMarker(source.marker)} aria-label={`Source ${source.marker}`}>{source.marker}</button>
-                    <div>
-                      <button className="aw-card-title" onClick={() => props.onMarker(source.marker)}>{source.title}</button>
-                      <div className="aw-meta"><span className="aw-tag">{source.pubType}</span> {citationYear(source)} · {source.office} · p. {source.page}</div>
-                    </div>
-                  </div>
-                </div>
+                <li key={source.marker} className="aw-src-row">
+                  <button className="aw-src-line" onClick={() => props.onMarker(source.marker)}>
+                    <span className="aw-mk">{source.marker}</span>
+                    <span className="aw-src-text">
+                      <span className="aw-src-title">{source.title}</span>
+                      <span className="aw-meta">{sourceMeta(source)}</span>
+                    </span>
+                  </button>
+                </li>
               ))}
-            </div>
+            </ol>
           )
         )}
-        {openSource && <SourceView source={openSource} />}
+        {openSource && <SourceView source={openSource} pdfUrl={props.pdfUrl} />}
       </div>
 
       <div className="aw-panel-foot">
@@ -278,7 +306,7 @@ export function SidePanel(props: SidePanelProps) {
               <Icon name="next" small label="Next citation" />
             </button>
             <span className="spacer" />
-            <span className="aw-meta">Page preview (mock); the PDF viewer needs stored PDFs</span>
+            <span className="aw-meta">Source {openSource.marker} of {markers.length}</span>
           </>
         ) : tab === "report" ? (
           <>

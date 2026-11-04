@@ -22,6 +22,11 @@ import { Welcome } from "./Welcome";
 
 type Panel = { turnId: string; tab: PanelTab; openDocs: number[] } | null;
 
+/** A short-lived link to a source's stored PDF (module level, so its identity never changes). */
+async function pdfUrl(source: Source): Promise<string | null> {
+  return (await getAgent()).sourceDownloadUrl(source);
+}
+
 function nameOf(code: string): string {
   return LANGUAGES.find((l) => l.code === code)?.name ?? code;
 }
@@ -161,7 +166,7 @@ export function ChatApp() {
     setToast(`${what} copied`);
   }
 
-  async function downloadPdf(source: Source) {
+async function downloadPdf(source: Source) {
     const agent = await getAgent();
     const url = await agent.sourceDownloadUrl(source);
     if (url) window.open(url, "_blank", "noreferrer");
@@ -313,6 +318,7 @@ export function ChatApp() {
             width={panelWidth}
             format={format}
             onFollowUp={followUp}
+            pdfUrl={pdfUrl}
             languageName={nameOf(
               panelTurn.translation && !panelTurn.translation.showOriginal
                 ? panelTurn.translation.language

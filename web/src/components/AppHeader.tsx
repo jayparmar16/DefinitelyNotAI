@@ -14,7 +14,7 @@ export const LANGUAGES = [
 ];
 
 const AUDIENCES: { value: Audience; name: string }[] = [
-  { value: "auto", name: "Auto (from your question)" },
+  { value: "auto", name: "Auto" },
   { value: "researcher", name: "Researcher" },
   { value: "policymaker", name: "Policymaker" },
   { value: "partnerships", name: "Partnerships" },

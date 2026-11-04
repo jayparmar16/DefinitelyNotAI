@@ -7,7 +7,7 @@
  * getAgent() in src/lib/agent.ts to the real client.
  */
 
-import type { AgentClient, AgentEvent, AskRequest, Answer, ReportFormat } from "../lib/agent.ts";
+import type { AgentClient, AgentEvent, AskRequest, Answer, Reader, ReportFormat } from "../lib/agent.ts";
 import { QUICK_PARAGRAPHS, REPORT_POINTS, SOURCES, SUB_QUESTIONS, THIN_EVIDENCE } from "./fixtures.ts";
 
 const ON_TOPIC = /\b(bus|buses|transit|transport|electri\w*|mobility|fleets?|brt|briefing|talking points)\b/i;
@@ -31,7 +31,12 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-function quickAnswer(language: string, startedAt: number): Answer {
+// The real agent infers the reader from the question; the mock just picks policymaker.
+function reader(request: AskRequest): Reader {
+  return request.audience === "auto" ? "policymaker" : request.audience;
+}
+
+function quickAnswer(request: AskRequest, language: string, startedAt: number): Answer {
   const translated = language === "es";
   const paragraphs = translated ? QUICK_PARAGRAPHS.es : QUICK_PARAGRAPHS.en;
   return {
@@ -40,10 +45,18 @@ function quickAnswer(language: string, startedAt: number): Answer {
     machineTranslated: translated,
     paragraphs,
     sources: SOURCES.slice(0, 4),
-    claimsTotal: 5,
+    claimsTotal: 6,
     claimsVerified: 5,
     elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
     report: null,
+    audience: reader(request),
+    scope: "Based on 4 of the 1,200 WRI publications indexed in AskWRI",
+    implications: [
+      "Cities planning a fleet change could start with pilots on a few routes before buying at scale.",
+    ],
+    limits: ["These publications don't compare total costs across cities."],
+    questions: ["How did Santiago finance its electric buses?", "What slowed adoption in other cities?"],
+    removedClaims: ["Every Latin American capital now runs electric buses."],
   };
 }
 
@@ -65,6 +78,12 @@ function deepAnswer(request: AskRequest, language: string, startedAt: number): A
       keyPoints,
       thinEvidence: translated ? THIN_EVIDENCE.es : THIN_EVIDENCE.en,
     },
+    audience: reader(request),
+    scope: `Based on ${SOURCES.length} of the 1,200 WRI publications indexed in AskWRI`,
+    implications: ["A partner conversation could open with the pilot results before costs."],
+    limits: [],
+    questions: ["Which cities moved first, and why?"],
+    removedClaims: [],
   };
 }
 
@@ -75,7 +94,7 @@ async function* quickRun(request: AskRequest, signal: AbortSignal): AsyncGenerat
   yield { type: "step", id: "search", label: "Searched WRI publications", detail: "4 sources", status: "done" };
   yield { type: "step", id: "verify", label: "Verifying 5 claims against passages", status: "now" };
   await pause(600, signal);
-  yield { type: "answer", answer: quickAnswer(request.language, startedAt) };
+  yield { type: "answer", answer: quickAnswer(request, request.language, startedAt) };
 }
 
 async function* deepRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
