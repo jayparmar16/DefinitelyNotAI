@@ -16,6 +16,9 @@ CANDIDATES = 40  # per search method, before fusion
 RERANK_POOL = 30  # fused candidates sent to the reranker
 MAX_K = 20
 RRF_K = 60  # reciprocal rank fusion constant: score = sum of 1 / (RRF_K + rank)
+# Evidence-aware ranking: a small lift for WRI's most reviewed formats and a small discount for
+# work in progress. Small enough to break near-ties, never to beat a clearly better passage.
+TYPE_WEIGHTS = {"Report": 1.10, "Technical note": 1.05, "Working paper": 0.95}
 
 # Both searches apply the same document filters. Keyword terms are OR-ed: the 'simple'
 # configuration keeps every word, so AND-ing a question's words would rarely match anything.
@@ -92,6 +95,15 @@ def matched_terms(headline: str) -> list[str]:
     return terms
 
 
+def by_evidence_weight(ranked: list[tuple[dict, float]], k: int) -> list[tuple[dict, float]]:
+    """The k best passages after weighting rerank scores by publication type. Scores are
+    returned unweighted: the agent's evidence threshold judges relevance, not format."""
+    weighted = sorted(
+        ranked, key=lambda pair: pair[1] * TYPE_WEIGHTS.get(pair[0]["pub_type"], 1.0), reverse=True
+    )
+    return weighted[:k]
+
+
 def to_result(row: dict, relevance: float) -> dict:
     """One search hit as the agent sees it: the passage, its citation fields and why it matched."""
     return {
@@ -120,12 +132,14 @@ def to_result(row: dict, relevance: float) -> dict:
             "matched_terms": matched_terms(row["matched"]) if row["by_keyword"] else [],
             "date_source": row["date_source"],
             "label_source": row["label_source"],
+            "type_weight": TYPE_WEIGHTS.get(row["pub_type"], 1.0),
         },
     }
 
 
 def rerank(query: str, rows: list[dict], k: int, client=None) -> list[tuple[dict, float]]:
-    """Reorder rows with the Bedrock rerank model (ASKWRI_RERANK_MODEL_ARN); keep the top k."""
+    """Reorder rows with the Bedrock rerank model (ASKWRI_RERANK_MODEL_ARN); keep the top k
+    (all rows when the caller weights them afterwards)."""
     client = client or boto3.client("bedrock-agent-runtime")
     response = client.rerank(
         queries=[{"type": "TEXT", "textQuery": {"text": query}}],
@@ -159,5 +173,5 @@ def handler(event: dict, context) -> dict:
         rows = connection.execute(SQL, params).fetchall()
     if not rows:
         return {"query": params["query"], "results": []}
-    ranked = rerank(params["query"], rows, min(k, len(rows)))
+    ranked = by_evidence_weight(rerank(params["query"], rows, len(rows)), k)
     return {"query": params["query"], "results": [to_result(row, score) for row, score in ranked]}

@@ -64,7 +64,18 @@ def test_result_explains_why_it_matched_and_keeps_citation_fields():
         "matched_terms": [],
         "date_source": "wri.org",
         "label_source": "wri.org",
+        "type_weight": 1.0,
     }
+
+
+def test_publication_type_breaks_near_ties_but_never_beats_a_clearly_better_passage():
+    from askwri.tools.search import by_evidence_weight
+
+    paper, report, brief = ({"pub_type": t} for t in ("Working paper", "Report", "Issue brief"))
+    near_tie = [(paper, 0.50), (report, 0.47), (brief, 0.46)]
+    assert by_evidence_weight(near_tie, 2) == [(report, 0.47), (paper, 0.50)]  # raw scores kept
+    clear = [(paper, 0.80), (report, 0.40)]
+    assert by_evidence_weight(clear, 2) == clear
 
 
 class FakeReranker:

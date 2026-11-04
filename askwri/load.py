@@ -8,6 +8,7 @@ Data API, so it runs from a laptop without VPC access. Rerunning replaces a docu
 import argparse
 import hashlib
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -74,7 +75,7 @@ def document_row(catalog_row: dict, file_sha256: str) -> dict:
         "pub_date": published,
         "date_source": "wri.org" if published else "none",
         "date_confidence": "high" if published else "undated",
-        "pub_type": catalog_row.get("doc_type") or catalog_row.get("wri_type"),
+        "pub_type": publication_type(catalog_row),
         "topic": catalog_row.get("topic"),
         "topic_source": catalog_row.get("topic_source"),
         "label_source": catalog_row["label_source"],
@@ -83,6 +84,27 @@ def document_row(catalog_row: dict, file_sha256: str) -> dict:
         "authors": json.dumps(catalog_row.get("authors") or [], ensure_ascii=False),
         "summary": catalog_row.get("summary"),
     }
+
+
+# WRI DOIs name the publication type: 10.46830/wriwp.25.00035 is a working paper.
+DOI_TYPES = {
+    "wrirpt": "Report",
+    "wriwp": "Working paper",
+    "writn": "Technical note",
+    "wriib": "Issue brief",
+}
+
+
+def publication_type(catalog_row: dict) -> str | None:
+    """WRI's publication type, in the UI's wording: from the DOI's type code, else the sorter's
+    doc_type, else wri.org's own type (which is only "Research" or "Data")."""
+    code = re.match(r"10\.46830/([a-z]+)\.", catalog_row.get("doi") or "")
+    if code and code.group(1) in DOI_TYPES:
+        return DOI_TYPES[code.group(1)]
+    doc_type = catalog_row.get("doc_type")
+    if doc_type and doc_type != "other":
+        return "Report" if doc_type == "research report" else doc_type.capitalize()
+    return catalog_row.get("wri_type")
 
 
 def chunk_row(record: ChunkRecord, embedding: list[float]) -> dict:

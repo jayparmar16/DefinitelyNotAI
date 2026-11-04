@@ -38,11 +38,16 @@ def test_without_a_date_the_document_is_undated_not_guessed():
     assert (row["date_source"], row["date_confidence"]) == ("none", "undated")
 
 
-def test_labeler_type_wins_over_site_type():
-    assert (
-        document_row({**CATALOG_ROW, "doc_type": "issue brief"}, "abc")["pub_type"] == "issue brief"
-    )
-    assert document_row(CATALOG_ROW, "abc")["pub_type"] == "Research"
+def test_publication_type_comes_from_the_doi_then_the_sorter_then_the_site():
+    def pub_type(**fields):
+        return document_row({**CATALOG_ROW, **fields}, "abc")["pub_type"]
+
+    assert pub_type(doi="10.46830/wriwp.25.00035", doc_type="research report") == "Working paper"
+    assert pub_type(doi="10.46830/writn.24.00028") == "Technical note"
+    assert pub_type(doi="10.46830/wrirpt.25.00050") == "Report"
+    assert pub_type(doi=None, doc_type="issue brief") == "Issue brief"
+    assert pub_type(doi=None, doc_type="research report") == "Report"
+    assert pub_type(doi="10.1000/other", doc_type="other") == "Research"  # the site's type
 
 
 ATTRIBUTES = {
