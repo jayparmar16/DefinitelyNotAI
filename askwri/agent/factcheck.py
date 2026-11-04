@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 
 from askwri.agent import llm
-from askwri.agent.citations import numbers_not_in, source_entry
+from askwri.agent.citations import numbers_not_in, readers_words, source_entry
 
 MAX_CLAIMS = 12
 PASSAGES_PER_CLAIM = {False: 4, True: 8}  # deep fact-check reads more passages per claim
@@ -202,13 +202,13 @@ def fact_check(deps, draft: str, filters: dict, deep: bool = False) -> Iterator[
 
 def readable_note(note: str, order: list[str]) -> str:
     """Notes cite passages by internal label (P3); show the reader's [n] marker instead, or
-    "a passage" for one that isn't in the sources list."""
+    "another source" for one that isn't in the sources list."""
 
     def marker(match: re.Match) -> str:
         label = match.group(0)
-        return f"[{order.index(label) + 1}]" if label in order else "a passage"
+        return f"[{order.index(label) + 1}]" if label in order else "another source"
 
-    return re.sub(r"\bP\d+\b", marker, note)
+    return readers_words(re.sub(r"\bP\d+\b", marker, note))
 
 
 def result(draft, claims, checked, labels, started) -> dict:

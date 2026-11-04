@@ -630,7 +630,7 @@ def test_fact_check_notes_show_the_readers_markers_not_internal_labels():
     from askwri.agent.factcheck import readable_note
 
     assert readable_note("P2 says 181; P7 agrees.", ["P7", "P2"]) == "[2] says 181; [1] agrees."
-    assert readable_note("P9 was not cited.", ["P1"]) == "a passage was not cited."
+    assert readable_note("P9 was not cited.", ["P1"]) == "another source was not cited."
 
 
 # --- languages ---
@@ -854,3 +854,16 @@ def test_a_translated_answer_translates_lens_cells_and_dossier_too(monkeypatch):
     assert cells[1] == {"status": "not_discussed", "text": ""}
     assert answer["dossier"]["agree"][0].startswith("ES: Both agree")
     assert answer["dossier"]["missing"] == ["ES: No costs."]
+
+
+def test_reader_facing_text_never_says_passages():
+    from askwri.agent.citations import readers_words
+
+    assert readers_words("The passages do not rank other laws.") == (
+        "The cited WRI publications do not rank other laws."
+    )
+    assert readers_words("None of these passages covers 2050.") == (
+        "None of the cited WRI publications covers 2050."
+    )
+    assert readers_words("A passage says so.") == "A cited WRI publication says so."
+    assert "passage" not in readers_words("Two passages agree; one passage differs.").lower()

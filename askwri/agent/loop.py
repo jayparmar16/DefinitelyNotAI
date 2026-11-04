@@ -19,6 +19,7 @@ from askwri.agent.citations import (
     label_passages,
     number_markers,
     numbers_not_in,
+    readers_words,
     source_entry,
 )
 from askwri.agent.factcheck import fact_check
@@ -422,7 +423,7 @@ class Agent:
                 "title": draft["title"],
                 "builtFrom": built_from(sources),
                 "keyPoints": texts,
-                "thinEvidence": draft["limits"],
+                "thinEvidence": [readers_words(t) for t in draft["limits"]],
             }
         answer = {
             "mode": mode,
@@ -431,9 +432,9 @@ class Agent:
             "audience": draft["audience"],
             "scope": f"Based on {cited_docs} of the {size} WRI publications indexed in AskWRI",
             "paragraphs": texts,
-            "implications": implications,
-            "limits": [] if report else draft["limits"],
-            "questions": draft["questions"],
+            "implications": [readers_words(t) for t in implications],
+            "limits": [] if report else [readers_words(t) for t in draft["limits"]],
+            "questions": [readers_words(t) for t in draft["questions"]],
             "sources": sources,
             "claimsTotal": total,
             "claimsVerified": claim_count(groups),
@@ -468,7 +469,9 @@ class Agent:
             answer["dossier"] = {
                 "agree": compare_texts[:agreed],
                 "differ": compare_texts[agreed:],
-                "missing": [m for m in compared["missing"] if not numbers_not_in(m, given)],
+                "missing": [
+                    readers_words(m) for m in compared["missing"] if not numbers_not_in(m, given)
+                ],
             }
         answer = yield from self._translate_answer(answer, language)
         answer["elapsedSeconds"] = round(time.monotonic() - started)

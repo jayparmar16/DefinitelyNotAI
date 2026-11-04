@@ -130,3 +130,20 @@ def numbers_not_in(text: str, source: str) -> list[str]:
     matches "1000"). An implication that introduces one states a fact no passage gave."""
     known = {re.sub(r"\D", "", n) for n in NUMBER.findall(source)}
     return [n for n in NUMBER.findall(text) if re.sub(r"\D", "", n) not in known]
+
+
+PASSAGES_WORD = re.compile(
+    r"\b(?:(the|these|those|its|their|a|an|one)\s+)?(passages?)\b", re.IGNORECASE
+)
+
+
+def readers_words(text: str) -> str:
+    """Replace "passage(s)", the agent's internal word, with what readers see: the cited WRI
+    publication(s). Models told not to say it still sometimes do."""
+
+    def replace(match: re.Match) -> str:
+        plural = match.group(2).lower().endswith("s")
+        words = "the cited WRI publications" if plural else "a cited WRI publication"
+        return words[0].upper() + words[1:] if match.group(0)[0].isupper() else words
+
+    return PASSAGES_WORD.sub(replace, text)
