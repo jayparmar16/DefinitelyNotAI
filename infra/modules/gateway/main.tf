@@ -166,7 +166,8 @@ resource "aws_bedrockagentcore_gateway_target" "tool" {
   for_each           = local.tools
   name               = replace(each.key, "_", "-")
   gateway_identifier = aws_bedrockagentcore_gateway.askwri.gateway_id
-  description        = each.value.description
+  # Target descriptions are capped at 200 characters; the full text is in the tool schema.
+  description = "AskWRI ${each.key} tool (askwri-tool-${local.lambda_for_tool[each.key]})"
 
   credential_provider_configuration {
     gateway_iam_role {}
