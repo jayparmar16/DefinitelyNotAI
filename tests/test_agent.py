@@ -14,7 +14,7 @@ from askwri.agent.citations import (
 )
 from askwri.agent.gateway import ToolError, parse_mcp_reply, tool_result
 from askwri.agent.loop import Agent, Deps, Settings, built_from, search_arguments
-from askwri.agent.memory import latest_answer
+from askwri.agent.memory import latest_turn
 
 # --- citations ---
 
@@ -140,19 +140,20 @@ def test_tool_errors_raise_with_the_tool_name():
         tool_result("coverage", {"error": {"message": "bad args"}})
 
 
-def test_latest_answer_picks_the_newest_assistant_answer():
+def test_latest_turn_picks_the_newest_question_and_answer():
     def event(when, answer):
         text = json.dumps({"askwri_answer": answer})
         return {
             "eventTimestamp": datetime(2026, 11, 4, when),
             "payload": [
-                {"conversational": {"role": "USER", "content": {"text": "q"}}},
+                {"conversational": {"role": "USER", "content": {"text": f"q{when}"}}},
                 {"conversational": {"role": "ASSISTANT", "content": {"text": text}}},
             ],
         }
 
-    assert latest_answer([event(9, {"n": 1}), event(11, {"n": 2}), event(10, {"n": 3})]) == {"n": 2}
-    assert latest_answer([]) is None
+    events = [event(9, {"n": 1}), event(11, {"n": 2}), event(10, {"n": 3})]
+    assert latest_turn(events) == {"question": "q11", "answer": {"n": 2}}
+    assert latest_turn([]) is None
 
 
 # --- the loop, end to end with fakes ---
@@ -194,11 +195,11 @@ class FakeGateway:
 
 
 class FakeMemory:
-    def __init__(self):
-        self.saved = []
+    def __init__(self, previous=None):
+        self.saved, self.previous = [], previous
 
-    def last_answer(self, session):
-        return None
+    def last_turn(self, session):
+        return self.previous
 
     def save_turn(self, session, question, answer):
         self.saved.append((session, question, answer))
@@ -208,11 +209,13 @@ DRAFT_EXTRAS = {"implications": [], "limits": [], "questions": []}
 PROMPTS = []
 
 
-def fake_models(monkeypatch, draft, supported, redraft=None):
+def fake_models(monkeypatch, draft, supported, redraft=None, follow=None):
     PROMPTS.clear()
 
     def ask_json(client, size, *, step, **kwargs):
         PROMPTS.append((step, kwargs))
+        if step == "follow-up":
+            return follow
         if step == "draft":
             return {**DRAFT_EXTRAS, **draft}
         if step == "redraft":
@@ -468,3 +471,71 @@ def test_most_claims_failing_triggers_one_stricter_redraft_and_keeps_the_better(
     assert (answer["claimsTotal"], answer["claimsVerified"]) == (2, 2)
     redraft_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "redraft")
     assert "Claim B." in redraft_prompt and "staying close to their wording" in redraft_prompt
+
+
+# --- follow-ups ---
+
+PREVIOUS = {
+    "question": "How do cities in Kenya keep cool?",
+    "answer": {
+        "paragraphs": ["Nairobi planted trees [1]."],
+        "report": None,
+        "sources": [
+            {
+                "chunkId": "heat#p6-1",
+                "docId": "heat",
+                "title": "Heat-resilient cities",
+                "pubType": "Technical note",
+                "year": 2024,
+                "page": 6,
+                "printedPage": "4",
+                "passage": "Nairobi planted street trees.",
+                "quotable": True,
+                "pdfKey": "raw/heat.pdf",
+            }
+        ],
+    },
+}
+
+
+class RecordingGateway(FakeGateway):
+    def __init__(self, relevance):
+        super().__init__(relevance)
+        self.queries = []
+
+    def call(self, tool, arguments):
+        if tool == "search":
+            self.queries.append(arguments["query"])
+        return super().call(tool, arguments)
+
+
+def follow_up(kind, standalone="", audience="auto"):
+    return {"kind": kind, "language": "none", "standalone": standalone, "audience": audience}
+
+
+def test_a_follow_up_question_is_searched_and_stored_in_context(monkeypatch):
+    standalone = "How does Kigali keep cool?"
+    fake_models(monkeypatch, DRAFT, {0}, follow=follow_up("new", standalone))
+    gateway, memory = RecordingGateway(0.3), FakeMemory(PREVIOUS)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=memory, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "what about Kigali?", "sessionId": "s" * 40}))
+    assert gateway.queries[0] == standalone
+    assert any(e.get("id") == "context" and e.get("detail") == standalone for e in events)
+    assert memory.saved[0][1] == standalone  # the next follow-up reads this one in context
+    follow_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "follow-up")
+    assert "How do cities in Kenya keep cool?" in follow_prompt
+
+
+def test_a_rewrite_request_reuses_the_previous_sources_without_searching(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0}, follow=follow_up("rewrite", audience="partnerships"))
+    gateway, memory = RecordingGateway(0.3), FakeMemory(PREVIOUS)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=memory, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "as talking points for a funder", "sessionId": "s" * 40}))
+    answer = events[-1]["answer"]
+    assert gateway.queries == []
+    assert answer["audience"] == "partnerships"
+    assert answer["sources"][0]["chunkId"] == "heat#p6-1"
+    assert answer["claimsVerified"] == 1  # verified again, not copied
+    draft_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
+    assert "Follow-up request: as talking points for a funder" in draft_prompt
+    assert "Nairobi planted street trees." in draft_prompt

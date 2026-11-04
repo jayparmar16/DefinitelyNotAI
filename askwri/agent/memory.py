@@ -1,7 +1,7 @@
 """Short-term conversation memory in AgentCore Memory (ASKWRI_MEMORY_ID).
 
-Each turn stores the question and the final answer, so a follow-up such as "now in Spanish"
-reuses the gathered evidence instead of searching again.
+Each turn stores the question (as the agent read it) and the final answer, so a follow-up can
+be read in context, and "now in Spanish" or "make it shorter" reuse the gathered evidence.
 """
 
 import json
@@ -39,8 +39,8 @@ class Memory:
             ],
         )
 
-    def last_answer(self, session_id: str) -> dict | None:
-        """The most recent answer in this session, or None for a new session."""
+    def last_turn(self, session_id: str) -> dict | None:
+        """The most recent {"question", "answer"} in this session, or None for a new session."""
         events = self._client.list_events(
             memoryId=self._memory_id,
             actorId=ACTOR,
@@ -48,22 +48,22 @@ class Memory:
             includePayloads=True,
             maxResults=20,
         )["events"]
-        return latest_answer(events)
+        return latest_turn(events)
 
 
-def latest_answer(events: list[dict]) -> dict | None:
-    """Find the newest stored answer among memory events (any order)."""
+def latest_turn(events: list[dict]) -> dict | None:
+    """Find the newest stored question and answer among memory events (any order)."""
     newest, newest_time = None, None
     for event in events:
+        question, answer = "", None
         for item in event.get("payload", []):
             content = item.get("conversational", {})
-            if content.get("role") != "ASSISTANT":
-                continue
             text = content.get("content", {}).get("text", "")
-            if not text.startswith("{"):
-                continue
-            answer = json.loads(text).get(ANSWER_KEY)
-            when = event["eventTimestamp"]
-            if answer is not None and (newest_time is None or when > newest_time):
-                newest, newest_time = answer, when
+            if content.get("role") == "USER":
+                question = text
+            elif content.get("role") == "ASSISTANT" and text.startswith("{"):
+                answer = json.loads(text).get(ANSWER_KEY)
+        when = event["eventTimestamp"]
+        if answer is not None and (newest_time is None or when > newest_time):
+            newest, newest_time = {"question": question, "answer": answer}, when
     return newest

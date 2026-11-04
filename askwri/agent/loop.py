@@ -215,6 +215,28 @@ def nearest_work(evidence: dict[str, dict], limit: int = 2) -> list[dict]:
     return related
 
 
+def result_from_source(source: dict) -> dict:
+    """A stored answer's source back in the search-result shape, to draft from it again."""
+    return {
+        "chunk_id": source["chunkId"],
+        "doc_id": source["docId"],
+        "title": source["title"],
+        "pub_type": source.get("pubType"),
+        "year": source.get("year"),
+        "date_confidence": source.get("dateConfidence"),
+        "office": source.get("office"),
+        "page": source["page"],
+        "printed_page": source.get("printedPage") or source["page"],
+        "passage": source["passage"],
+        "quotable": source.get("quotable", True),
+        "url": source.get("url"),
+        "doi": source.get("doi"),
+        "pdf_key": source.get("pdfKey"),
+        "why": source.get("why"),
+        "relevance": 1.0,  # it already answered this conversation
+    }
+
+
 def decline(message: str, searched: list[str], scope: str, evidence: dict[str, dict]) -> dict:
     return {
         "type": "decline",
@@ -255,13 +277,23 @@ class Agent:
     def _run(self, question: str, request: dict, session: str) -> Iterator[dict]:
         started = time.monotonic()
         mode = request.get("mode", "quick")
-        language = request.get("language", "en")
-        previous = self.deps.memory.last_answer(session) if self.deps.memory and session else None
+        previous = self.deps.memory.last_turn(session) if self.deps.memory and session else None
         if previous:
-            target = self._follow_up_language(question)
-            if target:
-                yield from self._translate_previous(previous, target, question, session, started)
+            follow = self._follow_up(question, previous)
+            if follow["kind"] == "translate":
+                yield from self._translate_previous(
+                    previous["answer"], follow["language"], question, session, started
+                )
                 return
+            if follow["kind"] == "rewrite":
+                yield from self._rewrite_previous(
+                    previous, question, follow, request, session, started
+                )
+                return
+            standalone = follow["standalone"].strip()
+            if standalone and standalone != question:
+                question = standalone
+                yield step("context", "Read your follow-up in context", "done", question)
 
         sub_questions = yield from self._plan(question, mode)
         evidence, searched, rounds_used, covered = {}, [], 0, 0
@@ -285,6 +317,15 @@ class Agent:
 
         ranked = sorted(evidence.values(), key=lambda r: r["relevance"], reverse=True)
         labels = label_passages(ranked[: PASSAGES[mode]])
+        yield from self._answer(
+            question, request, labels, searched, scope, evidence, session, started
+        )
+
+    def _answer(self, question, request, labels, searched, scope, evidence, session, started):
+        """Draft from the labelled passages, verify, and yield the answer or a decline.
+        `question` is what is drafted and stored; a follow-up arrives here already in context."""
+        mode = request.get("mode", "quick")
+        language = request.get("language", "en")
         audience = request.get("audience") if request.get("audience") in AUDIENCES else "auto"
         draft = yield from self._draft(question, mode, labels, request, audience)
         if not draft["answerable"]:
@@ -690,30 +731,57 @@ class Agent:
         yield step("translate", f"Translated to {name}", "done", detail)
         return out, kept < len(texts)
 
-    def _follow_up_language(self, question: str) -> str | None:
-        """If the question asks for the previous answer in another language, that language."""
-        if len(question) > 120:
-            return None
-        reply = llm.ask_json(
+    def _follow_up(self, question: str, previous: dict) -> dict:
+        """Read a message in the light of the session's previous turn: a request to translate
+        the previous answer, to rewrite it from the same sources, or a new question (returned
+        rewritten to stand alone, e.g. "what about Kigali?" -> a full question)."""
+        shown = previous["answer"].get("report") or {}
+        answer_text = " ".join(shown.get("keyPoints") or previous["answer"]["paragraphs"])
+        return llm.ask_json(
             self.deps.llm,
             llm.SMALL,
             step="follow-up",
-            system="Decide whether the user's message only asks to see the previous answer in "
-            "another language (e.g. 'now in Spanish', 'en español por favor').",
-            prompt=f"Message: {question}\nLanguages: {LANGUAGE_NAMES}",
+            system="You read a user's next message in a research chat. Decide its kind:\n"
+            "- translate: it only asks to see the previous answer in another language.\n"
+            "- rewrite: it asks for the previous answer in another form - shorter, simpler, more "
+            "detail from the same sources, talking points, for another reader - and needs no "
+            "new information.\n"
+            "- new: anything else. Write standalone: the message as a full question that makes "
+            "sense without the conversation (resolve 'it', 'they', 'that city', 'what about "
+            "X'). If it already stands alone, repeat it unchanged.\n"
+            "audience: the reader the message names (a funder or partner is partnerships, a "
+            "minister or city official is policymaker), else auto.",
+            prompt=f"Previous question: {previous['question']}\n"
+            f"Previous answer: {answer_text[:1500]}\n\nNext message: {question}\n"
+            f"Languages: {LANGUAGE_NAMES}",
             schema={
                 "type": "object",
                 "properties": {
-                    "translate_previous": {"type": "boolean"},
+                    "kind": {"type": "string", "enum": ["translate", "rewrite", "new"]},
                     "language": {"type": "string", "enum": [*LANGUAGE_NAMES, "none"]},
+                    "standalone": {"type": "string"},
+                    "audience": {"type": "string", "enum": ["auto", *AUDIENCES]},
                 },
-                "required": ["translate_previous", "language"],
+                "required": ["kind", "language", "standalone", "audience"],
                 "additionalProperties": False,
             },
         )
-        if reply["translate_previous"] and reply["language"] in LANGUAGE_NAMES:
-            return reply["language"]
-        return None
+
+    def _rewrite_previous(self, previous, question, follow, request, session, started):
+        """Answer "make it shorter" or "as talking points for a funder" from the previous
+        answer's own sources: no new search, and every claim is verified again."""
+        yield step(
+            "reuse", "Reusing the evidence from your previous answer", "done", "no new search"
+        )
+        results = [result_from_source(s) for s in previous["answer"]["sources"]]
+        labels = label_passages(results)
+        evidence = {r["chunk_id"]: r for r in results}
+        if follow["audience"] in AUDIENCES:
+            request = {**request, "audience": follow["audience"]}
+        asked = f"{previous['question']}\n(Follow-up request: {question})"
+        yield from self._answer(
+            asked, request, labels, [], "previous answer's sources", evidence, session, started
+        )
 
     def _translate_answer(self, answer: dict, language: str):
         """Translate every text section of an answer in one pass (key points are the answer's
