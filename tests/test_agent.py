@@ -766,3 +766,91 @@ def test_lens_cells_are_cited_summaries_or_not_discussed_and_are_verified(monkey
     assert "cost (Heat plan)" in gateway.queries
     draft_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
     assert "research goal: Heat plan" in draft_prompt
+
+
+# --- topic dossier ---
+
+
+class TwoPaperGateway(TranslatingGateway):
+    """Search finds two papers; searching inside a paper returns that paper's passage."""
+
+    def call(self, tool, arguments):
+        if tool == "search":
+            doc = arguments.get("doc_id")
+            heat = {**RESULT, "relevance": 0.3}
+            water = {**RESULT, "chunk_id": "water#p3-1", "doc_id": "water", "title": "Water"}
+            if doc == "water":
+                return {"results": [{**water, "chunk_id": "water#p4-1", "relevance": 0.2}]}
+            if doc == "heat":
+                return {"results": [{**heat, "chunk_id": "heat#p9-1", "relevance": 0.2}]}
+            return {"results": [heat, {**water, "relevance": 0.25}]}
+        if tool == "authors":
+            return {"documents": [], "people": []}
+        return super().call(tool, arguments)
+
+
+def run_dossier(monkeypatch, compare, language="en"):
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "plan":
+            return {"sub_questions": [{"question": "q", "search_query": "q"}]}
+        if step == "draft":
+            return {
+                **DRAFT_EXTRAS,
+                "answerable": True,
+                "title": "Cooling",
+                "key_points": [{"text": "Roofs cooled cities.", "passages": ["P1"]}],
+            }
+        if step == "lens":
+            found = "P4" if "Water" in kwargs["prompt"] else "P3"
+            first = {
+                "discussed": True,
+                "sentences": [{"text": f"Finding {found}.", "passages": [found]}],
+            }
+            return {"aspects": [first] + [{"discussed": False, "sentences": []}] * 3}
+        if step == "compare":
+            return compare
+        if step == "verify":
+            return {"verdicts": [{"index": i, "supported": True} for i in range(20)]}
+        raise AssertionError(step)
+
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    agent = Agent(Deps(llm=None, gateway=TwoPaperGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    request = {
+        "question": "Cooling cities",
+        "mode": "deep",
+        "format": "dossier",
+        "language": language,
+    }
+    return list(agent.run(request))[-1]["answer"]
+
+
+def test_a_dossier_has_a_matrix_and_comparisons_that_span_two_papers(monkeypatch):
+    compare = {
+        "agree": [
+            {"text": "Both papers favour greenery.", "passages": ["P3", "P4"]},
+            {"text": "Only one paper is cited here.", "passages": ["P3"]},  # not a comparison
+        ],
+        "differ": [{"text": "They differ on cost.", "passages": ["P4", "P3", "P99"]}],
+        "missing": ["Neither covers costs in 2050."],
+    }
+    answer = run_dossier(monkeypatch, compare)
+    assert answer["lens"]["aspects"] == loop.DOSSIER_ASPECTS
+    assert [row["docId"] for row in answer["lens"]["rows"]] == ["heat", "water"]
+    dossier = answer["dossier"]
+    assert dossier["agree"] == ["Both papers favour greenery [2][3]."]
+    assert dossier["differ"] == ["They differ on cost [3][2]."]
+    assert dossier["missing"] == []  # "2050" is a number no passage gave
+
+
+def test_a_translated_answer_translates_lens_cells_and_dossier_too(monkeypatch):
+    compare = {
+        "agree": [{"text": "Both agree.", "passages": ["P3", "P4"]}],
+        "differ": [],
+        "missing": ["No costs."],
+    }
+    answer = run_dossier(monkeypatch, compare, language="es")
+    cells = [c for row in answer["lens"]["rows"] for c in row["cells"]]
+    assert cells[0]["text"].startswith("ES: Finding")
+    assert cells[1] == {"status": "not_discussed", "text": ""}
+    assert answer["dossier"]["agree"][0].startswith("ES: Both agree")
+    assert answer["dossier"]["missing"] == ["ES: No costs."]

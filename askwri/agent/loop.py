@@ -39,10 +39,15 @@ LANGUAGE_NAMES = {
     "hi": "Hindi",
 }
 TRANSLATED_FIELDS = ("paragraphs", "implications", "limits", "questions")
+DOSSIER_FIELDS = ("agree", "differ", "missing")
+# A topic dossier reads every paper through this fixed lens: its columns are the evidence matrix.
+DOSSIER_ASPECTS = ["main findings", "key figures", "places covered", "methods and data"]
+DOSSIER_PAPERS = 8
 FORMATS = {
     "summary": "a researcher summary",
     "issue-brief": "a policymaker issue brief",
     "talking-points": "talking points for a partner meeting",
+    "dossier": "a topic dossier overview",
 }
 
 RULES = (
@@ -388,16 +393,22 @@ class Agent:
             )
             return
 
-        lens = lens_from(request)
-        lens_rows = []
+        dossier = mode == "deep" and request.get("format") == "dossier"
+        lens = {"goal": question, "aspects": DOSSIER_ASPECTS} if dossier else lens_from(request)
+        lens_rows, compared = [], None
         if lens:
             lens_rows, labels = yield from self._read_through_lens(
-                question, lens, labels, evidence, groups
+                question, lens, labels, evidence, groups, DOSSIER_PAPERS if dossier else None
             )
-        # Lens cells share the answer's [n] numbering and sources list.
+        if dossier:
+            compared = yield from self._compare_papers(question, lens_rows, labels)
+        # Lens cells and dossier comparisons share the answer's [n] numbering and sources list.
         lens_groups = [cell["sentences"] for row in lens_rows for cell in row["cells"]]
-        numbered, order = number_markers(groups + lens_groups)
-        texts, cell_texts = numbered[: len(groups)], iter(numbered[len(groups) :])
+        compare_groups = [[s] for s in compared["agree"] + compared["differ"]] if compared else []
+        numbered, order = number_markers(groups + lens_groups + compare_groups)
+        texts = numbered[: len(groups)]
+        cell_texts = iter(numbered[len(groups) : len(groups) + len(lens_groups)])
+        compare_texts = numbered[len(groups) + len(lens_groups) :]
         sources = [
             source_entry(i + 1, labels[label], authors.get(labels[label]["doc_id"], []))
             for i, label in enumerate(order)
@@ -452,20 +463,27 @@ class Agent:
         asked = request.get("question_language") or draft["question_language"]
         if language == "en" and asked in LANGUAGE_NAMES:
             language = asked
+        if compared:
+            agreed = len(compared["agree"])
+            answer["dossier"] = {
+                "agree": compare_texts[:agreed],
+                "differ": compare_texts[agreed:],
+                "missing": [m for m in compared["missing"] if not numbers_not_in(m, given)],
+            }
         answer = yield from self._translate_answer(answer, language)
         answer["elapsedSeconds"] = round(time.monotonic() - started)
         if self.deps.memory and session:
             self.deps.memory.save_turn(session, question, answer)
         yield {"type": "answer", "answer": answer}
 
-    def _read_through_lens(self, question, lens, labels, evidence, groups):
+    def _read_through_lens(self, question, lens, labels, evidence, groups, limit=None):
         """Read the answer's papers through the lens. Returns one row per paper (each aspect's
         cell: summarised with verified sentences, not_discussed, or unverified) and the labels
         extended with the passages the lens found."""
         cited = list(
             dict.fromkeys(labels[p]["doc_id"] for g in groups for s in g for p in s.passages)
         )
-        papers = lens_papers(evidence, cited)
+        papers = lens_papers(evidence, cited, limit) if limit else lens_papers(evidence, cited)
         yield step("lens", f"Reading {len(papers)} papers through your lens", "now")
         found = search_papers(self.deps.gateway, lens, papers)
         labels = dict(labels)
@@ -501,6 +519,69 @@ class Agent:
                 )
             rows.append({"paper": paper, "cells": row})
         return rows, labels
+
+    def _compare_papers(self, question, rows, labels):
+        """Where the dossier's papers agree and differ, from their verified lens cells, and what
+        none of them covers. A comparison must cite passages from at least two papers, and is
+        verified like any claim; 'missing' is uncited, like an answer's limits."""
+        empty = {"agree": [], "differ": [], "missing": []}
+        papers = [(row["paper"], [s for c in row["cells"] for s in c["sentences"]]) for row in rows]
+        papers = [(paper, found) for paper, found in papers if found]
+        if len(papers) < 2:
+            return empty
+        yield step("compare", f"Comparing {len(papers)} papers", "now")
+        allowed = {p for _, found in papers for s in found for p in s.passages}
+        blocks = [
+            f"{paper['title']} ({paper.get('year') or 'n.d.'}):\n"
+            + "\n".join(f"- {s.text} [{', '.join(s.passages)}]" for s in found)
+            for paper, found in papers
+        ]
+        items = {"type": "array", "items": sentence_schema()}
+        reply = llm.ask_json(
+            self.deps.llm,
+            llm.LARGE,
+            step="compare",
+            effort="low",
+            system="You compare WRI papers on one topic, using ONLY the cited findings given. "
+            "agree: findings two or more papers share. differ: where papers give different "
+            "figures, conclusions or emphases. Each such sentence cites passage IDs from at "
+            "least two papers, and copies numbers exactly. missing: 0 to 4 things about the "
+            "topic none of these papers covers (no citations, no new facts or numbers). Write "
+            "in English. Never say 'the passages'; name the papers.",
+            prompt=f"Topic: {question}\n\n" + "\n\n".join(blocks),
+            schema={
+                "type": "object",
+                "properties": {
+                    "agree": items,
+                    "differ": items,
+                    "missing": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["agree", "differ", "missing"],
+                "additionalProperties": False,
+            },
+        )
+
+        def across_papers(found: list[dict]) -> list[Sentence]:
+            kept = []
+            for s in to_sentences(found):
+                cited = tuple(p for p in s.passages if p in allowed)
+                if len({labels[p]["doc_id"] for p in cited}) >= 2 and s.text.strip():
+                    kept.append(Sentence(s.text.strip(), cited))
+            return kept
+
+        agree, differ = across_papers(reply["agree"]), across_papers(reply["differ"])
+        survivors = set()
+        if agree or differ:
+            kept = yield from self._verify(
+                question, [[s] for s in agree + differ], labels, "verify-compare"
+            )
+            survivors = {s for g in kept for s in g}
+        yield step("compare", f"Compared {len(papers)} papers", "done")
+        return {
+            "agree": [s for s in agree if s in survivors],
+            "differ": [s for s in differ if s in survivors],
+            "missing": reply["missing"][:4],
+        }
 
     def _collection_size(self) -> int:
         """How many documents AskWRI has indexed (asked once per runtime, then remembered)."""
@@ -904,6 +985,13 @@ class Agent:
         parts.append(("scope", [answer["scope"]] if answer.get("scope") else []))
         if report:
             parts += [("title", [report["title"]]), ("thinEvidence", list(report["thinEvidence"]))]
+        lens = answer.get("lens")
+        cells = [c for row in lens["rows"] for c in row["cells"]] if lens else []
+        summarised = [c for c in cells if c["status"] == "summarised"]
+        parts.append(("lens", [c["text"] for c in summarised]))
+        dossier = answer.get("dossier") or {}
+        for field in DOSSIER_FIELDS:
+            parts.append((f"dossier.{field}", list(dossier.get(field) or [])))
         flat = [text for _, items in parts for text in items]
         out, translated = yield from self._translate(flat, language)
         new, position = {}, 0
@@ -913,6 +1001,23 @@ class Agent:
         result = {**answer, **{field: new[field] for field in TRANSLATED_FIELDS}}
         if new["scope"]:
             result["scope"] = new["scope"][0]
+        if lens:
+            translated_cells = dict(zip(map(id, summarised), new["lens"], strict=True))
+            result["lens"] = {
+                **lens,
+                "rows": [
+                    {
+                        **row,
+                        "cells": [
+                            {**c, "text": translated_cells.get(id(c), c["text"])}
+                            for c in row["cells"]
+                        ],
+                    }
+                    for row in lens["rows"]
+                ],
+            }
+        if answer.get("dossier"):
+            result["dossier"] = {f: new[f"dossier.{f}"] for f in DOSSIER_FIELDS}
         if report:
             result["report"] = {
                 **report,

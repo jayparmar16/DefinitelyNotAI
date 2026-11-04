@@ -22,7 +22,8 @@ from botocore.exceptions import ClientError
 DOWNLOAD_SECONDS = 300  # the design's 5-minute presigned link
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{33,100}$")  # AgentCore runtime session IDs: 33+ chars
 PDF_KEY = re.compile(r"^raw/[^/]+\.pdf$")
-MODES, FORMATS = {"quick", "deep", "factcheck"}, {"summary", "issue-brief", "talking-points"}
+MODES = {"quick", "deep", "factcheck"}
+FORMATS = {"summary", "issue-brief", "talking-points", "dossier"}
 log = logging.getLogger("askwri.api")
 STARTING_RETRIES, STARTING_WAIT_SECONDS = 4, 2
 

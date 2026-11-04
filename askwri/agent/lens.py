@@ -28,7 +28,7 @@ def lens_from(request: dict) -> dict | None:
     return {"goal": goal, "aspects": aspects[:MAX_ASPECTS]}
 
 
-def lens_papers(evidence: dict[str, dict], cited: list[str]) -> list[dict]:
+def lens_papers(evidence: dict[str, dict], cited: list[str], limit: int = MAX_PAPERS) -> list[dict]:
     """The papers to read through the lens: those the answer cites first, then the next most
     relevant found, one entry per document."""
     best: dict[str, dict] = {}
@@ -36,7 +36,7 @@ def lens_papers(evidence: dict[str, dict], cited: list[str]) -> list[dict]:
         best.setdefault(result["doc_id"], result)
     ordered = [best[d] for d in cited if d in best]
     ordered += [r for d, r in best.items() if d not in cited]
-    return ordered[:MAX_PAPERS]
+    return ordered[:limit]
 
 
 def search_papers(gateway, lens: dict, papers: list[dict]) -> list[list[list[dict]]]:
