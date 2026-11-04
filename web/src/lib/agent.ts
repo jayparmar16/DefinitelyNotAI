@@ -52,6 +52,7 @@ export type Source = {
     matched_terms: string[];
     date_source: string;
     label_source: string;
+    type_weight?: number; // ranking weight from the publication type: above 1 lifts, below 1 lowers
   } | null;
 };
 

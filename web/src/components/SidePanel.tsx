@@ -148,7 +148,14 @@ function whyLine(source: Source): string | null {
   if (!why) return null;
   const how = [why.by_meaning && "meaning", why.by_keyword && "keywords"].filter(Boolean).join(" and ");
   const terms = why.matched_terms.length ? ` (${why.matched_terms.slice(0, 6).join(", ")})` : "";
-  return how ? `Found by ${how}${terms}.` : null;
+  const weight = why.type_weight ?? 1;
+  const ranked =
+    weight > 1
+      ? ` As a ${source.pubType.toLowerCase()}, it was ranked slightly higher.`
+      : weight < 1
+        ? ` As a ${source.pubType.toLowerCase()} (work in progress), it was ranked slightly lower.`
+        : "";
+  return how ? `Found by ${how}${terms}.${ranked}` : null;
 }
 
 /** The cited passage, why it was found, then the stored PDF opened at the cited page. */
