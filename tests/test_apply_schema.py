@@ -21,4 +21,4 @@ def test_schema_file_splits_into_complete_statements():
     statements = split_statements(Path("db/schema.sql").read_text())
     assert statements[0] == "CREATE EXTENSION IF NOT EXISTS vector"
     assert all(not s.startswith("--") for s in statements)
-    assert sum(s.startswith("CREATE TABLE") for s in statements) == 3
+    assert sum(s.startswith("CREATE TABLE") for s in statements) == 4

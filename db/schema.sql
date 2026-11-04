@@ -59,11 +59,28 @@ CREATE TABLE IF NOT EXISTS translations (
   text text NOT NULL
 );
 
+-- Which WRI documents in the collection cite which others, found by python -m askwri.links:
+-- a DOI, wri.org link or title of one document appearing in another's text.
+CREATE TABLE IF NOT EXISTS citations (
+  src_doc_id text NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,  -- the citing document
+  dst_doc_id text NOT NULL REFERENCES documents(doc_id) ON DELETE CASCADE,  -- the cited one
+  match_method text NOT NULL,         -- doi, url or title
+  chunk_id text,                      -- passage of the citing document where it appears
+  context_sentence text,              -- the sentence (or reference entry) that mentions it
+  context_page int,                   -- PDF page of that sentence
+  relation text,                      -- extends, uses_data_or_method, supports, contrasts, updates, background
+  aspect text,                        -- what of the cited document is used, in a few words
+  confidence real,                    -- 0-1; at most 0.4 when only a reference entry was found
+  PRIMARY KEY (src_doc_id, dst_doc_id)
+);
+CREATE INDEX IF NOT EXISTS citations_dst_idx ON citations (dst_doc_id);
+
 -- App users sign in with IAM database authentication, so no app password exists anywhere.
 DO $$ BEGIN CREATE ROLE askwri_ingest LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN CREATE ROLE askwri_tools LOGIN; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 GRANT rds_iam TO askwri_ingest, askwri_tools;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON documents, chunks TO askwri_ingest;
-GRANT SELECT ON documents, chunks TO askwri_tools;
+GRANT SELECT ON documents, chunks, citations TO askwri_tools;
+GRANT SELECT, INSERT, UPDATE, DELETE ON citations TO askwri_ingest;
 GRANT SELECT, INSERT, UPDATE ON translations TO askwri_tools;

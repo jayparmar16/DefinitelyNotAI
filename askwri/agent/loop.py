@@ -504,7 +504,8 @@ class Agent:
                 )
             )
         yield step("lens", f"Read {len(papers)} papers through your lens", "done")
-        summarised = [cell for paper in cells for cell in paper if cell]
+        # Each sentence is checked on its own, so one loose sentence doesn't sink its cell.
+        summarised = [[s] for paper in cells for cell in paper if cell for s in cell]
         survivors = set()
         if summarised:
             kept = yield from self._verify(question, summarised, labels, "verify-lens")
