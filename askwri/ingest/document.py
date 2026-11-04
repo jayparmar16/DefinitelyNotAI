@@ -9,6 +9,7 @@ from askwri.ingest.audit import AuditResult, audit_chunks
 from askwri.ingest.chunks import Chunk, build_chunks
 from askwri.ingest.labels import DocumentLabels, chunk_label_fields, label_document
 from askwri.ingest.pdf import ParsedPdf, parse_pdf
+from askwri.ingest.table_summary import summarize_tables
 from askwri.ingest.wri_site import WriSite
 
 
@@ -28,13 +29,17 @@ def ingest_document(pdf_path: Path, site: WriSite | None = None, client=None) ->
 
     Labels come from the wri.org page, and from the labeler model (`client`) where there is none.
     With no site, nothing is looked up; with no client, the model is never called and a document
-    without a page is labelled "no page".
+    without a page is labelled "no page". The same model writes each table chunk's description,
+    but only once the audit has passed, so a document that will not be indexed costs no calls.
+    A model error fails the document; with no client, table chunks have no description.
     """
     parsed = parse_pdf(pdf_path)
     title = _title(parsed, pdf_path)
     doc_id = doc_id_for(pdf_path)
     chunks = build_chunks(doc_id, title, parsed.blocks, parsed.printed_pages)
     audit = audit_chunks(pdf_path, chunks)
+    if client and audit.passed:
+        chunks = summarize_tables(client, chunks)
     unquotable = set(audit.unquotable)
     labels = label_document(pdf_path, title, site, client)
     chunks = [

@@ -70,8 +70,9 @@ page-header or page-footer text (a number counts only when at least two pages ag
 same offset from the PDF page). When neither exists, `printed_page` is the PDF page and
 `printed_page_fallback` is `true`. Page headers and footers never appear in chunk text.
 
-The command also looks each PDF up on wri.org (it needs internet access; there is no AWS
-setup). It finds the document's own WRI DOI in its suggested-citation block and resolves
+Each table becomes its own chunk of kind `table` (see "Table chunks" below).
+
+The command also looks each PDF up on wri.org (it needs internet access). It finds the document's own WRI DOI in its suggested-citation block and resolves
 `doi.org/<doi>`; with no DOI, or a DOI whose page has a different title, it matches the PDF
 title against the wri.org sitemap. A page is used only if it answers 200 and its title
 matches. From that page the WRI type, authors, publication date (`wri_published`), tags and
@@ -93,9 +94,32 @@ first pages as text and returns structured output, with the topic limited to the
 - **Page without a usable topic:** the model gives only the topic. `label_source` stays
   `wri.org`, and the catalog's `topic_source` is `model`.
 
-The Bedrock client is created only when a document first needs the model, so a run where every
-document has a wri.org page needs no AWS setup. Otherwise it needs Bedrock access to the `labeler`
+The Bedrock client is created only when a document first needs the model (a missing wri.org
+page, or a table to describe), so a run where every document has a wri.org page and no
+tables needs no AWS setup. Otherwise it needs Bedrock access to the `labeler`
 model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model call fails that document with an error naming it.
+
+### Table chunks
+
+- **What is in one:** the caption, the Markdown rows, and the `Notes:` and `Sources:` lines
+  under the table, as the chunk's `text`. The caption is the nearest `Table N` heading or
+  caption region on the page, above the table or (if it is much nearer) below it; it does not
+  have to be the next region, and it never becomes a section heading. `number` is the table
+  number ("Table 2", "Table A-1"); it is empty when the caption has none.
+- **Large tables:** a table over 2,000 characters is cut by rows into pieces that each repeat
+  the caption and the header row. Notes go on the last piece. A row is never cut.
+- **Continued tables:** a table whose number repeats on the same or the next page (for
+  example "Table 3 (cont.)") is a continuation. Every later piece, including row pieces,
+  has `table_first_chunk`, the `chunk_id` of the first piece; each piece keeps its own page.
+- **Not a table:** a grid with no caption and no numbers (a grid of names), a contents list
+  with dot leaders, or a table whose cell words the layout model got wrong stays a text
+  chunk.
+- **Description:** the `labeler` model writes one or two sentences per table chunk, stored in
+  the chunk's `description`. It is embedded and searched with the chunk (`indexed_text`) but
+  is not in `text`, so it is never quoted. Documents that fail the audit get no model calls;
+  a model refusal or error fails the document.
+- **Quotable:** the audit checks each row of a table on its own (a text layer often reads a
+  table column by column, so no whole table is one run of text).
 
 ## Models
 

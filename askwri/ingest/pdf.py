@@ -1,4 +1,4 @@
-"""Read a PDF with PyMuPDF's layout model into ordered text and heading blocks."""
+"""Read a PDF with PyMuPDF's layout model into ordered text, heading and table blocks."""
 
 import html
 import re
@@ -8,9 +8,18 @@ from pathlib import Path
 import pymupdf
 
 from askwri.ingest.pages import PrintedPage, printed_pages
-from askwri.ingest.text import comparable, missing_words
+from askwri.ingest.tables import (
+    Region,
+    Table,
+    TableClaim,
+    cells_text,
+    claim_tables,
+    is_data_table,
+    table_number,
+)
+from askwri.ingest.text import comparable, missing_words, words
 
-# Layout classes that carry body text. Tables and pictures get their own chunk kinds later.
+# Layout classes that carry body text. Pictures get their own chunk kind later.
 TEXT_CLASSES = {"text", "list-item", "footnote", "formula", "caption"}
 HEADING_CLASSES = {"title", "section-header"}
 RUNNING_CLASSES = {"page-header", "page-footer"}  # kept out of chunks, read for page numbers
@@ -23,6 +32,7 @@ class Block:
     page: int  # 1-based position in the PDF file
     heading_level: int  # 0 for body text, 1 for "#", 2 for "##", ...
     text: str
+    table: Table | None = None  # set for a table region; `text` is then the table's full text
 
 
 @dataclass(frozen=True)
@@ -35,14 +45,17 @@ class ParsedPdf:
 
 
 def parse_pdf(path: Path) -> ParsedPdf:
-    """Parse a PDF into text and heading blocks.
+    """Parse a PDF into text, heading and table blocks.
 
     The layout model decides the regions, their classes and their reading order. Page headers
     and footers are kept out of the blocks and read for printed page numbers instead. The layout
     model sometimes calls a running header "text" on one page while calling it a header on the
     others, so body text equal to a header or footer seen anywhere in the document is dropped
-    too (digits ignored, so a lone page number counts). Pictures and tables are skipped. OCR is off: a page without a text layer yields
-    no blocks, so every passage stays checkable against the PDF's own text.
+    too (digits ignored, so a lone page number counts). A table region becomes one table block
+    together with its caption and note lines (see `claim_tables`), so those never become text
+    or headings. A layout grid that is not a data table stays a text block. Pictures are
+    skipped. OCR is off: a page without a text layer yields no blocks, so every passage stays
+    checkable against the PDF's own text.
     """
     with pymupdf.open(path) as doc:
         pages = doc.to_markdown(
@@ -60,11 +73,20 @@ def parse_pdf(path: Path) -> ParsedPdf:
                     if box["class"] in RUNNING_CLASSES
                 ]
             )
-            for box in sorted(chunk["page_boxes"], key=lambda box: box["index"]):
+            boxes = sorted(chunk["page_boxes"], key=lambda box: box["index"])
+            markdowns = [chunk["text"][box["pos"][0] : box["pos"][1]].strip() for box in boxes]
+            claims = claim_tables(_regions(boxes, markdowns))
+            tables = {claim.table: claim for claim in claims}
+            claimed = {i for c in claims for i in (c.caption, *c.notes) if i is not None}
+            for position, (box, markdown) in enumerate(zip(boxes, markdowns, strict=True)):
+                if position in claimed:
+                    continue
+                if position in tables:
+                    block = table_block(page, page_text, boxes, markdowns, tables[position])
+                    blocks.extend([block] if block else [])
+                    continue
                 if box["class"] not in TEXT_CLASSES | HEADING_CLASSES:
                     continue
-                start, stop = box["pos"]
-                markdown = chunk["text"][start:stop].strip()
                 text = region_text(page, page_text, box["bbox"], plain_text(markdown))
                 if not text:
                     continue
@@ -76,6 +98,73 @@ def parse_pdf(path: Path) -> ParsedPdf:
     running = {running_key(text) for texts in region_texts for text in texts}
     blocks = [b for b in blocks if b.heading_level or running_key(b.text) not in running]
     return ParsedPdf(title=title, blocks=blocks, printed_pages=printed)
+
+
+def _regions(boxes: list[dict], markdowns: list[str]) -> list[Region]:
+    """The page's layout boxes as `Region`s; only classes that can caption or annotate a table need text."""
+    needs_text = TEXT_CLASSES | HEADING_CLASSES
+    return [
+        Region(
+            layout_class=box["class"],
+            top=box["bbox"][1],
+            bottom=box["bbox"][3],
+            text=plain_text(markdown) if box["class"] in needs_text else "",
+        )
+        for box, markdown in zip(boxes, markdowns, strict=True)
+    ]
+
+
+def table_block(
+    page: pymupdf.Page, page_text: str, boxes: list[dict], markdowns: list[str], claim: TableClaim
+) -> Block | None:
+    """The block for one table region with its claimed caption and notes, or None if it is empty.
+
+    A data table becomes a table block. A region that is not a data table (a layout grid with
+    no caption and no numbers, or a contents list) becomes a plain text block of its cell
+    words, and its caption and notes, if any, stay with it as text. So does a table whose cell
+    words are not all on the page (the layout model dropped letters), because the audit would
+    block the document; the PDF's text layer then supplies the words.
+    """
+
+    def claimed_text(position: int) -> str:
+        return region_text(
+            page, page_text, boxes[position]["bbox"], plain_text(markdowns[position])
+        )
+
+    rows = table_rows(markdowns[claim.table])
+    caption = claimed_text(claim.caption) if claim.caption is not None else ""
+    notes = tuple(claimed_text(position) for position in claim.notes)
+    if is_data_table(rows, bool(caption)) and not has_garbled_word(cells_text(rows), page_text):
+        table = Table(number=table_number(caption), caption=caption, rows=rows, notes=notes)
+        return Block(page=page.number + 1, heading_level=0, text=table.text, table=table)
+    bbox = boxes[claim.table]["bbox"]
+    grid = region_text(page, page_text, bbox, cells_text(rows))
+    if has_garbled_word(
+        grid, page_text
+    ):  # region_text keeps garbled layout words it cannot replace
+        grid = layer_text(page, bbox)
+    text = "\n\n".join(part for part in (caption, grid, *notes) if part)
+    return Block(page=page.number + 1, heading_level=0, text=text) if text else None
+
+
+def has_garbled_word(text: str, page_text: str) -> bool:
+    """Whether some word of the text is not on the page, such as "suort" for "support".
+
+    Stricter than the audit, which lets a word match as two words glued together. For a table
+    it is worth being strict: a garbled word in an indexed row is wrong even if the audit passes.
+    """
+    page = comparable(page_text)
+    return any(word not in page for word in words(text))
+
+
+def table_rows(markdown: str) -> tuple[str, ...]:
+    """Clean a Markdown table's lines: cell text as plain text, rows with no words dropped."""
+    rows = []
+    for line in re.sub(r"<!--.*?-->", " ", markdown, flags=re.DOTALL).splitlines():
+        cells = [plain_text(cell) for cell in line.strip().strip("|").split("|")]
+        if any(cells):
+            rows.append("|" + "|".join(cells) + "|")
+    return tuple(rows)
 
 
 def region_text(
