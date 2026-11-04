@@ -30,7 +30,9 @@ SLOW_START = Config(connect_timeout=90, read_timeout=90, retries={"max_attempts"
 COLUMNS = """c.chunk_id, c.doc_id, d.title, coalesce(d.url, d.pdf_key) AS link,
   c.pdf_page, c.pdf_page_end, c.printed_page, c.printed_page_end, c.section, c.kind,
   c.quotable, c.content, c.description, c.number, c.figure_key"""
-FILTERS = """(CAST(:year_from AS int) IS NULL OR d.year >= CAST(:year_from AS int))
+# Chunks with a role (references, notes, contents, ...) support a document; they never answer.
+FILTERS = """c.role IS NULL
+  AND (CAST(:year_from AS int) IS NULL OR d.year >= CAST(:year_from AS int))
   AND (CAST(:year_to AS int) IS NULL OR d.year <= CAST(:year_to AS int))
   AND (CAST(:topic AS text) IS NULL OR d.topic = CAST(:topic AS text))
   AND (CAST(:doc_type AS text) IS NULL OR d.doc_type = CAST(:doc_type AS text))
@@ -88,7 +90,8 @@ def search_passages(
 
     Embeds the question (Cohere Embed v4), runs one hybrid SQL statement over `chunks` (meaning
     and keyword rankings fused by reciprocal rank fusion, filters applied in the same
-    statement), reranks the top 25 with Amazon Rerank 1.0 and keeps the best 6 scoring at least MIN_RELEVANCE.
+    statement, chunks with a role such as references skipped), reranks the top 25 with Amazon
+    Rerank 1.0 and keeps the best 6 scoring at least MIN_RELEVANCE.
     Never padded.
     Each result has the citation fields plus `score` (the rerank relevance). A hit shorter than
     400 characters also has `neighbours`: the previous and next chunk of the same section.

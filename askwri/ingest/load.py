@@ -1,9 +1,11 @@
 """Load the corpus into Aurora: sort, ingest, embed with Cohere v4, replace each document's rows.
 
-Usage: `uv run python -m askwri.ingest.load <pdf folder>...` (scripts/run-pipeline.sh wraps it).
+Usage: `uv run python -m askwri.ingest.load [--reload] <year folder>...`, for example
+`2024 2025 2026` (scripts/run-pipeline.sh wraps it). An undated document takes its folder's year.
 Needs CORPUS_BUCKET and AWS credentials; writes through the RDS Data API, so no VPC access.
 """
 
+import argparse
 import hashlib
 import json
 import os
@@ -16,6 +18,7 @@ import boto3
 
 from askwri.ingest.chunks import Chunk
 from askwri.ingest.document import IngestResult, ingest_document
+from askwri.ingest.labels import document_card
 from askwri.ingest.sort import KeptDocument, sort_corpus
 from askwri.ingest.wri_site import WriSite
 from askwri.models import MODELS, ModelError, claude_client
@@ -29,29 +32,43 @@ ROW_BATCH = 40  # chunk rows per Data API call: each carries a 1,024-float vecto
 # waiting on Bedrock, so more workers than cores is fine; 8 stays well inside Bedrock quotas.
 WORKERS = 8
 
+ARRAY_COLUMNS = (
+    "authors", "tags", "countries", "replaces", "initiatives", "programs", "topics", "concepts",
+    "keywords", "acronyms", "regions", "key_findings",
+)  # fmt: skip
 DOCUMENT_COLUMNS = [
     "doc_id", "file_sha256", "pdf_key", "title", "label_source", "url", "doi", "topic",
-    "topic_source", "wri_type", "doc_type", "pub_date", "year", "authors", "tags", "countries",
-    "summary", "deadline", "language", "replaces",
+    "topic_source", "wri_type", "doc_type", "pub_date", "year", "date_source", "authors", "tags",
+    "countries", "summary", "deadline", "language", "replaces", "abstract", "initiatives",
+    "programs", "topics", "concepts", "keywords", "acronyms", "regions", "key_findings", "genre",
+    "coverage_start", "coverage_end", "doc_tsv", "card_embedding",
 ]  # fmt: skip
 CHUNK_COLUMNS = [
     "chunk_id", "doc_id", "seq", "kind", "pdf_page", "pdf_page_end", "printed_page",
     "printed_page_end", "printed_page_fallback", "section", "content", "description", "number",
-    "quotable", "embedding",
+    "quotable", "role", "embedding",
 ]  # fmt: skip
 CASTS = {
     "pub_date": "CAST(:pub_date AS date)",
     "deadline": "CAST(:deadline AS date)",
     "embedding": "CAST(:embedding AS vector)",
+    "card_embedding": "CAST(:card_embedding AS vector)",
+    "doc_tsv": "to_tsvector('english', CAST(:doc_tsv AS text))",
 } | {
     # The Data API has no array parameters for PostgreSQL: arrays travel as JSON text.
     name: f"ARRAY(SELECT json_array_elements_text(CAST(:{name} AS json)))"
-    for name in ("authors", "tags", "countries", "replaces")
+    for name in ARRAY_COLUMNS
 }
 
 
-def document_row(kept: KeptDocument, result: IngestResult, file_sha256: str) -> dict:
-    """The documents row: the wri.org or model labels plus the sorter's fields."""
+def document_row(
+    kept: KeptDocument, result: IngestResult, file_sha256: str, card_embedding: list[float]
+) -> dict:
+    """The documents row: the wri.org or model labels, the sorter's fields and the card.
+
+    `doc_tsv` is the keyword index of the document card plus the acronyms the text defines;
+    `card_embedding` is the card's embedding.
+    """
     labels = result.labels
     return {
         "doc_id": result.doc_id,
@@ -66,7 +83,8 @@ def document_row(kept: KeptDocument, result: IngestResult, file_sha256: str) -> 
         "wri_type": labels.wri_type,
         "doc_type": kept.doc_type,
         "pub_date": labels.published,
-        "year": int(labels.published[:4]) if labels.published else None,
+        "year": labels.year,
+        "date_source": labels.date_source,
         "authors": list(labels.authors),
         "tags": list(labels.tags),
         "countries": list(labels.countries),
@@ -74,6 +92,20 @@ def document_row(kept: KeptDocument, result: IngestResult, file_sha256: str) -> 
         "deadline": labels.deadline,
         "language": kept.language,
         "replaces": [path.name for path in kept.replaces],
+        "abstract": labels.abstract,
+        "initiatives": list(labels.initiatives),
+        "programs": list(labels.programs),
+        "topics": list(labels.topics),
+        "concepts": list(labels.concepts),
+        "keywords": list(labels.keywords),
+        "acronyms": list(labels.acronyms),
+        "regions": list(labels.regions),
+        "key_findings": list(labels.key_findings),
+        "genre": labels.genre,
+        "coverage_start": labels.coverage_start,
+        "coverage_end": labels.coverage_end,
+        "doc_tsv": "\n".join([document_card(labels), *labels.acronyms]),
+        "card_embedding": json.dumps(card_embedding),
     }
 
 
@@ -94,6 +126,7 @@ def chunk_row(chunk: Chunk, embedding: list[float]) -> dict:
         "description": chunk.description or None,
         "number": chunk.number,
         "quotable": chunk.quotable,
+        "role": chunk.role,
         "embedding": json.dumps(embedding),
     }
 
@@ -212,21 +245,34 @@ def _load_one(job: tuple[KeptDocument, str]) -> str:
     if not result.audit.passed:
         return f"SKIPPED {kept.doc_id}: audit failed: {result.audit.failures[0]}"
     aws["s3"].upload_file(str(kept.path), os.environ["CORPUS_BUCKET"], pdf_key(result.doc_id))
-    vectors = embed(aws["bedrock"], [chunk.indexed_text for chunk in result.chunks])
+    texts = [document_card(result.labels), *(chunk.indexed_text for chunk in result.chunks)]
+    card_vector, *vectors = embed(aws["bedrock"], texts)
     rows = [chunk_row(chunk, vector) for chunk, vector in zip(result.chunks, vectors, strict=True)]
-    replace_document(aws["data_api"], aws["target"], document_row(kept, result, file_sha256), rows)
-    return f"LOADED {result.doc_id}: {len(rows)} chunks, labels {result.labels.label_source}"
+    doc_row = document_row(kept, result, file_sha256, card_vector)
+    replace_document(aws["data_api"], aws["target"], doc_row, rows)
+    labels = result.labels
+    return (
+        f"LOADED {result.doc_id}: {len(rows)} chunks, labels {labels.label_source}, "
+        f"year {labels.year} ({labels.date_source}), topics {', '.join(labels.topics) or '-'}"
+    )
 
 
 def main() -> int:
-    """Load every kept PDF under the given folders; already-loaded, unchanged PDFs are skipped.
+    """Load every kept PDF under the given folders; loaded, unchanged PDFs are skipped.
 
+    `--reload` loads those too, so a change to ingestion reaches every document.
     Returns 1 if any document was skipped (model error or failed audit), else 0.
     """
-    pdfs = sorted(pdf for folder in sys.argv[1:] for pdf in Path(folder).glob("*.pdf"))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("folders", nargs="+", type=Path, help="corpus folders, e.g. 2024 2025 2026")
+    parser.add_argument(
+        "--reload", action="store_true", help="also reload PDFs already loaded and unchanged"
+    )
+    args = parser.parse_args()
+    pdfs = sorted(pdf for folder in args.folders for pdf in folder.glob("*.pdf"))
     corpus = sort_corpus(pdfs)
     print(f"{len(corpus.kept)} kept, {len(corpus.dropped)} dropped by sorting", flush=True)
-    loaded = _loaded_hashes()
+    loaded = {} if args.reload else _loaded_hashes()
     jobs = []
     for kept in corpus.kept:
         file_sha256 = hashlib.sha256(kept.path.read_bytes()).hexdigest()

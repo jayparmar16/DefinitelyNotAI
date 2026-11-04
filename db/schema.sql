@@ -49,6 +49,29 @@ CREATE TABLE IF NOT EXISTS chunks (
   ) STORED
 );
 
+-- Richer labels (docs/tasks/richer-metadata.md). ADD COLUMN IF NOT EXISTS upgrades a database
+-- created before them in place; `python -m askwri.ingest.load --reload` fills them.
+ALTER TABLE documents
+  ADD COLUMN IF NOT EXISTS date_source text,    -- source of `year`: 'wri.org', 'model', 'folder'
+  ADD COLUMN IF NOT EXISTS abstract text,       -- the wri.org page's description: WRI's words
+  ADD COLUMN IF NOT EXISTS initiatives text[],  -- the page's "part of ... within ..." line
+  ADD COLUMN IF NOT EXISTS programs text[],
+  ADD COLUMN IF NOT EXISTS topics text[],       -- every topic covered, `topic` (counted) first
+  ADD COLUMN IF NOT EXISTS concepts text[],     -- askwri/ingest/vocabulary.py CONCEPTS
+  ADD COLUMN IF NOT EXISTS keywords text[],     -- the labeler's search phrases
+  ADD COLUMN IF NOT EXISTS acronyms text[],     -- 'OSW = Offshore wind', as the text defines them
+  ADD COLUMN IF NOT EXISTS regions text[],      -- vocabulary.py REGIONS
+  ADD COLUMN IF NOT EXISTS key_findings text[], -- model-written: searchable, never quoted
+  ADD COLUMN IF NOT EXISTS genre text,          -- vocabulary.py GENRES
+  ADD COLUMN IF NOT EXISTS coverage_start int,  -- the years the document's data covers
+  ADD COLUMN IF NOT EXISTS coverage_end int,
+  ADD COLUMN IF NOT EXISTS doc_tsv tsvector,    -- keyword index: document card and acronyms
+  ADD COLUMN IF NOT EXISTS card_embedding vector(1024);  -- Cohere Embed v4 of the card
+
+-- 'references', 'notes', 'contents', 'acknowledgements', 'about' or 'abbreviations', from the
+-- section path. Null for the document's own content. Search skips chunks with a role.
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS role text;
+
 CREATE INDEX IF NOT EXISTS chunks_embedding_idx ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv_idx ON chunks USING gin (tsv);
 CREATE INDEX IF NOT EXISTS chunks_doc_seq_idx ON chunks (doc_id, seq);

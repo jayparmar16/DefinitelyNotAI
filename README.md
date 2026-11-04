@@ -94,9 +94,36 @@ first pages as text and returns structured output, with the topic limited to the
 - **Page without a usable topic:** the model gives only the topic. `label_source` stays
   `wri.org`, and the catalog's `topic_source` is `model`.
 
-The Bedrock client is created only when a document first needs the model (a missing wri.org
-page, or a table to describe), so a run where every document has a wri.org page and no
-tables needs no AWS setup. Otherwise it needs Bedrock access to the `labeler`
+### Richer labels
+
+Every document also gets the labels below, so vague questions ("trends in ocean renewable
+energy published in 2025") can match it. They are columns of `documents` (and `role` of
+`chunks`) and fields of the catalog row; see [docs/richer-metadata.md](docs/richer-metadata.md)
+for how to check them.
+
+- **By rule, no model:**
+  - `year` is the publication date's year, else the corpus folder's (`2025/report.pdf`);
+    `date_source` is `wri.org`, `model` or `folder`.
+  - From the wri.org page: `abstract` (its description) and the `initiatives` and `programs`
+    of its "This Working Paper is part of ... within ..." line.
+  - WRI's tags are sorted into `topics` (the 11) and `concepts`, a controlled vocabulary in
+    `askwri/ingest/vocabulary.py`, matched ignoring case. `tags` keeps the originals.
+  - `acronyms` the text defines, e.g. `OSW = Offshore wind`.
+  - A chunk under a References, Notes, Contents, Acknowledgements, About or Abbreviations
+    heading gets a `role`; search skips those chunks.
+- **One `labeler` call per document** (after the audit passes): more `topics` and `concepts`,
+  `keywords`, `countries`, `regions`, 3 to 5 `key_findings`, a `genre` and the years its data
+  covers (`coverage_start`, `coverage_end`). They are added after WRI's labels and never
+  replace them. A topic, concept, region or genre outside its list raises an error naming the
+  document (structured output makes this unlikely).
+- **What search embeds:** each chunk's embedded text has a context line after its address
+  with the document's year, topics, concepts, initiatives and places. Each document has a card
+  (title, abstract or summary, labels, key findings) stored as `card_embedding` and, with the
+  acronyms, as the keyword index `doc_tsv`. Key findings and cards are model-written:
+  searchable, never quoted.
+
+The Bedrock client is created the first time a document needs the model. Every document that
+passes the audit gets the enrichment call, so a run needs Bedrock access to the `labeler`
 model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model call fails that document with an error naming it.
 
 ### Table chunks
@@ -126,7 +153,8 @@ model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model
 One command runs the whole ingestion pipeline against the team sandbox:
 
 ```sh
-scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
+scripts/run-pipeline.sh 2024 2025 2026            # one corpus folder per publication year
+scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: reload everything
 ```
 
 - **First run:** if the Aurora cluster `askwri-db` or the corpus bucket is missing, it creates
@@ -137,8 +165,11 @@ scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
   sort the corpus, ingest each kept PDF, upload it to `s3://$CORPUS_BUCKET/raw/<doc_id>.pdf`,
   embed its chunks with Cohere Embed v4 and replace the document's rows in `documents` and
   `chunks` in one transaction.
-- **Reruns** skip documents already loaded with the same file hash. A document whose audit
-  fails or whose model call is refused is reported as `SKIPPED` and not written.
+- **Reruns** skip documents already loaded with the same file hash; `--reload` loads them
+  again, which a change to ingestion needs. A document whose audit fails or whose model call
+  is refused is reported as `SKIPPED` and not written (its earlier rows stay).
+- **Folder names** start with the publication year (`2025` or `2025_publications`): an
+  undated document takes its folder's year.
 - Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
 
 ## Search the index
@@ -149,7 +180,7 @@ statement over `chunks` through the RDS Data API (pgvector cosine search and ful
 fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
 on), reranks the top 25 with Amazon Rerank 1.0 and returns at most 6 passages with their
 citation fields and rerank `score`. Fewer matches return fewer results, and none returns an
-empty list. A hit under 400 characters also carries its previous and next chunk of the same
+empty list. Chunks with a `role` (references, notes, contents...) are never returned. A hit under 400 characters also carries its previous and next chunk of the same
 section as `neighbours`.
 
 ```sh
