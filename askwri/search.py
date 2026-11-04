@@ -19,6 +19,9 @@ SECRET = "askwri/db"
 DATABASE = "askwri"
 CANDIDATES = 25  # per ranking, and after fusion: what the reranker sees
 RESULTS = 6
+# Rerank relevance below this is not an answer: on live queries relevant hits scored 0.08-0.99
+# and off-topic ones about 0.000. A starting point for #26 to tune on the evaluation set.
+MIN_RELEVANCE = 0.05
 SHORT_CHUNK_CHARS = 400  # shorter hits come back with their neighbours
 RRF_K = 60  # reciprocal rank fusion constant
 # The first query after an Aurora auto-pause can take 30 s or more.
@@ -81,11 +84,12 @@ def search_passages(
     doc_type: str | None = None,
     country: str | None = None,
 ) -> list[dict]:
-    """Return up to 6 passages for the question, best first; an empty list means no match.
+    """Return up to 6 relevant passages, best first; an empty list means the corpus has no answer.
 
     Embeds the question (Cohere Embed v4), runs one hybrid SQL statement over `chunks` (meaning
     and keyword rankings fused by reciprocal rank fusion, filters applied in the same
-    statement), reranks the top 25 with Amazon Rerank 1.0 and keeps the best 6. Never padded.
+    statement), reranks the top 25 with Amazon Rerank 1.0 and keeps the best 6 scoring at least MIN_RELEVANCE.
+    Never padded.
     Each result has the citation fields plus `score` (the rerank relevance). A hit shorter than
     400 characters also has `neighbours`: the previous and next chunk of the same section.
     """
@@ -186,6 +190,7 @@ def _rerank(client, question: str, candidates: list[dict]) -> list[dict]:
     return [
         _citation(candidates[hit["index"]]) | {"score": hit["relevanceScore"]}
         for hit in response["results"][:RESULTS]
+        if hit["relevanceScore"] >= MIN_RELEVANCE
     ]
 
 

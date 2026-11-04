@@ -128,3 +128,15 @@ def test_neighbours_only_for_short_hits_in_one_statement(run):
     neighbour_statements = [s for s in data_api.statements if "hit_id" in s["sql"]]
     assert len(neighbour_statements) == 1
     assert [p["value"] for p in neighbour_statements[0]["parameters"]] == [{"stringValue": "short"}]
+
+
+def test_hits_below_min_relevance_are_dropped(run, monkeypatch):
+    scores = {"answer": 0.9, "noise": 0.01}
+
+    def rerank(self, **kwargs):
+        texts = [s["inlineDocumentSource"]["textDocument"]["text"] for s in kwargs["sources"]]
+        return {"results": [{"index": i, "relevanceScore": scores[t]} for i, t in enumerate(texts)]}
+
+    monkeypatch.setattr(FakeRerank, "rerank", rerank)
+    results, _, _ = run([row("a", content="answer"), row("b", content="noise")])
+    assert [r["chunk_id"] for r in results] == ["a"]
