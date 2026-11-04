@@ -1,7 +1,7 @@
 # Hybrid search with filters and rerank
 
 Owner: jayparmar16
-Status: in-progress
+Status: in-review
 Issue: #19
 
 ## Goal
@@ -11,12 +11,12 @@ for a question, from the Aurora index, for the 5 Nov demo.
 
 ## Done when
 
-- [ ] One SQL statement fuses pgvector and full-text rankings (RRF) with year, topic, type and
+- [x] One SQL statement fuses pgvector and full-text rankings (RRF) with year, topic, type and
       country filters; the top 25 are reranked with Amazon Rerank 1.0 and the best 6 returned.
-- [ ] Short hits come back with their previous and next chunk of the same section.
-- [ ] Fewer matches than 6 are never padded; none returns an empty list.
-- [ ] Tests with fakes cover filters, rerank order and cut, no padding and neighbours.
-- [ ] `python -m askwri.search` runs live and is documented in the README.
+- [x] Short hits come back with their previous and next chunk of the same section.
+- [x] Fewer matches than 6 are never padded; none returns an empty list.
+- [x] Tests with fakes cover filters, rerank order and cut, no padding and neighbours.
+- [x] `python -m askwri.search` runs live and is documented in the README.
 
 ## Handoff
 

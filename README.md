@@ -141,6 +141,25 @@ scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
   fails or whose model call is refused is reported as `SKIPPED` and not written.
 - Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
 
+## Search the index
+
+`askwri.search.search_passages(question, *, year_from, year_to, topic, doc_type, country)` is
+what the answering agent calls. It embeds the question with Cohere Embed v4, runs one SQL
+statement over `chunks` through the RDS Data API (pgvector cosine search and full-text search
+fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
+on), reranks the top 25 with Amazon Rerank 1.0 and returns at most 6 passages with their
+citation fields and rerank `score`. Fewer matches return fewer results, and none returns an
+empty list. A hit under 400 characters also carries its previous and next chunk of the same
+section as `neighbours`.
+
+```sh
+uv run python -m askwri.search "Which countries had the highest deforestation?" --topic Forests --year-from 2024
+```
+
+Options: `--topic`, `--year-from`, `--year-to`, `--doc-type`, `--country`. Needs AWS
+credentials and region in the environment. The first query after Aurora auto-pauses can take
+30 seconds or more; the clients wait up to 90 seconds.
+
 ## Models
 
 Every model call picks its model by role from the registry in `askwri/models.py`, so swapping
