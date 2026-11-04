@@ -482,3 +482,9 @@ a.aw-btn{text-decoration:none}
 .aw-rel.extends{background:var(--secondary-100);color:var(--secondary-700)}
 .aw-rel.contrasts{background:var(--error-100);color:var(--error-900);outline:1px dashed var(--error-500)}
 .aw-rel.supports{background:var(--success-100);color:var(--success-900)}
+
+/* Report type next to Deep research; ticks in the claims matrix */
+.aw-report-type select{font:inherit;font-size:12px;font-weight:600;padding:4px 8px;border:var(--border-thin) solid var(--line);border-radius:var(--radius-300);background:var(--surface);color:var(--ink)}
+.aw-lens td.aw-tick{color:var(--success-900);font-weight:700;text-align:center;font-style:normal}
+.aw-lens td.empty{text-align:center}
+.aw-claims thead th{text-transform:none;font-weight:600;min-width:150px}

@@ -8,7 +8,8 @@
 
 import { useState } from "react";
 
-import type { CitationFlow, Empty, FlowLink, KeyFigure, LensResult, Relation, Timeline, Visuals } from "@/lib/agent";
+import type { CitationFlow, Empty, FlowLink, KeyFigure, LensResult, Relation, Source, Timeline, Visuals } from "@/lib/agent";
+import { type ClaimsMatrix, claimsMatrix } from "@/lib/matrix";
 import { LensTable } from "./LensTable";
 
 const RELATION_LABELS: Record<Relation, string> = {
@@ -229,8 +230,43 @@ function CitationFlowView({ flow, onOpenPage, onMarker }: FlowProps) {
   );
 }
 
+function ClaimsMatrixTable({ matrix }: { matrix: ClaimsMatrix }) {
+  return (
+    <div className="aw-lens aw-claims">
+      <div className="aw-lens-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Report</th>
+              {matrix.columns.map((column, i) => (
+                <th key={i} scope="col" title={column.text}>{column.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.rows.map((row, r) => (
+              <tr key={row.docId}>
+                <th scope="row">
+                  {row.title}
+                  <span className="aw-meta">{row.year ?? "n.d."}</span>
+                </th>
+                {matrix.cells[r].map((backs, c) => (
+                  <td key={c} className={backs ? "aw-tick" : "empty"} aria-label={backs ? "cited for this point" : "not cited"}>
+                    {backs ? "✓" : "–"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 type VisualsViewProps = {
   visuals: Visuals;
+  answer?: { paragraphs: string[]; sources: Source[] };
   lens?: LensResult;
   matrix?: boolean;
   activeMarker: number | null;
@@ -238,8 +274,9 @@ type VisualsViewProps = {
   onOpenPage: (link: FlowLink) => void;
 };
 
-export function VisualsView({ visuals, lens, matrix, activeMarker, onMarker, onOpenPage }: VisualsViewProps) {
+export function VisualsView({ visuals, answer, lens, matrix, activeMarker, onMarker, onOpenPage }: VisualsViewProps) {
   const figures = visuals.keyFigures;
+  const claims = !lens && answer ? claimsMatrix(answer.paragraphs, answer.sources) : null;
   return (
     <div className="aw-visuals">
       {!isEmpty(figures) && figures.cards.length > 0 && (
@@ -255,11 +292,19 @@ export function VisualsView({ visuals, lens, matrix, activeMarker, onMarker, onO
           <CitationFlowView flow={visuals.citationFlow} onOpenPage={onOpenPage} onMarker={onMarker} />
         </Section>
       )}
-      {lens && (
-        <Section title="Evidence matrix">
+      {lens ? (
+        <section className="aw-visual">
           <LensTable lens={lens} activeMarker={activeMarker} onMarker={onMarker} matrix={matrix} />
+        </section>
+      ) : claims ? (
+        <Section title="Evidence matrix" caption="Which report backs which point of the answer (hover a column for the full point). For a matrix by topic, use a Lens or a Topic dossier.">
+          <ClaimsMatrixTable matrix={claims} />
         </Section>
-      )}
+      ) : answer ? (
+        <Section title="Evidence matrix" caption="The answer rests on one report, so there is nothing to compare. A Lens or a Topic dossier reads more papers." >
+          {null}
+        </Section>
+      ) : null}
     </div>
   );
 }

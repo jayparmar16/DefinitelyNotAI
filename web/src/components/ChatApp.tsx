@@ -497,6 +497,8 @@ async function downloadPdf(source: Source) {
             onTool={setTool}
             lens={lens}
             onLens={setLens}
+            format={format}
+            onFormat={setFormat}
             filters={filters}
             onFilters={setFilters}
             running={running}

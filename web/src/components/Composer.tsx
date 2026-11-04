@@ -5,7 +5,7 @@
 import { type FormEvent, type KeyboardEvent, type RefObject, useEffect, useState } from "react";
 
 
-import type { Filters, Lens } from "@/lib/agent";
+import type { Filters, Lens, ReportFormat } from "@/lib/agent";
 import { Icon } from "./Icon";
 import { LensBar, LensEditor } from "./LensControl";
 import { Menu } from "./Menu";
@@ -28,6 +28,13 @@ const TOOLS: { value: Tool; name: string; placeholder: string }[] = [
   { value: "explore", name: "Explore", placeholder: "A topic to explore, e.g. adaptation finance: timeline, citation links and key figures" },
 ];
 
+const REPORT_TYPES: { value: ReportFormat; name: string; hint: string }[] = [
+  { value: "talking-points", name: "Talking points", hint: "Short points for a partner or funder meeting" },
+  { value: "issue-brief", name: "Issue brief", hint: "Bottom line and implications for policymakers" },
+  { value: "summary", name: "Researcher summary", hint: "Precise findings, methods and caveats" },
+  { value: "dossier", name: "Topic dossier", hint: "Compare up to 8 papers: evidence matrix, where they agree and differ, what's missing" },
+];
+
 type ComposerProps = {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   draft: string;
@@ -38,6 +45,8 @@ type ComposerProps = {
   onTool: (tool: Tool) => void;
   lens: Lens | null;
   onLens: (lens: Lens | null) => void;
+  format: ReportFormat;
+  onFormat: (format: ReportFormat) => void;
   filters: Filters;
   onFilters: (filters: Filters) => void;
   running: boolean;
@@ -129,6 +138,16 @@ export function Composer(props: ComposerProps) {
             Deep research
 
           </button>
+          )}
+          {props.tool === "ask" && props.deep && (
+            <label className="aw-report-type" title={REPORT_TYPES.find((t) => t.value === props.format)?.hint}>
+              <span className="visually-hidden">Report type</span>
+              <select value={props.format} onChange={(event) => props.onFormat(event.target.value as ReportFormat)}>
+                {REPORT_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>{type.name}</option>
+                ))}
+              </select>
+            </label>
           )}
           <span className="spacer" />
 
