@@ -41,7 +41,7 @@ node_modules/
 *.tfplan
 infra/terraform.tfvars
 infra/backend.hcl
-build/
+/build/
 
 # Web app build output
 web/out/
