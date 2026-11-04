@@ -160,6 +160,16 @@ Options: `--topic`, `--year-from`, `--year-to`, `--doc-type`, `--country`. Needs
 credentials and region in the environment. The first query after Aurora auto-pauses can take
 30 seconds or more; the clients wait up to 90 seconds.
 
+## Query Aurora by hand
+
+```sh
+uv run python db/query.py "SELECT count(*) FROM documents"   # rows printed as JSON
+```
+
+Runs one SQL statement on `askwri-db` through the RDS Data API as the master user. It reads
+`AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`
+from `.env` in the repo root. See [docs/query-aurora.md](docs/query-aurora.md).
+
 ## Models
 
 Every model call picks its model by role from the registry in `askwri/models.py`, so swapping
