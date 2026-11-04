@@ -1,5 +1,6 @@
 """Table chunks, driven through synthetic PDFs with ruled tables and the fake model client."""
 
+import json
 from pathlib import Path
 
 import pymupdf
@@ -13,6 +14,17 @@ PARAGRAPH = (
     "Forests store large amounts of carbon and support the livelihoods of many communities. "
     "Protecting them requires secure land rights, transparent monitoring and finance that "
     "reaches local groups. "
+)
+# A document with no wri.org page is also labelled by the model, after its tables are described.
+LABELS = json.dumps(
+    {
+        "title": "Forest Cover",
+        "date": "2025-01-01",
+        "doc_type": "other",
+        "topic": "Forests",
+        "countries": [],
+        "summary": "Forest cover tables.",
+    }
 )
 HEADER = ["Country", "Forest (Mha)", "Share (%)", "Change (%)"]
 
@@ -137,8 +149,20 @@ def report_with_long_table(path: Path, caption: str = "Table 1 | Forest cover by
     return save(doc, path, "Long Table")
 
 
-def ingest(path: Path, *summaries: str):
-    result = ingest_document(path, client=FakeClaude(*summaries))
+class SummaryClaude(FakeClaude):
+    """Answers the labels request (the one asking for JSON) with LABELS, any other with a summary."""
+
+    def __init__(self, summary: str = "A table."):
+        super().__init__()
+        self.summary = summary
+
+    def _create(self, **request):
+        self.replies = [LABELS if "output_config" in request else self.summary]
+        return super()._create(**request)
+
+
+def ingest(path: Path):
+    result = ingest_document(path, client=SummaryClaude())
     assert result.audit.passed, result.audit.failures
     return result
 
@@ -150,7 +174,7 @@ def tables_pdf(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="module")
 def result(tables_pdf):
-    return ingest(tables_pdf, *["Summary of a table."] * 5)
+    return ingest(tables_pdf)
 
 
 def by_number(result, number: str):
@@ -205,9 +229,7 @@ def test_a_grid_of_names_is_text_without_a_table_number(result):
 
 
 def test_nearest_caption_wins_but_a_caption_above_beats_a_slightly_nearer_one_below(tmp_path):
-    chunks = ingest(
-        report_with_neighbouring_captions(tmp_path / "neighbours.pdf"), "One.", "Two."
-    ).chunks
+    chunks = ingest(report_with_neighbouring_captions(tmp_path / "neighbours.pdf")).chunks
 
     first, second = chunks
     assert (first.number, second.number) == ("Table 1", "Table 2")
@@ -216,7 +238,7 @@ def test_nearest_caption_wins_but_a_caption_above_beats_a_slightly_nearer_one_be
 
 
 def test_large_table_splits_by_rows_with_caption_and_header_repeated(tmp_path):
-    chunks = ingest(report_with_long_table(tmp_path / "long-table.pdf"), *["Summary."] * 10).chunks
+    chunks = ingest(report_with_long_table(tmp_path / "long-table.pdf")).chunks
 
     assert len(chunks) > 1
     assert all(len(c.text) <= 2000 for c in chunks)
@@ -239,9 +261,7 @@ def test_large_table_splits_by_rows_with_caption_and_header_repeated(tmp_path):
 
 
 def test_pieces_of_a_table_without_a_number_still_point_at_the_first(tmp_path):
-    chunks = ingest(
-        report_with_long_table(tmp_path / "no-number.pdf", caption=""), *["S."] * 10
-    ).chunks
+    chunks = ingest(report_with_long_table(tmp_path / "no-number.pdf", caption="")).chunks
 
     assert len(chunks) > 1
     assert {c.number for c in chunks} == {None}
@@ -253,7 +273,7 @@ def test_pieces_of_a_table_without_a_number_still_point_at_the_first(tmp_path):
 def test_rows_are_quotable_when_the_text_layer_lists_them_in_another_order(tmp_path):
     pdf = report_with_one_table(tmp_path / "rows-reversed.pdf", text_order="rows reversed")
 
-    (table,) = ingest(pdf, "A table.").chunks
+    (table,) = ingest(pdf).chunks
 
     assert table.quotable
 
@@ -261,13 +281,13 @@ def test_rows_are_quotable_when_the_text_layer_lists_them_in_another_order(tmp_p
 def test_a_table_with_a_row_in_another_word_order_is_kept_but_not_quotable(tmp_path):
     pdf = report_with_one_table(tmp_path / "cells-reversed.pdf", text_order="cells reversed")
 
-    (table,) = ingest(pdf, "A table.").chunks
+    (table,) = ingest(pdf).chunks
 
     assert not table.quotable
 
 
 def test_description_is_for_search_only(tables_pdf):
-    client = FakeClaude(*["Forest cover by country in 2020."] * 5)
+    client = SummaryClaude("Forest cover by country in 2020.")
 
     result = ingest_document(tables_pdf, client=client)
 
@@ -278,7 +298,7 @@ def test_description_is_for_search_only(tables_pdf):
         "Forest Cover › Findings\n\nForest cover by country in 2020.\n\n"
     )
     assert all(c.description == "" for c in result.chunks if c.kind == "source_text")
-    assert len(client.requests) == sum(c.kind == "table" for c in result.chunks)
+    assert len(client.requests) == sum(c.kind == "table" for c in result.chunks) + 1
     request = client.requests[0]
     assert request["model"] == MODELS["labeler"]
     assert "|Country 3|10.5|6.3|-1.2|" in request["messages"][0]["content"][0]["text"]
