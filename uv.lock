@@ -55,6 +55,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic", extra = ["bedrock"] },
+    { name = "boto3" },
     { name = "pymupdf" },
 ]
 
@@ -66,6 +67,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "anthropic", extras = ["bedrock"], specifier = ">=2.4.0" },
+    { name = "boto3", specifier = ">=1.43.123" },
     { name = "pymupdf", specifier = "==2.0" },
 ]
 

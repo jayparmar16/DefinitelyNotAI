@@ -150,6 +150,44 @@ output, and asks `answerer` a plain question. In code, use `call_claude` (text) 
 `tests/fake_claude.FakeClaude` and never touch the network. A refusal, a truncated reply or
 an API error raises `ModelError` naming the document.
 
+## Deploy to AWS
+
+Everything deploys with Terraform into **one team sandbox account** in us-west-2, following
+[the solution design](docs/askwri-solution-design.md) ("AWS deployment layout"). Teammates'
+sandboxes are for local experiments only: Terraform refuses any account other than
+`TF_VAR_team_account_id`. Needs Terraform 1.11+ (`brew install hashicorp/tap/terraform`).
+
+```sh
+export AWS_PROFILE=<team sandbox profile> AWS_REGION=us-west-2
+export TF_VAR_team_account_id=$(aws sts get-caller-identity --query Account --output text)
+
+infra/bootstrap/create-state-bucket.sh        # once: S3 state bucket, writes infra/backend.hcl
+cp infra/terraform.tfvars.example infra/terraform.tfvars   # once: set the Team and Owner tags
+cd infra && terraform init -backend-config=backend.hcl
+terraform plan -out=plan.tfplan && terraform apply plan.tfplan
+cd .. && uv run python db/apply_schema.py     # tables, indexes and database users
+```
+
+`backend.hcl` and `terraform.tfvars` hold account-specific values and are gitignored; never
+commit the account ID or ARNs. Sandbox credentials expire: on `ExpiredToken`, refresh them
+before planning again.
+
+`db/apply_schema.py` uses the RDS Data API, so it also runs from CloudShell without VPC access.
+It is safe to rerun.
+
+| Resource | Name | Notes |
+|---|---|---|
+| VPC | `askwri-vpc` (10.20.0.0/16) | Private subnets `askwri-app-a/b` and `askwri-db-a/b`; no internet route, no NAT |
+| VPC endpoints | `askwri-vpce-*` | S3 (gateway), bedrock-runtime, bedrock-agent-runtime, secretsmanager, logs |
+| Security groups | `askwri-sg-lambda`, `askwri-sg-db`, `askwri-sg-endpoints` | Only Lambda to Aurora (5432) and Lambda to endpoints/S3 (443) |
+| Corpus bucket | `askwri-corpus-<account-id>` | `raw/` PDFs, `text/`, `eval/`; private, encrypted, TLS only; objects readable only by the deploy role and the askwri-* roles |
+| Database | `askwri-db` | Aurora PostgreSQL 18 Serverless v2 with pgvector; Data API on; pauses after an hour idle (resume takes 15 s or more; set `db_min_capacity = 0.5` for demos) |
+| Secret | `askwri/db` | Master credentials, used only by the Data API. Lambdas sign in with IAM database auth as `askwri_ingest` or `askwri_tools` |
+| Resource group | `askwri-rg` | Lists every resource tagged `Project = AskWRI` |
+
+Interface endpoints and Aurora bill by the hour. After the event, tear everything down with
+`cd infra && terraform destroy`, then check that `askwri-rg` is empty.
+
 ## The rules
 
 - `main` is protected, so every change goes in through a pull request.

@@ -1,0 +1,6 @@
+# Written by bootstrap/create-state-bucket.sh as backend.hcl (gitignored).
+bucket       = "askwri-tfstate-<account-id>"
+key          = "askwri/terraform.tfstate"
+region       = "us-west-2"
+encrypt      = true
+use_lockfile = true

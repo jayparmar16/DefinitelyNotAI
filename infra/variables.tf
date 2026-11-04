@@ -1,0 +1,51 @@
+variable "team_account_id" {
+  description = "The team sandbox account ID. Set TF_VAR_team_account_id; never commit it."
+  type        = string
+
+  # An empty value (for example from an expired session) would rename the corpus bucket
+  # and plan its replacement, so refuse it outright.
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.team_account_id))
+    error_message = "team_account_id must be the 12-digit team account ID."
+  }
+}
+
+variable "region" {
+  description = "Region for every resource."
+  type        = string
+  default     = "us-west-2"
+}
+
+variable "team" {
+  description = "Value of the Team tag."
+  type        = string
+}
+
+variable "owner" {
+  description = "Value of the Owner tag (an email address)."
+  type        = string
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block of askwri-vpc; subnets are carved from it."
+  type        = string
+  default     = "10.20.0.0/16"
+}
+
+variable "db_min_capacity" {
+  description = "Aurora minimum ACUs. 0 pauses when idle (resume takes 15 s or more); 0.5 for demos."
+  type        = number
+  default     = 0
+}
+
+variable "db_max_capacity" {
+  description = "Aurora maximum ACUs."
+  type        = number
+  default     = 4
+}
+
+variable "db_seconds_until_auto_pause" {
+  description = "Idle seconds before Aurora pauses; only applies when db_min_capacity is 0."
+  type        = number
+  default     = 3600
+}

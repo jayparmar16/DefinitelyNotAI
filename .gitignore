@@ -33,3 +33,12 @@ __pycache__/
 .pytest_cache/
 node_modules/
 .next/
+
+# Terraform: state stays in S3; the account-specific files stay local (commit the .example files)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+infra/terraform.tfvars
+infra/backend.hcl
+build/
