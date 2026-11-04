@@ -6,7 +6,14 @@ import anthropic
 import httpx2
 import pytest
 
-from askwri.models import MODELS, Image, ModelError, call_claude, call_claude_json
+from askwri.models import (
+    MODELS,
+    Image,
+    ModelError,
+    cached_client,
+    call_claude,
+    call_claude_json,
+)
 from tests.fake_claude import FakeClaude
 
 SCHEMA = {
@@ -100,3 +107,19 @@ def test_a_reply_with_no_text_raises():
 def test_embedding_and_rerank_roles_are_not_claude_roles():
     with pytest.raises(ValueError, match="embedder"):
         call_claude(FakeClaude("x"), "embedder", document="report.pdf", prompt="Hi")
+
+
+def test_a_cached_client_replays_a_finished_reply_for_the_same_request(tmp_path):
+    client = FakeClaude("A table.", "Another table.", {"stop_reason": "refusal"}, "Third.")
+    cached = cached_client(client, tmp_path)
+
+    first = call_claude(cached, "labeler", document="d", prompt="Summarise table 1.")
+    again = call_claude(cached, "labeler", document="d", prompt="Summarise table 1.")
+    other = call_claude(cached, "labeler", document="d", prompt="Summarise table 2.")
+    with pytest.raises(ModelError):
+        call_claude(cached, "labeler", document="d", prompt="Summarise table 3.")
+    retried = call_claude(cached, "labeler", document="d", prompt="Summarise table 3.")
+
+    assert (first, again, other, retried) == ("A table.", "A table.", "Another table.", "Third.")
+    assert len(client.requests) == 4  # the repeat was replayed; the refusal was asked again
+    assert len(list(tmp_path.glob("*.json"))) == 3

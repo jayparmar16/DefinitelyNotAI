@@ -19,10 +19,10 @@ from botocore.config import Config
 
 from askwri.ingest.chunks import Chunk
 from askwri.ingest.document import IngestResult, ingest_document
-from askwri.ingest.labels import document_card
+from askwri.ingest.labels import catalog_row, document_card
 from askwri.ingest.sort import KeptDocument, sort_corpus
 from askwri.ingest.wri_site import WriSite
-from askwri.models import MODELS, ModelError, claude_client
+from askwri.models import MODELS, ModelError, cached_client, claude_client
 
 CLUSTER = "askwri-db"
 SECRET = "askwri/db"
@@ -35,6 +35,10 @@ WORKERS = 8
 # Cohere Embed v4 allows 300,000 tokens a minute, about a third of what the corpus needs: the
 # embed calls of 8 workers get throttled, and adaptive retries wait instead of failing the run.
 EMBED_RETRIES = Config(retries={"mode": "adaptive", "max_attempts": 10})
+
+# Local record of the model's work, git-ignored: every Haiku reply (replayed by later loads,
+# so a reload pays only for calls it has never made) and each loaded document's labels.
+CACHE = Path(__file__).resolve().parents[2] / ".cache" / "ingest"
 
 ARRAY_COLUMNS = (
     "authors", "tags", "countries", "replaces", "initiatives", "programs", "topics", "concepts",
@@ -226,7 +230,7 @@ def _aws() -> dict:
             "database": DATABASE,
         },
         "site": WriSite(),
-        "claude": claude_client(),
+        "claude": cached_client(claude_client(), CACHE / "model-calls"),
     }
 
 
@@ -243,6 +247,16 @@ def _loaded_hashes() -> dict[str, str]:
     return {row[0]["stringValue"]: row[1]["stringValue"] for row in result["records"]}
 
 
+def _save_labels(result: IngestResult) -> None:
+    """Write CACHE/documents/<doc_id>.json: the catalog row plus every table description."""
+    row = catalog_row(result.doc_id, result.pdf_file, result.labels) | {
+        "table_descriptions": {c.chunk_id: c.description for c in result.chunks if c.description}
+    }
+    path = CACHE / "documents" / f"{result.doc_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _load_one(job: tuple[KeptDocument, str]) -> str:
     """Ingest, upload, embed and write one document; returns its report line."""
     kept, file_sha256 = job
@@ -255,6 +269,7 @@ def _load_one(job: tuple[KeptDocument, str]) -> str:
         return f"SKIPPED {kept.doc_id}: bad label: {error}"
     if not result.audit.passed:
         return f"SKIPPED {kept.doc_id}: audit failed: {result.audit.failures[0]}"
+    _save_labels(result)
     aws["s3"].upload_file(str(kept.path), os.environ["CORPUS_BUCKET"], pdf_key(result.doc_id))
     texts = [document_card(result.labels), *(chunk.indexed_text for chunk in result.chunks)]
     card_vector, *vectors = embed(aws["bedrock"], texts)

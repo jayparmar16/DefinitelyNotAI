@@ -89,6 +89,8 @@ Ingestion runs on a laptop or in CloudShell with AWS credentials, 8 documents at
 - A failed audit, model call or off-list label reports the document as `SKIPPED`, and its
   earlier rows stay.
 - Each document is replaced in its own transaction, so search keeps working during a load.
+- Haiku replies are saved in `.cache/ingest/model-calls/` and replayed, and each loaded
+  document's labels go to `.cache/ingest/documents/`; both stay on the machine that ran it.
 - To check one PDF without Aurora: `uv run python -m askwri.ingest <pdf> --out <folder>`
   writes the chunks and `catalog.json` locally.
 
@@ -97,5 +99,4 @@ Ingestion runs on a laptop or in CloudShell with AWS credentials, 8 documents at
 - Chart and image chunks (PR #45).
 - Search that reads the document-level fields: topics, concepts and regions as filters,
   and documents-first search through the card.
-- Caching: a reload repeats every model call.
 - Non-English documents: sorting drops them.

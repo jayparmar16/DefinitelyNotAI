@@ -63,8 +63,8 @@ else in search reads the new fields yet (see "Not in this branch").
    also works; the name has to start with the year). A folder named anything else leaves
    undated documents undated.
 
-4. Cost of a full reload. Nothing is cached, so the reload repeats every existing model
-   call and adds one more per document. With today's corpus that is about 562 enrichment
+4. Cost of a full reload. The first load on a machine makes every model call; it saves
+   each reply in `.cache/ingest/model-calls/`, and later loads replay them. With today's corpus that is about 562 enrichment
    calls, about 3,070 table summaries (tables with a role are no longer summarized) and
    about 386 fallback-label calls, all on the `labeler` (Haiku, at effort `low`). Table
    summaries run 4 at a time per document. It also makes about 694 Cohere embedding calls

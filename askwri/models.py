@@ -5,9 +5,15 @@ Run `python -m askwri.models smoke` to make one real call per Claude role.
 
 import argparse
 import base64
+import hashlib
 import json
+import os
 import sys
+import threading
 from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
+from types import SimpleNamespace
 
 import anthropic
 import pymupdf
@@ -48,6 +54,36 @@ def claude_client() -> anthropic.AnthropicBedrock:
     AWS_DEFAULT_REGION (us-west-2 for this project); the SDK raises if neither is set.
     """
     return anthropic.AnthropicBedrock()
+
+
+def cached_client(client, folder: Path):
+    """`client`, with every finished reply saved in `folder` and replayed for the same request.
+
+    The key is a hash of the whole request (model, prompt, schema, effort), so a changed prompt
+    or model is a new call. Only replies that ended normally are kept; a refusal or error is
+    asked again next time. Safe across processes and threads: each reply is its own file.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    return SimpleNamespace(messages=SimpleNamespace(create=partial(_cached_create, client, folder)))
+
+
+def _cached_create(client, folder: Path, **request):
+    key = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
+    path = folder / f"{key}.json"
+    if path.exists():
+        text = json.loads(path.read_text(encoding="utf-8"))["text"]
+        content = [SimpleNamespace(type="text", text=text)]
+        return SimpleNamespace(stop_reason="end_turn", stop_details=None, content=content)
+    response = client.messages.create(**request)
+    text = "".join(block.text for block in response.content if block.type == "text")
+    if response.stop_reason == "end_turn" and text:
+        partial_path = path.with_suffix(f".{os.getpid()}-{threading.get_ident()}.tmp")
+        partial_path.write_text(
+            json.dumps({"model": request["model"], "text": text}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        partial_path.replace(path)  # atomic: a reader never sees half a file
+    return response
 
 
 def call_claude(

@@ -169,6 +169,10 @@ scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: r
   rerunning after an interruption resumes; `--reload` loads them again, which a change to
   ingestion needs. A document whose audit fails, whose model call is refused or whose label
   is off-list is reported as `SKIPPED` and not written (its earlier rows stay).
+- **Saved model work:** every finished Haiku reply is kept in `.cache/ingest/model-calls/`
+  (git-ignored) and replayed when the same request comes again, so a rerun or `--reload`
+  pays only for calls it has never made. Each loaded document's labels and table
+  descriptions are also written to `.cache/ingest/documents/<doc_id>.json`.
 - **Folder names** start with the publication year (`2025` or `2025_publications`): an
   undated document takes its folder's year.
 - Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
