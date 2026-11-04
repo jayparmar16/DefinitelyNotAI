@@ -30,7 +30,7 @@ rows can be quoted; the summary cannot.
 - [x] Table chunks pass the audit: every cell's words are on the claimed page.
 - [x] A model refusal or error fails the document loudly.
 - [x] Tests use synthetic PDFs and the fake model client.
-- [ ] The PR reports a live run on about 10 table-heavy reports: tables found, captions paired
+- [x] The PR reports a live run on about 10 table-heavy reports: tables found, captions paired
       (and how many from a non-adjacent region), split tables, continued tables, grids
       rejected, 3 example table chunks with summaries, and the audit results.
 
