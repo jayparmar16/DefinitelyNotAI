@@ -1032,7 +1032,9 @@ class Agent:
         results = [result_from_source(s) for s in previous["answer"]["sources"]]
         labels = label_passages(results)
         evidence = {r["chunk_id"]: r for r in results}
-        if follow["audience"] in AUDIENCES:
+        # A reader the user picked always wins; the message only names one when none was picked
+        # ("as talking points for a funder").
+        if follow["audience"] in AUDIENCES and request.get("audience") not in AUDIENCES:
             request = {**request, "audience": follow["audience"]}
         asked = f"{previous['question']}\n(Follow-up request: {question})"
         yield from self._answer(

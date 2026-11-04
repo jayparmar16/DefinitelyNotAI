@@ -972,3 +972,13 @@ def test_key_figures_keep_only_values_found_word_for_word_one_per_document():
         ("181", "a"),
         ("23", "b"),
     ]
+
+
+def test_a_reader_the_user_picked_beats_the_one_the_follow_up_suggests(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0}, follow=follow_up("rewrite", audience="policymaker"))
+    agent = Agent(
+        Deps(llm=None, gateway=RecordingGateway(0.3), memory=FakeMemory(PREVIOUS), bedrock=None),
+        SETTINGS,
+    )
+    request = {"question": "same question again", "sessionId": "s" * 40, "audience": "partnerships"}
+    assert list(agent.run(request))[-1]["answer"]["audience"] == "partnerships"
