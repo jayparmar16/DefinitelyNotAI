@@ -539,3 +539,89 @@ def test_a_rewrite_request_reuses_the_previous_sources_without_searching(monkeyp
     draft_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
     assert "Follow-up request: as talking points for a funder" in draft_prompt
     assert "Nairobi planted street trees." in draft_prompt
+
+
+# --- fact-check ---
+
+
+def test_fact_check_verdicts_must_rest_on_retrieved_passages_and_their_figures():
+    from askwri.agent.factcheck import checked_verdict
+
+    labels = {"P1": {"passage": "In 2024, 181 of 394 cities missed the 2030 standards."}}
+    claim = {"claim": "181 of 394 cities missed the standards in 2024."}
+
+    def verdict(kind, passages, correction=""):
+        return {"verdict": kind, "passages": passages, "correction": correction, "note": "n"}
+
+    assert checked_verdict(claim, verdict("supported", ["P1"]), ["P1"], labels)["verdict"] == (
+        "supported"
+    )
+    # citing a passage that wasn't retrieved for this claim is not evidence
+    assert checked_verdict(claim, verdict("supported", ["P9"]), ["P1"], labels)["verdict"] == (
+        "not_found"
+    )
+    # a "supported" figure the passage doesn't give is not supported
+    wrong = {"claim": "281 of 394 cities missed the standards."}
+    assert checked_verdict(wrong, verdict("supported", ["P1"]), ["P1"], labels)["verdict"] == (
+        "not_found"
+    )
+    # a correction keeps only figures the passages give
+    fixed = checked_verdict(
+        wrong, verdict("contradicted", ["P1"], "181 of 394 cities"), ["P1"], labels
+    )
+    assert (fixed["verdict"], fixed["correction"]) == ("contradicted", "181 of 394 cities")
+    invented = verdict("contradicted", ["P1"], "About 200 cities missed them.")
+    assert checked_verdict(wrong, invented, ["P1"], labels)["correction"] == ""
+    assert checked_verdict(claim, None, ["P1"], labels)["verdict"] == "not_found"
+
+
+def test_fact_check_mode_returns_claims_with_markers_into_one_sources_list(monkeypatch):
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "claims":
+            return {
+                "claims": [
+                    {
+                        "quote": "Cool roofs cut heat",
+                        "claim": "Cool roofs lowered heat.",
+                        "query": "q1",
+                    },
+                    {"quote": "Roofs cure disease", "claim": "Roofs cure disease.", "query": "q2"},
+                ]
+            }
+        if step == "judge":
+            return {
+                "verdicts": [
+                    {
+                        "index": 0,
+                        "verdict": "supported",
+                        "passages": ["P1"],
+                        "correction": "",
+                        "note": "",
+                    },
+                    {
+                        "index": 1,
+                        "verdict": "not_found",
+                        "passages": [],
+                        "correction": "",
+                        "note": "",
+                    },
+                ]
+            }
+        raise AssertionError(step)
+
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    events = list(
+        agent.run({"question": "Cool roofs cut heat. Roofs cure disease.", "mode": "factcheck"})
+    )
+    check = events[-1]["factcheck"]
+    assert [c["verdict"] for c in check["claims"]] == ["supported", "not_found"]
+    assert check["claims"][0]["markers"] == [1] and check["claims"][1]["markers"] == []
+    assert len(check["sources"]) == 1 and check["counts"]["supported"] == 1
+
+
+def test_fact_check_notes_show_the_readers_markers_not_internal_labels():
+    from askwri.agent.factcheck import readable_note
+
+    assert readable_note("P2 says 181; P7 agrees.", ["P7", "P2"]) == "[2] says 181; [1] agrees."
+    assert readable_note("P9 was not cited.", ["P1"]) == "a passage was not cited."

@@ -21,6 +21,7 @@ from askwri.agent.citations import (
     numbers_not_in,
     source_entry,
 )
+from askwri.agent.factcheck import fact_check
 from askwri.agent.tracing import agent_span, finish_agent_span
 
 PASSAGES = {"quick": 8, "deep": 14}  # passages given to the draft step
@@ -263,20 +264,24 @@ class Agent:
         with agent_span(question, session) as span:
             final = None
             for event in self._run(question, request, session):
-                if event["type"] in ("answer", "decline"):
+                if event["type"] in ("answer", "decline", "factcheck"):
                     final = event
                 yield event
             if final:
-                shown = (
-                    final["answer"]["paragraphs"]
-                    if final["type"] == "answer"
-                    else [final["decline"]["message"]]
-                )
+                if final["type"] == "answer":
+                    shown = final["answer"]["paragraphs"]
+                elif final["type"] == "factcheck":
+                    shown = [f"{c['verdict']}: {c['claim']}" for c in final["factcheck"]["claims"]]
+                else:
+                    shown = [final["decline"]["message"]]
                 finish_agent_span(span, "\n\n".join(shown))
 
     def _run(self, question: str, request: dict, session: str) -> Iterator[dict]:
         started = time.monotonic()
         mode = request.get("mode", "quick")
+        if mode == "factcheck":
+            yield from fact_check(self.deps, question, request.get("filters") or {})
+            return
         previous = self.deps.memory.last_turn(session) if self.deps.memory and session else None
         if previous:
             follow = self._follow_up(question, previous)
@@ -291,7 +296,9 @@ class Agent:
                 )
                 return
             standalone = follow["standalone"].strip()
-            if standalone and standalone != question:
+            if standalone and " ".join(standalone.lower().split()) != " ".join(
+                question.lower().split()
+            ):
                 question = standalone
                 yield step("context", "Read your follow-up in context", "done", question)
 
