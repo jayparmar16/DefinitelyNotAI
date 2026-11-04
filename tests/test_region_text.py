@@ -47,3 +47,10 @@ def test_plain_text_drops_pymupdf_picture_markers():
 
     marked = "<!-- Start of picture text -->Solar pumps<!-- End of picture text --> save water."
     assert plain_text(marked) == "Solar pumps save water."
+
+
+def test_plain_text_drops_spaced_dot_leaders():
+    from askwri.ingest.pdf import plain_text
+
+    assert plain_text("Introduction. . . . . . . .2 Methods") == "Introduction 2 Methods"
+    assert plain_text("The U.S. and e.g. other cases.") == "The U.S. and e.g. other cases."
