@@ -2,12 +2,13 @@
 
 /** A cited answer: header chips, paragraphs (or report key points) with markers, and actions. */
 
-import type { Answer } from "@/lib/agent";
+import type { Answer, Reader } from "@/lib/agent";
 import { LANGUAGES } from "./AppHeader";
+import { AnswerSections, ReaderChip, VerifiedChip } from "./AnswerSections";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
 import { Menu } from "./Menu";
-import type { Turn } from "./turn";
+import { type Turn, shownAnswer } from "./turn";
 
 type AnswerCardProps = {
   turn: Turn;
@@ -20,14 +21,16 @@ type AnswerCardProps = {
   onToggleOriginal: () => void;
   onBriefing: () => void;
   onOpenReport: () => void;
+  onReader: (reader: Reader) => void;
+  onFollowUp: (question: string) => void;
 };
 
 export function AnswerCard(props: AnswerCardProps) {
-  const { answer, turn } = props;
+  const { turn } = props;
   const translation = turn.translation;
   const showTranslation = translation !== null && !translation.showOriginal;
-  const texts = answer.report ? answer.report.keyPoints : answer.paragraphs;
-  const shown = showTranslation ? translation.paragraphs : texts;
+  const answer = shownAnswer(turn) ?? props.answer;
+  const shown = showTranslation ? answer.paragraphs : answer.report?.keyPoints ?? answer.paragraphs;
   const deep = answer.mode === "deep";
 
   return (
@@ -36,18 +39,18 @@ export function AnswerCard(props: AnswerCardProps) {
         <span className={deep ? "aw-mode-chip deep" : "aw-mode-chip"}>
           <Icon name="layers" small /> {deep ? "Deep research" : "Quick answer"}
         </span>
-        <span className="aw-verified">
-          <Icon name="check" small /> {answer.claimsVerified} of {answer.claimsTotal} claims verified
-        </span>
+        <VerifiedChip answer={answer} />
+        <ReaderChip answer={answer} onReader={props.onReader} />
         <span>
           · {answer.sources.length} sources · {answer.elapsedSeconds} s
         </span>
         {(answer.machineTranslated || showTranslation) && <span className="aw-mt">Machine-translated</span>}
       </div>
 
+      {answer.scope && <div className="aw-scope">{answer.scope}</div>}
       {answer.report && (
         <>
-          <h3 style={{ margin: "0 0 4px", fontSize: 20, lineHeight: "28px" }}>{(showTranslation && translation.report?.title) || answer.report.title}</h3>
+          <h3 style={{ margin: "0 0 4px", fontSize: 20, lineHeight: "28px" }}>{answer.report.title}</h3>
           <div className="aw-meta" style={{ marginBottom: 12 }}>{answer.report.builtFrom}</div>
         </>
       )}
@@ -66,6 +69,8 @@ export function AnswerCard(props: AnswerCardProps) {
           </p>
         ))
       )}
+
+      <AnswerSections answer={answer} onFollowUp={props.onFollowUp} showLimits={!deep} />
 
       <div className="aw-actions">
         <button className="aw-btn sm" onClick={props.onCopy}>

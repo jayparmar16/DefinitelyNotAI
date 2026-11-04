@@ -1,6 +1,6 @@
 "use client";
 
-/** The dark header band: mark, language, audience (Deep research only), Download, New chat. */
+/** The dark header band: mark, audience (Auto by default), language, Download, New chat. */
 
 import type { Audience } from "@/lib/agent";
 import { Icon } from "./Icon";
@@ -14,6 +14,7 @@ export const LANGUAGES = [
 ];
 
 const AUDIENCES: { value: Audience; name: string }[] = [
+  { value: "auto", name: "Auto (from your question)" },
   { value: "researcher", name: "Researcher" },
   { value: "policymaker", name: "Policymaker" },
   { value: "partnerships", name: "Partnerships" },
@@ -23,7 +24,6 @@ export type DownloadChoice = "markdown" | "csv" | "bibtex" | "copy";
 
 type AppHeaderProps = {
   mock: boolean;
-  deep: boolean;
   language: string;
   onLanguage: (code: string) => void;
   audience: Audience;
@@ -45,8 +45,7 @@ export function AppHeader(props: AppHeaderProps) {
       {props.mock && <span className="aw-mock" title="Answers come from the mock agent in src/mock">Mock data</span>}
       <span className="spacer" />
 
-      {props.deep && (
-        <label className="aw-select">
+      <label className="aw-select" title="Who answers are written for. Auto reads it from each question.">
           <span className="k lbl">Audience</span>
           <select
             className="aw-select-native"
@@ -59,7 +58,6 @@ export function AppHeader(props: AppHeaderProps) {
           </select>
           <Icon name="chevron" small />
         </label>
-      )}
 
       <label className="aw-select">
         <Icon name="globe" small />

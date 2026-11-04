@@ -1,6 +1,6 @@
 /** One question and everything the agent streamed back for it, as the UI keeps it. */
 
-import type { AgentEvent, Answer, Decline, Mode, Report, StepStatus } from "@/lib/agent";
+import type { AgentEvent, Answer, Decline, Mode, StepStatus, Translation } from "@/lib/agent";
 
 export type Step = { id: string; label: string; detail?: string; status: StepStatus };
 
@@ -16,8 +16,16 @@ export type Turn = {
   answer: Answer | null;
   decline: Decline | null;
   error: string | null;
-  translation: { language: string; paragraphs: string[]; report: Report | null; showOriginal: boolean } | null;
+  translation: (Translation & { language: string; showOriginal: boolean }) | null;
 };
+
+/** The answer as the reader sees it: the translation's texts when it is shown, else the original. */
+export function shownAnswer(turn: Turn): Answer | null {
+  const { answer, translation } = turn;
+  if (!answer || !translation || translation.showOriginal) return answer;
+  const { language: _language, showOriginal: _showOriginal, ...texts } = translation;
+  return { ...answer, ...texts, report: texts.report ?? answer.report };
+}
 
 export function newTurn(id: string, question: string, mode: Mode): Turn {
   return {

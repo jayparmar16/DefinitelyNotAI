@@ -41,7 +41,7 @@ export function httpAgent(baseUrl: string, apiKey: string): AgentClient {
     async translate(_paragraphs, language, sessionId) {
       const request: AskRequest = {
         question: `Now in ${LANGUAGE_NAMES[language] ?? language}`,
-        mode: "quick", language, audience: "researcher", format: "summary", filters: {}, sessionId,
+        mode: "quick", language, audience: "auto", format: "summary", filters: {}, sessionId,
       };
       let answer: Answer | null = null;
       for await (const event of ask(request, new AbortController().signal)) {
@@ -49,7 +49,8 @@ export function httpAgent(baseUrl: string, apiKey: string): AgentClient {
         if (event.type === "decline") throw new Error(event.decline.message);
       }
       if (!answer) throw new Error("No translation came back");
-      return { paragraphs: answer.report?.keyPoints ?? answer.paragraphs, report: answer.report };
+      const { report, implications, limits, questions } = answer;
+      return { paragraphs: report?.keyPoints ?? answer.paragraphs, report, implications, limits, questions };
     },
 
     async warmup(sessionId) {

@@ -17,7 +17,7 @@ import { DeclineCard, OutdatedFlag } from "./Feedback";
 import { ProgressTrace } from "./ProgressTrace";
 import { type PanelTab, SidePanel } from "./SidePanel";
 import { SourceCards, cardId } from "./SourceCards";
-import { type Turn, applyEvent, newTurn } from "./turn";
+import { type Turn, applyEvent, newTurn, shownAnswer } from "./turn";
 import { Welcome } from "./Welcome";
 
 type Panel = { turnId: string; tab: PanelTab; openDocs: number[] } | null;
@@ -35,7 +35,7 @@ export function ChatApp() {
   const [draft, setDraft] = useState("");
   const [deep, setDeep] = useState(false);
   const [language, setLanguage] = useState("en");
-  const [audience, setAudience] = useState<Audience>("policymaker");
+  const [audience, setAudience] = useState<Audience>("auto");
   const [format, setFormat] = useState<ReportFormat>("talking-points");
   const [filters, setFilters] = useState<Filters>({});
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
@@ -82,7 +82,7 @@ export function ChatApp() {
   const updateTurn = (id: string, change: (turn: Turn) => Turn) =>
     setTurns((all) => all.map((turn) => (turn.id === id ? change(turn) : turn)));
 
-  async function ask(question: string, mode: Mode, reportFormat = format) {
+  async function ask(question: string, mode: Mode, reportFormat = format, reader: Audience = audience) {
     const turn = newTurn(crypto.randomUUID(), question, mode);
     setTurns((all) => [...all, turn]);
     if (mode === "deep") setPanel({ turnId: turn.id, tab: "report", openDocs: [] });
@@ -90,7 +90,7 @@ export function ChatApp() {
     abort.current = controller;
     try {
       const agent = await getAgent();
-      const request = { question, mode, language, audience, format: reportFormat, filters, sessionId };
+      const request = { question, mode, language, audience: reader, format: reportFormat, filters, sessionId };
       for await (const event of agent.ask(request, controller.signal)) {
         if (event.type === "answer") {
           const texts = event.answer.report?.keyPoints ?? event.answer.paragraphs;
@@ -119,6 +119,12 @@ export function ChatApp() {
     if (!question || running) return;
     setDraft("");
     ask(question, deep ? "deep" : "quick");
+  }
+
+  // A suggested follow-up goes into the box, not straight to the agent, so it can be edited first.
+  function followUp(question: string) {
+    setDraft(question);
+    input.current?.focus();
   }
 
   function newChat() {
@@ -166,16 +172,16 @@ export function ChatApp() {
     const answer = turn.answer!;
     const texts = answer.report?.keyPoints ?? answer.paragraphs;
     const agent = await getAgent();
-    const { paragraphs, report } = await agent.translate(texts, target, sessionId);
-    if (paragraphs.every((text, i) => text === texts[i])) {
+    const translated = await agent.translate(texts, target, sessionId);
+    if (translated.paragraphs.every((text, i) => text === texts[i])) {
       setToast(usingMock ? "The mock agent only has Spanish translations" : "No translation returned");
       return;
     }
-    updateTurn(turn.id, (current) => ({ ...current, translation: { language: target, paragraphs, report, showOriginal: false } }));
+    updateTurn(turn.id, (current) => ({ ...current, translation: { ...translated, language: target, showOriginal: false } }));
   }
 
   function download(turn: Turn, choice: DownloadChoice) {
-    const answer = turn.answer!;
+    const answer = shownAnswer(turn)!;
     const name = slug(answer.report?.title ?? turn.question);
     if (choice === "markdown") saveFile(`${name}.md`, answerMarkdown(turn.question, answer), "text/markdown");
     if (choice === "csv") saveFile(`${name}-sources.csv`, sourcesCsv(answer.sources), "text/csv");
@@ -195,7 +201,6 @@ export function ChatApp() {
     <div className="aw-app">
       <AppHeader
         mock={usingMock}
-        deep={deep}
         language={language}
         onLanguage={setLanguage}
         audience={audience}
@@ -237,7 +242,7 @@ export function ChatApp() {
                             answer={turn.answer}
                             activeMarker={activeMarker}
                             onMarker={onMarker}
-                            onCopy={() => copy(answerMarkdown(turn.question, turn.answer!), "Answer")}
+                            onCopy={() => copy(answerMarkdown(turn.question, shownAnswer(turn)!), "Answer")}
                             onDownload={() => download(turn, "markdown")}
                             onTranslate={(target) => translate(turn, target)}
                             onToggleOriginal={() =>
@@ -251,6 +256,8 @@ export function ChatApp() {
                               ask(`Turn this into a briefing: ${turn.question}`, "deep");
                             }}
                             onOpenReport={() => setPanel({ turnId: turn.id, tab: "report", openDocs: [] })}
+                            onReader={(reader) => ask(turn.question, turn.mode, format, reader)}
+                            onFollowUp={followUp}
                           />
                           <SourceCards
                             turnId={turn.id}
@@ -304,8 +311,8 @@ export function ChatApp() {
             openDocs={panel.openDocs}
             activeMarker={active?.turnId === panelTurn.id ? active.marker : null}
             width={panelWidth}
-            audience={audience}
             format={format}
+            onFollowUp={followUp}
             languageName={nameOf(
               panelTurn.translation && !panelTurn.translation.showOriginal
                 ? panelTurn.translation.language

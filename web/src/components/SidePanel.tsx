@@ -7,12 +7,13 @@
 
 import { type PointerEvent as ReactPointerEvent, useState } from "react";
 
-import type { Audience, ReportFormat, Source } from "@/lib/agent";
+import type { ReportFormat, Source } from "@/lib/agent";
 import { citationYear, pageLink } from "@/lib/citations";
+import { AnswerSections, VerifiedChip, readerName } from "./AnswerSections";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
 import { Passage } from "./SourceCards";
-import type { Turn } from "./turn";
+import { type Turn, shownAnswer } from "./turn";
 
 export type PanelTab = "report" | "sources" | number; // a number is an open source's marker
 
@@ -21,11 +22,6 @@ const FORMATS: { value: ReportFormat; name: string }[] = [
   { value: "issue-brief", name: "Issue brief" },
   { value: "summary", name: "Researcher summary" },
 ];
-const AUDIENCE_NAMES: Record<Audience, string> = {
-  researcher: "a researcher",
-  policymaker: "a policymaker",
-  partnerships: "partnerships staff",
-};
 const MIN_WIDTH = 360;
 const MAX_WIDTH = 760;
 
@@ -35,7 +31,6 @@ type SidePanelProps = {
   openDocs: number[];
   activeMarker: number | null;
   width: number;
-  audience: Audience;
   format: ReportFormat;
   languageName: string;
   onTab: (tab: PanelTab) => void;
@@ -46,6 +41,7 @@ type SidePanelProps = {
   onDownloadReport: () => void;
   onWidth: (width: number) => void;
   onClose: () => void;
+  onFollowUp: (question: string) => void;
 };
 
 function ResizeHandle({ width, onWidth }: { width: number; onWidth: (width: number) => void }) {
@@ -83,7 +79,7 @@ function ReportView(props: SidePanelProps) {
   if (!report) {
     return (
       <div className="aw-report">
-        <div className="aw-meta">Briefing · for {AUDIENCE_NAMES[props.audience]} · {props.languageName}</div>
+        <div className="aw-meta">Briefing · {props.languageName}</div>
         <h2>{turn.status === "running" ? "Building your report…" : "No report"}</h2>
         <p className="aw-meta">
           {turn.status === "running"
@@ -99,21 +95,23 @@ function ReportView(props: SidePanelProps) {
       </div>
     );
   }
-  const authors = [...new Set(turn.answer!.sources.flatMap((source) => source.authors))];
-  const shown = turn.translation && !turn.translation.showOriginal ? turn.translation : null;
-  const translation = shown ? shown.paragraphs : null;
-  const translatedReport = shown?.report ?? null;
+  const answer = shownAnswer(turn)!;
+  const translated = Boolean(turn.translation && !turn.translation.showOriginal);
+  const shownReport = answer.report ?? report;
+  const authors = [...new Set(answer.sources.flatMap((source) => source.authors))];
   return (
     <div className="aw-report">
       <div className="aw-meta">
-        Briefing · for {AUDIENCE_NAMES[props.audience]} · {props.languageName}
-        {(turn.answer!.machineTranslated || translation) && <> · <span className="aw-mt">Machine-translated</span></>}
+        Briefing · for {readerName(answer.audience)} · {props.languageName}
+        {(answer.machineTranslated || translated) && <> · <span className="aw-mt">Machine-translated</span></>}
       </div>
-      <h2>{translatedReport?.title ?? report.title}</h2>
+      <h2>{shownReport.title}</h2>
       <div className="aw-meta">{report.builtFrom}</div>
+      {answer.scope && <div className="aw-scope">{answer.scope}</div>}
+      <div style={{ marginTop: 8 }}><VerifiedChip answer={answer} /></div>
       <h4>Key points</h4>
       <ul>
-        {(translation ?? report.keyPoints).map((point, index) => (
+        {(translated ? answer.paragraphs : shownReport.keyPoints).map((point, index) => (
           <li key={index}>
             <MarkedText text={point} activeMarker={props.activeMarker} onMarker={props.onMarker} />
           </li>
@@ -126,10 +124,11 @@ function ReportView(props: SidePanelProps) {
       ))}
       <h4>Where the evidence is thin</h4>
       <ul>
-        {(translatedReport?.thinEvidence ?? report.thinEvidence).map((point) => (
+        {shownReport.thinEvidence.map((point) => (
           <li key={point}>{point}</li>
         ))}
       </ul>
+      <AnswerSections answer={answer} onFollowUp={props.onFollowUp} showLimits={false} />
       <h4>People behind this work</h4>
       <div className="aw-searched">
         {authors.map((author) => (

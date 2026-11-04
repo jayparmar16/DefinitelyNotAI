@@ -26,6 +26,7 @@ function sourcesMarkdown(sources: Source[]): string {
 export function answerMarkdown(question: string, answer: Answer): string {
   const lines = [`# ${answer.report?.title ?? question}`, ""];
   if (answer.machineTranslated) lines.push("_Machine-translated._", "");
+  if (answer.scope) lines.push(`_${answer.scope}._`, "");
   if (answer.report) {
     lines.push(answer.report.builtFrom, "", "## Key points", "");
     lines.push(...answer.report.keyPoints.map((point) => `- ${point}`), "");
@@ -33,6 +34,14 @@ export function answerMarkdown(question: string, answer: Answer): string {
     lines.push(...answer.report.thinEvidence.map((point) => `- ${point}`), "");
   } else {
     lines.push(...answer.paragraphs.flatMap((paragraph) => [paragraph, ""]));
+  }
+  const sections: [string, string[] | undefined][] = [
+    ["Possible implications (AskWRI's interpretation, not WRI findings)", answer.implications],
+    ["What this can't tell you", answer.report ? [] : answer.limits],
+    ["Questions to explore", answer.questions],
+  ];
+  for (const [heading, items] of sections) {
+    if (items?.length) lines.push(`## ${heading}`, "", ...items.map((item) => `- ${item}`), "");
   }
   lines.push("## Sources", "", sourcesMarkdown(answer.sources), "");
   return lines.join("\n");

@@ -106,3 +106,25 @@ test("Markdown export keeps markers and lists every source; quotes only quotable
   assert.match(md, /"fleet operators piloted buses"/);
   assert.doesNotMatch(md, /"diagram labels"/);
 });
+
+test("the Markdown export labels the interpretation and keeps scope and follow-ups", () => {
+  const markdown = answerMarkdown("Which laws?", {
+    mode: "quick",
+    language: "en",
+    machineTranslated: false,
+    paragraphs: ["The directive applies [1]."],
+    sources: [source()],
+    claimsTotal: 1,
+    claimsVerified: 1,
+    elapsedSeconds: 9,
+    report: null,
+    scope: "Based on 1 of the 5 WRI publications indexed in AskWRI",
+    implications: ["Focus on transposition."],
+    limits: ["No ranking of other laws."],
+    questions: ["What do cities do?"],
+  });
+  assert.match(markdown, /_Based on 1 of the 5 WRI publications indexed in AskWRI\._/);
+  assert.match(markdown, /## Possible implications \(AskWRI's interpretation, not WRI findings\)\n\n- Focus on transposition\./);
+  assert.match(markdown, /## What this can't tell you\n\n- No ranking of other laws\./);
+  assert.ok(markdown.indexOf("Questions to explore") < markdown.indexOf("## Sources"));
+});

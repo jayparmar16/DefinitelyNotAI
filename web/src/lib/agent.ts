@@ -6,7 +6,10 @@
  */
 
 export type Mode = "quick" | "deep";
-export type Audience = "researcher" | "policymaker" | "partnerships";
+/** Who an answer is written for. */
+export type Reader = "researcher" | "policymaker" | "partnerships";
+/** "auto": nobody picks a persona when typing, so the agent infers the reader from the question. */
+export type Audience = "auto" | Reader;
 export type ReportFormat = "summary" | "issue-brief" | "talking-points";
 
 export type Filters = {
@@ -69,6 +72,13 @@ export type Answer = {
   claimsVerified: number;
   elapsedSeconds: number;
   report: Report | null; // Deep research only
+  // Optional so older agents and the mock still fit; the AskWRI agent always sends them.
+  audience?: Reader; // the reader the answer was written for (inferred when "auto")
+  scope?: string; // e.g. "Based on 2 of the 5 WRI publications indexed in AskWRI"
+  implications?: string[]; // AskWRI's interpretation, uncited, never new facts or numbers
+  limits?: string[]; // what the question asks that the evidence doesn't cover (Quick answer)
+  questions?: string[]; // follow-ups the user could ask next
+  removedClaims?: string[]; // drafted claims verification removed
 };
 
 export type Decline = {
@@ -87,8 +97,8 @@ export type AgentEvent =
   | { type: "answer"; answer: Answer }
   | { type: "decline"; decline: Decline };
 
-/** A translated answer: its texts and, for a report, the translated report. */
-export type Translation = { paragraphs: string[]; report: Report | null };
+/** A translated answer: every text the reader sees, in the target language. */
+export type Translation = Pick<Answer, "paragraphs" | "report" | "implications" | "limits" | "questions">;
 
 export type AgentClient = {
   /** Streams events for one question; stops early when `signal` aborts (the Stop button). */
