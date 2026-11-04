@@ -12,6 +12,7 @@ import { citationYear, pageLink } from "@/lib/citations";
 import { AnswerSections, VerifiedChip, readerName } from "./AnswerSections";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
+import { PdfPage } from "./PdfPage";
 import { Passage, sourceMeta } from "./SourceCards";
 import { type Turn, shownAnswer } from "./turn";
 
@@ -184,11 +185,14 @@ function SourceView({ source, pdfUrl }: { source: Source; pdfUrl: SidePanelProps
       </div>
       {!loaded ? (
         <div className="aw-empty">Loading the PDF…</div>
-      ) : loaded.url ? (
-        <iframe
-          className="aw-doc-pdf"
-          title={`${source.title}, page ${source.page}`}
-          src={`${loaded.url}#page=${source.page}&view=FitH`}
+      ) : loaded.url && source.pdfKey ? (
+        <PdfPage
+          key={source.chunkId}
+          pdfKey={source.pdfKey}
+          url={loaded.url}
+          page={source.page}
+          passage={source.passage}
+          title={source.title}
         />
       ) : (
         <div className="aw-empty">
