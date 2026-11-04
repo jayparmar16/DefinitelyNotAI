@@ -50,6 +50,7 @@ export function ChatApp() {
   const [toast, setToast] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
   const warmed = useRef<string | null>(null);
+  const warming = useRef<Promise<void> | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -63,7 +64,9 @@ export function ChatApp() {
     if (!draft.trim() || warmed.current === sessionId) return;
     warmed.current = sessionId;
     // A failed warm-up only means the first answer starts cold; the question itself still works.
-    getAgent().then((agent) => agent.warmup(sessionId)).catch((error) => console.warn(error));
+    warming.current = getAgent()
+      .then((agent) => agent.warmup(sessionId))
+      .catch((error) => console.warn(error));
   }, [draft, sessionId]);
 
   useEffect(() => {
@@ -95,6 +98,9 @@ export function ChatApp() {
     abort.current = controller;
     try {
       const agent = await getAgent();
+      // A question sent while the warm-up is still starting this chat's agent would collide
+      // with it (the runtime answers the second call with an error), so it waits.
+      await warming.current;
       const request = { question, mode, language, audience: reader, format: reportFormat, filters, sessionId };
       for await (const event of agent.ask(request, controller.signal)) {
         if (event.type === "answer") {
@@ -139,6 +145,7 @@ export function ChatApp() {
     setActive(null);
     setDraft("");
     setSessionId(crypto.randomUUID());
+    warming.current = null;
     input.current?.focus();
   }
 
