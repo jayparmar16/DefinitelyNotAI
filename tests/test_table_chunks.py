@@ -7,6 +7,7 @@ import pymupdf
 import pytest
 
 from askwri.ingest.document import ingest_document
+from askwri.ingest.pdf import has_garbled_word
 from askwri.models import MODELS, ModelError
 from tests.fake_claude import FakeClaude
 
@@ -313,3 +314,10 @@ def test_without_a_client_no_summaries_are_written(tables_pdf):
     result = ingest_document(tables_pdf)
 
     assert all(chunk.description == "" for chunk in result.chunks)
+
+
+def test_a_word_with_dropped_letters_is_garbled_but_a_word_on_the_page_is_not():
+    page = "To support the plan, WRI counts 3.5 million hectares."
+
+    assert has_garbled_word("To suort the plan", page)
+    assert not has_garbled_word("To support the plan, 3.5 million hectares", page)

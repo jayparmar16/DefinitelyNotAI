@@ -17,7 +17,7 @@ from askwri.ingest.tables import (
     is_data_table,
     table_number,
 )
-from askwri.ingest.text import comparable, missing_words
+from askwri.ingest.text import comparable, missing_words, words
 
 # Layout classes that carry body text. Pictures get their own chunk kind later.
 TEXT_CLASSES = {"text", "list-item", "footnote", "formula", "caption"}
@@ -134,15 +134,27 @@ def table_block(
     rows = table_rows(markdowns[claim.table])
     caption = claimed_text(claim.caption) if claim.caption is not None else ""
     notes = tuple(claimed_text(position) for position in claim.notes)
-    if is_data_table(rows, bool(caption)) and not missing_words(cells_text(rows), page_text):
+    if is_data_table(rows, bool(caption)) and not has_garbled_word(cells_text(rows), page_text):
         table = Table(number=table_number(caption), caption=caption, rows=rows, notes=notes)
         return Block(page=page.number + 1, heading_level=0, text=table.text, table=table)
     bbox = boxes[claim.table]["bbox"]
     grid = region_text(page, page_text, bbox, cells_text(rows))
-    if missing_words(grid, page_text):  # region_text keeps garbled layout words it cannot replace
+    if has_garbled_word(
+        grid, page_text
+    ):  # region_text keeps garbled layout words it cannot replace
         grid = layer_text(page, bbox)
     text = "\n\n".join(part for part in (caption, grid, *notes) if part)
     return Block(page=page.number + 1, heading_level=0, text=text) if text else None
+
+
+def has_garbled_word(text: str, page_text: str) -> bool:
+    """Whether some word of the text is not on the page, such as "suort" for "support".
+
+    Stricter than the audit, which lets a word match as two words glued together. For a table
+    it is worth being strict: a garbled word in an indexed row is wrong even if the audit passes.
+    """
+    page = comparable(page_text)
+    return any(word not in page for word in words(text))
 
 
 def table_rows(markdown: str) -> tuple[str, ...]:
