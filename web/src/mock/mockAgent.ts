@@ -160,7 +160,7 @@ export const mockAgent: AgentClient = {
     return null; // no stored PDFs without the backend
   },
 
-  async translate(paragraphs, language) {
+  async translate(paragraphs, language) { // the mock has no session to reuse
     if (language !== "es") return paragraphs;
     const canned = new Map(
       [...QUICK_PARAGRAPHS.en.map((text, i) => [text, QUICK_PARAGRAPHS.es[i]] as const),

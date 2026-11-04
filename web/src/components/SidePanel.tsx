@@ -168,7 +168,7 @@ function SourceBar({ source, onPdf }: { source: Source; onPdf: (source: Source) 
   return (
     <div className="aw-panel-bar">
       <span className="aw-tag">{source.pubType}</span>
-      {citationYear(source)} · {source.office} · Page {source.page}
+      {citationYear(source)} · {source.office} · Page {source.printedPage ?? source.page}
       {source.pageCount ? ` of ${source.pageCount}` : ""}
       <span className="spacer" />
       {link && (

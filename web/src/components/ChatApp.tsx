@@ -147,7 +147,7 @@ export function ChatApp() {
 
   async function downloadPdf(source: Source) {
     const agent = await getAgent();
-    const url = await agent.sourceDownloadUrl(source.docId);
+    const url = await agent.sourceDownloadUrl(source);
     if (url) window.open(url, "_blank", "noreferrer");
     else setToast("PDF download needs the API (presigned link from the corpus bucket)");
   }
@@ -156,7 +156,7 @@ export function ChatApp() {
     const answer = turn.answer!;
     const texts = answer.report?.keyPoints ?? answer.paragraphs;
     const agent = await getAgent();
-    const paragraphs = await agent.translate(texts, target);
+    const paragraphs = await agent.translate(texts, target, sessionId);
     if (paragraphs.every((text, i) => text === texts[i])) {
       setToast(usingMock ? "The mock agent only has Spanish translations" : "No translation returned");
       return;

@@ -79,7 +79,7 @@ export function SourceCards(props: SourceCardsProps) {
                   </button>
                   <div className="aw-meta">
                     <span className="aw-tag">{source.pubType}</span>
-                    {source.pubType === "Working paper" && " in progress ·"} {citationYear(source)} · {source.office} · p. {source.page}
+                    {source.pubType === "Working paper" && " in progress ·"} {citationYear(source)} · {source.office} · p. {source.printedPage ?? source.page}
                   </div>
                 </div>
               </div>

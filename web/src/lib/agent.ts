@@ -34,13 +34,22 @@ export type Source = {
   year: number | null;
   dateConfidence: "high" | "low" | "undated";
   office: string;
-  page: number;
+  page: number; // PDF page: opens the PDF there
+  printedPage?: string | null; // the number printed on the page, for display
   pageCount: number | null;
   passage: string;
   quotable: boolean; // false: cite the page, never quote the passage verbatim
   url: string | null; // wri.org page; "Open at page" adds #page=N
   doi: string | null;
   authors: string[];
+  pdfKey?: string | null; // stored copy in the corpus bucket, for the download link
+  why?: {
+    by_meaning: boolean;
+    by_keyword: boolean;
+    matched_terms: string[];
+    date_source: string;
+    label_source: string;
+  } | null;
 };
 
 export type Report = {
@@ -82,18 +91,25 @@ export type AgentClient = {
   /** Streams events for one question; stops early when `signal` aborts (the Stop button). */
   ask(request: AskRequest, signal: AbortSignal): AsyncIterable<AgentEvent>;
   /** A short-lived (5 minute) download link for the stored PDF, or null if there is none. */
-  sourceDownloadUrl(docId: string): Promise<string | null>;
-  /** Machine translation of answer paragraphs, with numbers checked by the agent. */
-  translate(paragraphs: string[], language: string): Promise<string[]>;
+  sourceDownloadUrl(source: Source): Promise<string | null>;
+  /** The session's last answer machine-translated, with numbers checked by the agent. */
+  translate(paragraphs: string[], language: string, sessionId: string): Promise<string[]>;
 };
 
-/** True while the UI runs on the mock agent (no API yet); the header shows a "Mock data" badge. */
-export const usingMock = true;
+const apiUrl = process.env.NEXT_PUBLIC_ASKWRI_API_URL;
 
-/** The agent client the UI talks to. */
+/** True when no API URL is set, so the UI runs on the mock agent and shows a "Mock data" badge. */
+export const usingMock = !apiUrl;
+
+/**
+ * The agent client the UI talks to: the AskWRI API when NEXT_PUBLIC_ASKWRI_API_URL is set,
+ * otherwise the mock in src/mock/ (delete that folder once the mock is no longer wanted).
+ */
 export async function getAgent(): Promise<AgentClient> {
-  // shortcut: the mock is the only client until the API (runbook phase 5) exists. To switch,
-  // add an HTTP client for the API here, set usingMock to false and delete src/mock/.
+  if (apiUrl) {
+    const { httpAgent } = await import("./httpAgent.ts");
+    return httpAgent(apiUrl, process.env.NEXT_PUBLIC_ASKWRI_API_KEY ?? "");
+  }
   const { mockAgent } = await import("../mock/mockAgent.ts");
   return mockAgent;
 }

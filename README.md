@@ -109,8 +109,20 @@ npm run build      # static site in web/out/
 placeholders, not real WRI publications. Questions about transport (buses, transit, BRT) get a
 cited answer, or a streamed report with Deep research on; anything else gets the decline;
 "Now make it in Spanish" after a report reuses it, machine-translated. Everything goes through
-the contract in `web/src/lib/agent.ts`. To switch to the real agent: add the HTTP client in
-`getAgent()` there, set `usingMock` to false, and delete `web/src/mock/`.
+the contract in `web/src/lib/agent.ts`.
+
+**Real agent.** Put the API's URL and key in `web/.env.local` (gitignored) and restart
+`npm run dev`; the "Mock data" badge disappears:
+
+```sh
+NEXT_PUBLIC_ASKWRI_API_URL=<terraform output api_url>
+NEXT_PUBLIC_ASKWRI_API_KEY=<value of the askwri/api-key secret>
+```
+
+Get them with `terraform -chdir=infra output -raw api_url` and
+`aws secretsmanager get-secret-value --secret-id askwri/api-key --query SecretString --output text`.
+The API allows browser calls from `http://localhost:3000` only (Terraform `allowed_origins`).
+Without the URL the UI uses the mock; delete `web/src/mock/` when it is no longer wanted.
 
 ## The rules
 
