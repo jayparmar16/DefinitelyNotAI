@@ -44,13 +44,13 @@ class Chunk:
     kind: str  # "source_text" or "table"
     text: str  # passage text; paragraphs separated by blank lines
     quotable: bool = True  # False when the audit found the words re-ordered against the PDF
-    table_number: str | None = None  # "Table 2", on every piece of a table that has a number
+    number: str | None = None  # "Table 2", on every piece of a table that has a number
     # chunk_id of the first piece of this table: set on later pieces, whether split by rows or
     # continued on the next page, so all pieces can be found; None on the first piece
     table_first_chunk: str | None = None
-    # Model-written, for search only: it is embedded with the passage but is not in `text`, so
+    # Model-written summary, for search only: it is embedded with the passage but is not in `text`, so
     # an answer can never quote it as WRI's words. Empty for text chunks.
-    summary: str = ""
+    description: str = ""
     # The document's labels, copied onto every chunk so retrieval can filter on them.
     label_source: str = "no page"  # "wri.org", or "no page" (the citation then cites the PDF)
     link: str | None = None
@@ -66,8 +66,8 @@ class Chunk:
 
     @property
     def indexed_text(self) -> str:
-        """The text that is embedded and searched: address first, then any summary, then the passage."""
-        return "\n\n".join(part for part in (self.address, self.summary, self.text) if part)
+        """The text that is embedded and searched: address first, then any description, then the passage."""
+        return "\n\n".join(part for part in (self.address, self.description, self.text) if part)
 
 
 def build_chunks(
@@ -113,7 +113,7 @@ def build_chunks(
                     section=section,
                     kind="table" if table else "source_text",
                     text=_joined(group),
-                    table_number=table.number if table else None,
+                    number=table.number if table else None,
                     table_first_chunk=table_head if table and table_head != chunk_id else None,
                 )
             )

@@ -15,12 +15,12 @@ only what the table says; do not add outside knowledge. Reply with the summary o
 
 
 def summarize_tables(client, chunks: list[Chunk]) -> list[Chunk]:
-    """Return the chunks with `summary` set on every table chunk, one `labeler` call each.
+    """Return the chunks with `description` set on every table chunk, one `labeler` call each.
 
     A model refusal or error raises `ModelError` naming the chunk, which fails the document.
     """
     return [
-        dataclasses.replace(chunk, summary=_summary(client, chunk))
+        dataclasses.replace(chunk, description=_summary(client, chunk))
         if chunk.kind == "table"
         else chunk
         for chunk in chunks

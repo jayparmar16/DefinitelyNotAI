@@ -123,7 +123,7 @@ def table_block(
     no caption and no numbers, or a contents list) becomes a plain text block of its cell
     words, and its caption and notes, if any, stay with it as text. So does a table whose cell
     words are not all on the page (the layout model dropped letters), because the audit would
-    block the document; the text layer then supplies the words.
+    block the document; the PDF's text layer then supplies the words.
     """
 
     def claimed_text(position: int) -> str:
@@ -137,7 +137,10 @@ def table_block(
     if is_data_table(rows, bool(caption)) and not missing_words(cells_text(rows), page_text):
         table = Table(number=table_number(caption), caption=caption, rows=rows, notes=notes)
         return Block(page=page.number + 1, heading_level=0, text=table.text, table=table)
-    grid = region_text(page, page_text, boxes[claim.table]["bbox"], cells_text(rows))
+    bbox = boxes[claim.table]["bbox"]
+    grid = region_text(page, page_text, bbox, cells_text(rows))
+    if missing_words(grid, page_text):  # region_text keeps garbled layout words it cannot replace
+        grid = layer_text(page, bbox)
     text = "\n\n".join(part for part in (caption, grid, *notes) if part)
     return Block(page=page.number + 1, heading_level=0, text=text) if text else None
 

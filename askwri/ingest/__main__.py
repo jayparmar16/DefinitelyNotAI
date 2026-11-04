@@ -44,6 +44,9 @@ def write_chunks(chunks: list[Chunk], out_dir: Path) -> None:
             "topic": chunk.topic,
             "wri_type": chunk.wri_type,
             "tags": list(chunk.tags),
+            "number": chunk.number,
+            "table_first_chunk": chunk.table_first_chunk,
+            "description": chunk.description,
         }
         attributes |= {key: value for key, value in labelled.items() if value}
         path.with_name(f"{path.name}.metadata.json").write_text(

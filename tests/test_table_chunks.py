@@ -154,7 +154,7 @@ def result(tables_pdf):
 
 
 def by_number(result, number: str):
-    return [c for c in result.chunks if c.table_number == number]
+    return [c for c in result.chunks if c.number == number]
 
 
 def test_table_is_a_chunk_with_rows_caption_notes_and_number(result):
@@ -199,7 +199,7 @@ def test_continued_table_links_to_its_first_part_and_records_both_pages(result):
 def test_a_grid_of_names_is_text_without_a_table_number(result):
     grid = [c for c in result.chunks if "Alice Smith" in c.text]
 
-    assert [(c.kind, c.table_number) for c in grid] == [("source_text", None)]
+    assert [(c.kind, c.number) for c in grid] == [("source_text", None)]
     assert grid[0].section == "Board of directors"
     assert "|" not in grid[0].text
 
@@ -210,7 +210,7 @@ def test_nearest_caption_wins_but_a_caption_above_beats_a_slightly_nearer_one_be
     ).chunks
 
     first, second = chunks
-    assert (first.table_number, second.table_number) == ("Table 1", "Table 2")
+    assert (first.number, second.number) == ("Table 1", "Table 2")
     assert "Country 1|" in first.text
     assert "Country 5|" in second.text
 
@@ -220,7 +220,7 @@ def test_large_table_splits_by_rows_with_caption_and_header_repeated(tmp_path):
 
     assert len(chunks) > 1
     assert all(len(c.text) <= 2000 for c in chunks)
-    assert {c.table_number for c in chunks} == {"Table 1"}
+    assert {c.number for c in chunks} == {"Table 1"}
     assert [c.table_first_chunk for c in chunks] == [None] + [chunks[0].chunk_id] * (
         len(chunks) - 1
     )
@@ -244,7 +244,7 @@ def test_pieces_of_a_table_without_a_number_still_point_at_the_first(tmp_path):
     ).chunks
 
     assert len(chunks) > 1
-    assert {c.table_number for c in chunks} == {None}
+    assert {c.number for c in chunks} == {None}
     assert [c.table_first_chunk for c in chunks] == [None] + [chunks[0].chunk_id] * (
         len(chunks) - 1
     )
@@ -266,18 +266,18 @@ def test_a_table_with_a_row_in_another_word_order_is_kept_but_not_quotable(tmp_p
     assert not table.quotable
 
 
-def test_summary_is_for_search_only(tables_pdf):
+def test_description_is_for_search_only(tables_pdf):
     client = FakeClaude(*["Forest cover by country in 2020."] * 5)
 
     result = ingest_document(tables_pdf, client=client)
 
     table = by_number(result, "Table 2")[0]
-    assert table.summary == "Forest cover by country in 2020."
+    assert table.description == "Forest cover by country in 2020."
     assert "Forest cover by country in 2020." not in table.text
     assert table.indexed_text.startswith(
         "Forest Cover › Findings\n\nForest cover by country in 2020.\n\n"
     )
-    assert all(c.summary == "" for c in result.chunks if c.kind == "source_text")
+    assert all(c.description == "" for c in result.chunks if c.kind == "source_text")
     assert len(client.requests) == sum(c.kind == "table" for c in result.chunks)
     request = client.requests[0]
     assert request["model"] == MODELS["labeler"]
@@ -292,4 +292,4 @@ def test_a_model_refusal_fails_the_document(tables_pdf):
 def test_without_a_client_no_summaries_are_written(tables_pdf):
     result = ingest_document(tables_pdf)
 
-    assert all(chunk.summary == "" for chunk in result.chunks)
+    assert all(chunk.description == "" for chunk in result.chunks)
