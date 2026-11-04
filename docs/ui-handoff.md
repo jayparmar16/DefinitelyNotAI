@@ -128,26 +128,32 @@ styles are in `src/app/globals.css` (from the AskWRI design system artifact).
   a bar above the input (Edit, ✕) and is sent with every Ask question in the chat.
 - Answers then show **"Through your lens"**: one row per paper, one column per aspect, each
   cell a cited summary, *"Not discussed in this paper"*, or *"No verified summary"*. The side
-  panel shows that paper's lens summary above the cited passage.
+  panel shows that paper's lens summary above the cited passage. The lens is saved with the
+  chat (survives a refresh) and its cells are translated with the answer.
 
-### 4.8 Languages
+### 4.8 Topic dossier
+- A fourth Deep research format, **Topic dossier** (format switch in the report panel). The
+  report gains the **evidence matrix** (documents × main findings, key figures, places covered,
+  methods and data; same cells as the lens), **Where the papers agree**, **Where they differ**
+  (both cited, each citing at least two papers) and **What none of them covers** (uncited).
+  Matrix as CSV; everything in the Markdown export. Types: `Answer.lens` + `Answer.dossier`.
+
+### 4.9 Languages
 - Language selector (English, Español, Português, Bahasa Indonesia). With English selected, a
   question asked in Spanish is answered in Spanish. Translated answers are labelled
   **Machine-translated**; sources keep their original titles and passages. Translate menu and
   "Show original" on each answer.
 
-### 4.9 Declines and errors
+### 4.10 Declines and errors
 - A decline shows the message, what was searched (chips), closest related WRI work, Rephrase
   and Copy what was searched. A failed run shows the API's message.
 
-### 4.10 Downloads
-- Answer/report as Markdown (includes scope, implications, limits, questions), sources as
-  CSV/BibTeX, copy as Markdown. Fact-check report as Markdown.
+### 4.11 Downloads
+- Answer/report as Markdown (includes scope, lens or evidence matrix, dossier comparisons,
+  implications, limits, questions), sources as CSV/BibTeX, copy as Markdown. Fact-check
+  report as Markdown. Evidence matrix as CSV.
 
 ## 5. Coming next (design room for them)
-- **Topic dossier**: a fourth Deep research format with one card per document, where documents
-  agree / differ / what's missing, and an evidence matrix (documents × fields) with CSV export.
-  The answer will carry a `dossier` field (added to `agent.ts` when built).
 - **Citation graph / research lineage** once older documents are loaded: "Cited by N in this
   collection" in the source view and a lineage timeline tab.
 
