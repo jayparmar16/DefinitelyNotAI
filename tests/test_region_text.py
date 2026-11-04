@@ -40,3 +40,10 @@ def test_keeps_reordered_layout_text_when_the_text_layer_is_no_better(page):
 
     # A region that cuts off most of the text can't replace the layout text.
     assert region_text(page, page.get_text(), (50, 50, 60, 60), reordered) == reordered
+
+
+def test_plain_text_drops_pymupdf_picture_markers():
+    from askwri.ingest.pdf import plain_text
+
+    marked = "<!-- Start of picture text -->Solar pumps<!-- End of picture text --> save water."
+    assert plain_text(marked) == "Solar pumps save water."
