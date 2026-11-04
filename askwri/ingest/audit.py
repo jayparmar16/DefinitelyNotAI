@@ -30,7 +30,9 @@ def audit_chunks(pdf_path: Path, chunks: list[Chunk]) -> AuditResult:
     and end on its last. A chunk whose words are all on its pages, but where some paragraph
     is not a contiguous run of one page's text, is unquotable: the layout model re-ordered it
     (diagram labels, a pull quote overlapping a paragraph), so it may be cited by page but not
-    quoted. Matching ignores case, whitespace, punctuation, line-end hyphens and ligatures.
+    quoted. In a table chunk each row is checked on its own, since a text layer often reads a
+    table column by column and no table is one run. Matching ignores case, whitespace,
+    punctuation, line-end hyphens and ligatures.
     """
     with pymupdf.open(pdf_path) as doc:
         page_texts = [page.get_text() for page in doc]
@@ -47,13 +49,24 @@ def audit_chunks(pdf_path: Path, chunks: list[Chunk]) -> AuditResult:
             failures.append(f"{chunk.chunk_id}: mostly non-text characters")
         elif reason := _not_on_claimed_pages(chunk, paragraphs, texts):
             failures.append(f"{chunk.chunk_id}: {reason}")
-        elif any(not any(comparable(p) in comparable(t) for t in texts) for p in paragraphs):
+        elif not _is_verbatim(chunk, paragraphs, texts):
             unquotable.append(chunk.chunk_id)
     return AuditResult(
         failures=failures,
         unquotable=unquotable,
         pages_without_text=[n for n, text in enumerate(page_texts, start=1) if not text.strip()],
     )
+
+
+def _is_verbatim(chunk: Chunk, paragraphs: list[str], texts: list[str]) -> bool:
+    """Whether every paragraph (every line, for a table) is a contiguous run of one page's text."""
+    units = (
+        [line for p in paragraphs for line in p.splitlines()]
+        if chunk.kind == "table"
+        else paragraphs
+    )
+    runs = [comparable(t) for t in texts]
+    return all(any(comparable(unit) in run for run in runs) for unit in units)
 
 
 def _not_on_claimed_pages(chunk: Chunk, paragraphs: list[str], texts: list[str]) -> str | None:

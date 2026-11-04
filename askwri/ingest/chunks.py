@@ -1,4 +1,4 @@
-"""Cut parsed PDF blocks into section-bounded, size-banded text chunks with stable IDs."""
+"""Cut parsed PDF blocks into section-bounded, size-banded text and table chunks with stable IDs."""
 
 import math
 import re
@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 
 from askwri.ingest.pages import PrintedPage
 from askwri.ingest.pdf import Block
+from askwri.ingest.tables import split_table
 
 # The size band, at about 4 characters per token: roughly 100 to 500 tokens. Shorter chunks
 # embed as little more than their address; longer ones blur several ideas into one vector.
@@ -40,9 +41,16 @@ class Chunk:
     printed_page_end: str
     printed_page_fallback: bool  # True when no printed number was found: the PDF page stands in
     section: str  # section path, e.g. "Supply risks › Lithium"
-    kind: str
+    kind: str  # "source_text" or "table"
     text: str  # passage text; paragraphs separated by blank lines
     quotable: bool = True  # False when the audit found the words re-ordered against the PDF
+    table_number: str | None = None  # "Table 2", on every piece of a table that has a number
+    # chunk_id of the first piece of this table: set on later pieces, whether split by rows or
+    # continued on the next page, so all pieces can be found; None on the first piece
+    table_first_chunk: str | None = None
+    # Model-written, for search only: it is embedded with the passage but is not in `text`, so
+    # an answer can never quote it as WRI's words. Empty for text chunks.
+    summary: str = ""
     # The document's labels, copied onto every chunk so retrieval can filter on them.
     label_source: str = "no page"  # "wri.org", or "no page" (the citation then cites the PDF)
     link: str | None = None
@@ -58,8 +66,8 @@ class Chunk:
 
     @property
     def indexed_text(self) -> str:
-        """The text that is embedded and searched: address first, so the passage stands alone."""
-        return f"{self.address}\n\n{self.text}"
+        """The text that is embedded and searched: address first, then any summary, then the passage."""
+        return "\n\n".join(part for part in (self.address, self.summary, self.text) if part)
 
 
 def build_chunks(
@@ -71,17 +79,29 @@ def build_chunks(
     Headings update the section path; a heading repeating the document title is not part of
     it. Short blocks join their neighbours within the section, a block over the maximum is
     cut at sentence boundaries, and a section whose whole text is short stays one short chunk.
+    A table is always its own chunk, or several cut by rows if it is over the maximum. Later
+    pieces point at the first through `table_first_chunk`, and so does a table whose number
+    repeats on the same or the next page (a continuation).
     """
     chunks: list[Chunk] = []
     per_start_page = Counter()
+    earlier: dict[str, tuple[str, int]] = {}  # table number -> (first piece's chunk_id, last page)
+    table_head = ""  # chunk_id of the first piece of the table being chunked
     for section, body in _sections(blocks, doc_title):
         for group in _group_section(body):
             start, end = group[0].page, group[-1].page
             per_start_page[start] += 1
             first, last = printed_pages[start - 1], printed_pages[end - 1]
+            chunk_id = f"{doc_id}#p{start}-{per_start_page[start]}"
+            table = group[0].table
+            if table:
+                if table.part == 1:
+                    table_head = _earlier_part(earlier, table.number, start) or chunk_id
+                if table.number:
+                    earlier[table.number] = (table_head, start)
             chunks.append(
                 Chunk(
-                    chunk_id=f"{doc_id}#p{start}-{per_start_page[start]}",
+                    chunk_id=chunk_id,
                     seq=len(chunks) + 1,
                     doc_id=doc_id,
                     doc_title=doc_title,
@@ -91,8 +111,10 @@ def build_chunks(
                     printed_page_end=last.label,
                     printed_page_fallback=first.fallback or last.fallback,
                     section=section,
-                    kind="source_text",
+                    kind="table" if table else "source_text",
                     text=_joined(group),
+                    table_number=table.number if table else None,
+                    table_first_chunk=table_head if table and table_head != chunk_id else None,
                 )
             )
     return chunks
@@ -117,8 +139,34 @@ def _sections(blocks: list[Block], doc_title: str) -> Iterator[tuple[str, list[B
         yield SEPARATOR.join(text for _, text in path), body
 
 
+def _earlier_part(earlier: dict[str, tuple[str, int]], number: str | None, page: int) -> str | None:
+    """The chunk_id of the first piece of a numbered table last seen on this page or the one before.
+
+    A number last seen longer ago is a different table that reuses it.
+    """
+    head, last_page = earlier.get(number, (None, 0))
+    return head if head and page - last_page <= 1 else None
+
+
 def _group_section(body: list[Block]) -> list[list[Block]]:
-    """Split a section's blocks into chunk-sized groups, keeping them in reading order."""
+    """Split a section's blocks into groups in reading order: tables alone, text chunk-sized."""
+    groups: list[list[Block]] = []
+    run: list[Block] = []
+    for block in body:
+        if block.table is None:
+            run.append(block)
+            continue
+        groups += _group_text(run)
+        run = []
+        groups += [
+            [replace(block, text=piece.text, table=piece)]
+            for piece in split_table(block.table, MAX_CHUNK_CHARS)
+        ]
+    return groups + _group_text(run)
+
+
+def _group_text(body: list[Block]) -> list[list[Block]]:
+    """Split a run of text blocks into chunk-sized groups, keeping them in reading order."""
     pieces = [piece for block in body for piece in _split_long_block(block)]
     groups: list[list[Block]] = []
     for piece in pieces:
