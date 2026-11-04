@@ -32,6 +32,9 @@ def build_agent() -> Agent:
 
 class Handler(BaseHTTPRequestHandler):
     agent: Agent  # set by serve()
+    # HTTP/1.1 chunked responses: AgentCore Runtime passes chunks on as they arrive, but holds an
+    # HTTP/1.0 response (no length, ended by closing) until it is complete.
+    protocol_version = "HTTP/1.1"
 
     def do_GET(self):
         if self.path != "/ping":
@@ -51,6 +54,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
         try:
             for event in self.agent.run(request):
@@ -58,9 +62,14 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:  # the stream is already open: report the failure in it
             log.exception("run failed")
             self._event({"type": "error", "message": f"{type(error).__name__}: {error}"})
+        self._chunk(b"")  # the empty chunk ends the response
 
     def _event(self, event: dict) -> None:
-        self.wfile.write(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
+        self._chunk(f"data: {json.dumps(event, ensure_ascii=False)}\n\n".encode())
+
+    def _chunk(self, data: bytes) -> None:
+        """Send one chunk of a chunked response; empty data ends it."""
+        self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
         self.wfile.flush()
 
     def _json(self, status: int, body: dict) -> None:

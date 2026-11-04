@@ -84,6 +84,9 @@ class Api:
 
 class Handler(BaseHTTPRequestHandler):
     api: Api  # set by serve()
+    # HTTP/1.1 chunked responses stream through the Lambda Web Adapter; HTTP/1.0 ones are held
+    # until they end.
+    protocol_version = "HTTP/1.1"
 
     def _cors(self) -> None:
         origin = self.headers.get("Origin")
@@ -155,12 +158,23 @@ class Handler(BaseHTTPRequestHandler):
         self._cors()
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("Transfer-Encoding", "chunked")
         self.end_headers()
-        # The agent already sends server-sent events: pass each line through as it arrives.
+        # The agent already sends server-sent events: forward each event (its lines up to the
+        # blank line that ends it) as one chunk, as soon as it arrives.
+        event = b""
         for line in response["response"].iter_lines():
-            self.wfile.write(line + b"\n" if line else b"\n")
+            event += line + b"\n"
             if not line:
-                self.wfile.flush()
+                self._chunk(event)
+                event = b""
+        if event:
+            self._chunk(event)
+        self._chunk(b"")  # the empty chunk ends the response
+
+    def _chunk(self, data: bytes) -> None:
+        """Send one chunk of a chunked response; empty data ends it."""
+        self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
         self.wfile.flush()
 
     def log_message(self, format, *args):

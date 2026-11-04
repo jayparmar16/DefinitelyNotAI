@@ -72,9 +72,15 @@ resource "aws_bedrock_guardrail" "askwri" {
   }
 }
 
+# The agent uses a published version, which is frozen: changing the guardrail only edits its
+# draft. Replacing the version whenever the guardrail changes publishes the new settings.
 resource "aws_bedrock_guardrail_version" "askwri" {
   guardrail_arn = aws_bedrock_guardrail.askwri.guardrail_arn
   description   = "Used by askwri_agent"
+
+  lifecycle {
+    replace_triggered_by = [aws_bedrock_guardrail.askwri]
+  }
 }
 
 # --- The agent's role ---
