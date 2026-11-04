@@ -57,6 +57,23 @@ function quickAnswer(request: AskRequest, language: string, startedAt: number): 
     limits: ["These publications don't compare total costs across cities."],
     questions: ["How did Santiago finance its electric buses?", "What slowed adoption in other cities?"],
     removedClaims: ["Every Latin American capital now runs electric buses."],
+    lens: request.lens
+      ? {
+          ...request.lens,
+          // Alternate summarised and "not discussed" cells so both states show.
+          rows: SOURCES.slice(0, 3).map((source, row) => ({
+            docId: source.docId,
+            title: source.title,
+            year: source.year,
+            pubType: source.pubType,
+            cells: request.lens!.aspects.map((_, i) =>
+              (row + i) % 2 === 0
+                ? { status: "summarised" as const, text: `${source.passage} [${source.marker}].` }
+                : { status: "not_discussed" as const, text: "" },
+            ),
+          })),
+        }
+      : undefined,
   };
 }
 

@@ -7,7 +7,7 @@
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
-import { type Audience, type Filters, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
+import { type Audience, type Filters, type Lens, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
 import { type SavedChat, readChats, upsertChat, writeChats } from "@/lib/chats";
 import { unmatchedMarkers } from "@/lib/citations";
 import { answerMarkdown, formatCitation, saveFile, sourcesBibtex, sourcesCsv } from "@/lib/exports";
@@ -49,6 +49,7 @@ export function ChatApp() {
   const [draft, setDraft] = useState("");
   const [deep, setDeep] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [lens, setLens] = useState<Lens | null>(null);
   const [language, setLanguage] = useState("en");
   const [audience, setAudience] = useState<Audience>("auto");
   const [format, setFormat] = useState<ReportFormat>("talking-points");
@@ -135,7 +136,11 @@ export function ChatApp() {
       // A question sent while the warm-up is still starting this chat's agent would collide
       // with it (the runtime answers the second call with an error), so it waits.
       await warming.current;
-      const request = { question, mode, language, audience: reader, format: reportFormat, filters, sessionId };
+      const request = {
+        question, mode, language, audience: reader, format: reportFormat, filters, sessionId,
+        deep: mode === "factcheck" && deep,
+        lens: mode === "factcheck" ? null : lens,
+      };
       for await (const event of agent.ask(request, controller.signal)) {
         if (event.type === "answer") {
           const texts = event.answer.report?.keyPoints ?? event.answer.paragraphs;
@@ -178,6 +183,7 @@ export function ChatApp() {
     setPanel(null);
     setActive(null);
     setDraft("");
+    setLens(null);
     const next = crypto.randomUUID();
     setSessionId(next);
     warming.current = null;
@@ -414,6 +420,8 @@ async function downloadPdf(source: Source) {
             onDeep={setDeep}
             checking={checking}
             onChecking={setChecking}
+            lens={lens}
+            onLens={setLens}
             filters={filters}
             onFilters={setFilters}
             running={running}

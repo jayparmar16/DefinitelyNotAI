@@ -6,6 +6,7 @@ import type { Answer, Reader } from "@/lib/agent";
 import { LANGUAGES } from "./AppHeader";
 import { AnswerSections, ReaderChip, VerifiedChip } from "./AnswerSections";
 import { Icon } from "./Icon";
+import { LensTable } from "./LensTable";
 import { MarkedText } from "./MarkedText";
 import { Menu } from "./Menu";
 import { type Turn, shownAnswer } from "./turn";
@@ -70,6 +71,7 @@ export function AnswerCard(props: AnswerCardProps) {
         ))
       )}
 
+      {answer.lens && <LensTable lens={answer.lens} activeMarker={props.activeMarker} onMarker={props.onMarker} />}
       <AnswerSections answer={answer} onFollowUp={props.onFollowUp} showLimits={!deep} />
 
       <div className="aw-actions">

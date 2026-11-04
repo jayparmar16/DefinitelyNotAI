@@ -404,3 +404,36 @@ a.aw-btn{text-decoration:none}
   .aw-app.with-sidebar{grid-template-columns:minmax(0,1fr)}
   .aw-sidebar{position:fixed;top:var(--header-height);bottom:0;left:0;z-index:20;box-shadow:4px 0 16px rgba(0,0,0,.12);max-width:85vw}
 }
+
+/* Research lens: composer bar and editor, answer table, side panel summary */
+.aw-lensbar{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-200);padding:var(--space-200) var(--space-300);margin-bottom:var(--space-200);border-radius:var(--radius-500);background:var(--secondary-100);border:var(--border-thin) solid var(--secondary-200);font-size:13px;line-height:20px}
+.aw-lensbar .k{font-weight:700;color:var(--secondary-700)}
+.aw-lensbar .goal{font-weight:600;max-width:40ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aw-lensbar .spacer{flex:1}
+.aw-chip{display:inline-flex;align-items:center;gap:4px;padding:2px var(--space-200);border-radius:var(--radius-900);background:var(--surface);border:var(--border-thin) solid var(--secondary-200);font-size:12px;line-height:16px}
+.aw-chip button{border:0;background:none;cursor:pointer;font-size:14px;line-height:1;padding:0;color:var(--ink-muted)}
+.aw-lens-editor{display:flex;flex-direction:column;gap:var(--space-300);padding:var(--space-300);margin-bottom:var(--space-300);border-radius:var(--radius-500);border:var(--border-thin) solid var(--secondary-200);background:var(--secondary-100)}
+.aw-lens-h{display:flex;flex-direction:column;gap:2px}
+.aw-lens-field{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--ink-muted)}
+.aw-lens-field input{font:inherit;font-size:14px;font-weight:400;color:var(--ink);padding:6px var(--space-200);border:var(--border-thin) solid var(--line);border-radius:var(--radius-300);background:var(--surface);min-width:0}
+.aw-lens-aspects{display:flex;flex-wrap:wrap;gap:var(--space-200);align-items:center;padding:4px;border:var(--border-thin) solid var(--line);border-radius:var(--radius-300);background:var(--surface)}
+.aw-lens-aspects input{border:0;flex:1;min-width:12ch;padding:2px 4px}
+.aw-lens-aspects input:focus{outline:none}
+.aw-lens-actions{display:flex;justify-content:flex-end;gap:var(--space-200)}
+.aw-lens{margin-top:var(--space-400)}
+.aw-lens h5{margin:0 0 var(--space-200);font-size:13px;line-height:20px}
+.aw-lens h5 span{font-weight:400;color:var(--ink-muted);margin-left:var(--space-100)}
+.aw-lens-scroll{overflow-x:auto;border:var(--border-thin) solid var(--line);border-radius:var(--radius-500)}
+.aw-lens table{border-collapse:collapse;width:100%;font-size:13px;line-height:20px}
+.aw-lens th,.aw-lens td{padding:var(--space-200) var(--space-300);border-bottom:var(--border-thin) solid var(--line);text-align:left;vertical-align:top;min-width:180px}
+.aw-lens thead th{background:var(--surface-sunken);font-size:12px;line-height:16px;text-transform:capitalize}
+.aw-lens tbody th{font-weight:600;min-width:200px}
+.aw-lens tbody th .aw-meta{display:block;font-weight:400}
+.aw-lens tr:last-child > *{border-bottom:0}
+.aw-lens td.empty{color:var(--ink-muted);font-style:italic}
+.aw-doc-lens{margin:0 var(--space-400) var(--space-300);padding:var(--space-300);border-radius:var(--radius-300);background:var(--secondary-100);border:var(--border-thin) solid var(--secondary-200)}
+.aw-doc-lens .cap{font-size:12px;line-height:16px;font-weight:700;color:var(--secondary-700);margin-bottom:var(--space-200)}
+.aw-doc-lens dl{margin:0;display:flex;flex-direction:column;gap:var(--space-200);font-size:13px;line-height:20px}
+.aw-doc-lens dt{font-weight:600;text-transform:capitalize}
+.aw-doc-lens dd{margin:0}
+.aw-doc-lens dd.empty{color:var(--ink-muted);font-style:italic}

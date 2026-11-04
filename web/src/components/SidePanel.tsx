@@ -7,7 +7,7 @@
 
 import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "react";
 
-import type { ReportFormat, Source } from "@/lib/agent";
+import type { LensResult, ReportFormat, Source } from "@/lib/agent";
 import { citationYear, pageLink } from "@/lib/citations";
 import { AnswerSections, VerifiedChip, readerName } from "./AnswerSections";
 import { Icon } from "./Icon";
@@ -160,7 +160,7 @@ function whyLine(source: Source): string | null {
 }
 
 /** The cited passage, why it was found, then the stored PDF opened at the cited page. */
-function SourceView({ source, pdfUrl }: { source: Source; pdfUrl: SidePanelProps["pdfUrl"] }) {
+function SourceView({ source, pdfUrl, lens }: { source: Source; pdfUrl: SidePanelProps["pdfUrl"]; lens?: LensResult }) {
   const [pdf, setPdf] = useState<{ chunkId: string; url: string | null; failed: boolean } | null>(null);
   useEffect(() => {
     let current = true;
@@ -172,12 +172,30 @@ function SourceView({ source, pdfUrl }: { source: Source; pdfUrl: SidePanelProps
     };
   }, [source, pdfUrl]);
   const loaded = pdf?.chunkId === source.chunkId ? pdf : null;
+  const lensRow = lens?.rows.find((row) => row.docId === source.docId);
   const why = whyLine(source);
   return (
     <div className="aw-doc">
       <div className="aw-doc-head">
         <h3>{source.title}</h3>
       </div>
+      {lensRow && lens && (
+        <div className="aw-doc-lens">
+          <div className="cap">Through your lens · {lens.goal}</div>
+          <dl>
+            {lens.aspects.map((aspect, i) => (
+              <div key={aspect}>
+                <dt>{aspect}</dt>
+                <dd className={lensRow.cells[i]?.status === "summarised" ? "" : "empty"}>
+                  {lensRow.cells[i]?.status === "summarised"
+                    ? lensRow.cells[i].text.replace(/\s*\[\d+\]/g, "")
+                    : lensRow.cells[i]?.status === "unverified" ? "No verified summary" : "Not discussed in this paper"}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
       <div className="aw-doc-cited">
         <div className="cap">Cited passage</div>
         <Passage source={source} />
@@ -304,7 +322,7 @@ export function SidePanel(props: SidePanelProps) {
             </ol>
           )
         )}
-        {openSource && <SourceView source={openSource} pdfUrl={props.pdfUrl} />}
+        {openSource && <SourceView source={openSource} pdfUrl={props.pdfUrl} lens={turn.answer?.lens} />}
       </div>
 
       <div className="aw-panel-foot">

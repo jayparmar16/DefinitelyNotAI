@@ -25,6 +25,22 @@ export type AskRequest = {
   format: ReportFormat;
   filters: Filters;
   sessionId: string; // AgentCore Memory session, so follow-ups reuse gathered evidence
+  deep?: boolean; // fact-check only: more passages per claim, and a second search for unsettled ones
+  lens?: Lens | null; // the research lens, applied to every paper the answer uses
+};
+
+/** A researcher's goal and the 1-4 aspects every paper is summarised for. */
+export type Lens = { goal: string; aspects: string[] };
+
+/** The lens applied to an answer's papers. A cell's text carries [n] markers into the sources. */
+export type LensResult = Lens & {
+  rows: {
+    docId: string;
+    title: string;
+    year: number | null;
+    pubType: string | null;
+    cells: { status: "summarised" | "not_discussed" | "unverified"; text: string }[];
+  }[];
 };
 
 /** One cited passage. `marker` is the [n] used in the answer text. */
@@ -80,6 +96,7 @@ export type Answer = {
   limits?: string[]; // what the question asks that the evidence doesn't cover (Quick answer)
   questions?: string[]; // follow-ups the user could ask next
   removedClaims?: string[]; // drafted claims verification removed
+  lens?: LensResult; // with a research lens: each paper summarised for its aspects
 };
 
 export type Decline = {

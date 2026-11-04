@@ -2,10 +2,12 @@
 
 /** The one search box: question, Deep research toggle, filters and send. */
 
-import { type FormEvent, type KeyboardEvent, type RefObject, useEffect } from "react";
+import { type FormEvent, type KeyboardEvent, type RefObject, useEffect, useState } from "react";
 
-import type { Filters } from "@/lib/agent";
+
+import type { Filters, Lens } from "@/lib/agent";
 import { Icon } from "./Icon";
+import { LensBar, LensEditor } from "./LensControl";
 import { Menu } from "./Menu";
 
 const PUB_TYPES = [
@@ -26,6 +28,8 @@ type ComposerProps = {
   onDeep: (on: boolean) => void;
   checking: boolean; // fact-check a pasted draft instead of asking a question
   onChecking: (on: boolean) => void;
+  lens: Lens | null;
+  onLens: (lens: Lens | null) => void;
   filters: Filters;
   onFilters: (filters: Filters) => void;
   running: boolean;
@@ -40,6 +44,7 @@ function filtersLabel(filters: Filters): string {
 export function Composer(props: ComposerProps) {
   const { inputRef, draft } = props;
   const canSend = draft.trim().length > 0 && !props.running;
+  const [editingLens, setEditingLens] = useState(false);
 
   // Grow the box with its text, up to the max height set in CSS.
   useEffect(() => {
@@ -60,6 +65,19 @@ export function Composer(props: ComposerProps) {
   return (
     <div className="aw-composer-wrap">
       <form className="aw-composer" onSubmit={submit}>
+        {editingLens && (
+          <LensEditor
+            lens={props.lens}
+            onApply={(lens) => {
+              props.onLens(lens);
+              setEditingLens(false);
+            }}
+            onCancel={() => setEditingLens(false)}
+          />
+        )}
+        {props.lens && !editingLens && !props.checking && (
+          <LensBar lens={props.lens} onEdit={() => setEditingLens(true)} onClear={() => props.onLens(null)} />
+        )}
         <label className="visually-hidden" htmlFor="aw-question">Your question</label>
         <textarea
           id="aw-question"
@@ -84,7 +102,6 @@ export function Composer(props: ComposerProps) {
               Fact-check
             </button>
           </div>
-          {!props.checking && (
           <button
             type="button"
             className={props.deep ? "aw-toggle on" : "aw-toggle"}
@@ -94,10 +111,19 @@ export function Composer(props: ComposerProps) {
           >
             <span className="aw-track" />
             Deep research
-            <span className="sub">{props.deep ? "searches wider, builds a report" : "off: Quick answer"}</span>
+            <span className="sub">
+              {props.checking
+                ? props.deep ? "more passages per claim, searches again" : "off: standard check"
+                : props.deep ? "searches wider, builds a report" : "off: Quick answer"}
+            </span>
           </button>
-          )}
           <span className="spacer" />
+
+          {!props.checking && !props.lens && !editingLens && (
+            <button type="button" className="aw-btn ghost sm" onClick={() => setEditingLens(true)} title="Summarise every paper for your goal and aspects">
+              <Icon name="filter" small /> Lens
+            </button>
+          )}
 
           <Menu
             placement="above"
