@@ -188,7 +188,9 @@ def main() -> int:
     for entry in catalog:
         pdf = args.pdfs / entry["pdf_file"]
         row = document_row(entry, hashlib.sha256(pdf.read_bytes()).hexdigest())
-        s3.upload_file(str(pdf), bucket, row["pdf_key"])
+        s3.upload_file(
+            str(pdf), bucket, row["pdf_key"], ExtraArgs={"ContentType": "application/pdf"}
+        )
         records = read_chunks(args.ingested / entry["doc_id"])
         load_document(row, records, data_api, arns)
         print(f"{entry['doc_id']}: {len(records)} chunks loaded")

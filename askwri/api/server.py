@@ -141,8 +141,16 @@ class Handler(BaseHTTPRequestHandler):
         except BadRequest as error:
             self._json(400, {"error": str(error)})
             return
+        # Served as an inline PDF so the UI's side panel can show the cited page; PDFs loaded
+        # before load.py set a content type are stored as binary/octet-stream.
+        params = {
+            "Bucket": self.api.bucket,
+            "Key": key,
+            "ResponseContentType": "application/pdf",
+            "ResponseContentDisposition": "inline",
+        }
         link = self.api.s3.generate_presigned_url(
-            "get_object", Params={"Bucket": self.api.bucket, "Key": key}, ExpiresIn=DOWNLOAD_SECONDS
+            "get_object", Params=params, ExpiresIn=DOWNLOAD_SECONDS
         )
         self._json(200, {"url": link, "expiresIn": DOWNLOAD_SECONDS})
 
