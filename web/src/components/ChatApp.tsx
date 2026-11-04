@@ -28,6 +28,11 @@ async function pdfUrl(source: Source): Promise<string | null> {
   return (await getAgent()).sourceDownloadUrl(source);
 }
 
+/** How the agent read a follow-up in the light of the conversation, if it rewrote it. */
+function readAs(turn: Turn): string | undefined {
+  return turn.steps.find((step) => step.id === "context")?.detail;
+}
+
 function nameOf(code: string): string {
   return LANGUAGES.find((l) => l.code === code)?.name ?? code;
 }
@@ -284,6 +289,11 @@ async function downloadPdf(source: Source) {
                   return (
                     <div key={turn.id} style={{ display: "contents" }}>
                       <div className="aw-user" id={`q-${turn.id}`}>{turn.question}</div>
+                      {readAs(turn) && (
+                        <div className="aw-context" title="AskWRI read your follow-up together with the conversation so far">
+                          ↳ Read in context as: <q>{readAs(turn)}</q>
+                        </div>
+                      )}
                       {(turn.mode === "deep" || turn.status === "running") && (
                         <ProgressTrace turn={turn} onStop={() => abort.current?.abort()} />
                       )}
