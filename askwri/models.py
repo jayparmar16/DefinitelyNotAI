@@ -10,7 +10,6 @@ import sys
 from dataclasses import dataclass
 
 import anthropic
-import pymupdf
 
 # Global inference profiles: the only way to call these Claude models in a US region.
 MODELS = {
@@ -112,6 +111,9 @@ def _reply_text(document: str, role: str, response) -> str:
 
 
 def _red_square_png() -> bytes:
+    # Imported here so the agent runtime can import the registry without PyMuPDF installed.
+    import pymupdf
+
     pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 64, 64), False)
     pixmap.set_rect(pixmap.irect, (255, 0, 0))
     return pixmap.tobytes("png")
