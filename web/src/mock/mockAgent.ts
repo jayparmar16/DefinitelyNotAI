@@ -7,7 +7,7 @@
  * getAgent() in src/lib/agent.ts to the real client.
  */
 
-import type { AgentClient, AgentEvent, AskRequest, Answer, Reader, ReportFormat } from "../lib/agent.ts";
+import type { AgentClient, AgentEvent, AskRequest, Answer, CheckedClaim, Reader, ReportFormat, Verdict } from "../lib/agent.ts";
 import { QUICK_PARAGRAPHS, REPORT_POINTS, SOURCES, SUB_QUESTIONS, THIN_EVIDENCE } from "./fixtures.ts";
 
 const ON_TOPIC = /\b(bus|buses|transit|transport|electri\w*|mobility|fleets?|brt|briefing|talking points)\b/i;
@@ -84,6 +84,44 @@ function deepAnswer(request: AskRequest, language: string, startedAt: number): A
     limits: [],
     questions: ["Which cities moved first, and why?"],
     removedClaims: [],
+  };
+}
+
+// The real agent judges each claim against WRI passages; the mock cycles through the verdicts so
+// every state can be seen.
+const MOCK_VERDICTS: Verdict[] = ["supported", "contradicted", "not_found", "outdated"];
+
+async function* factCheckRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  const startedAt = Date.now();
+  yield { type: "step", id: "claims", label: "Finding the claims in your draft", status: "now" };
+  await pause(600, signal);
+  const sentences = request.question.match(/[^.!?]+[.!?]?/g)?.map((s) => s.trim()).filter((s) => s.length > 20) ?? [];
+  const claims: CheckedClaim[] = sentences.slice(0, 8).map((quote, i) => {
+    const verdict = MOCK_VERDICTS[i % MOCK_VERDICTS.length];
+    return {
+      quote,
+      claim: quote,
+      verdict,
+      markers: verdict === "not_found" ? [] : [1],
+      correction: verdict === "contradicted" || verdict === "outdated" ? "Pilots ran on three routes in 2019 [1]." : "",
+      note: verdict === "not_found" ? "No WRI passage settles this." : "Mock verdict for the UI.",
+    };
+  });
+  yield { type: "step", id: "claims", label: `Found ${claims.length} claims to check`, status: "done" };
+  yield { type: "step", id: "judge", label: "Checking each claim against the passages", status: "now" };
+  await pause(900, signal);
+  yield { type: "step", id: "judge", label: "Checked every claim", status: "done" };
+  const counts = { supported: 0, contradicted: 0, outdated: 0, not_found: 0 };
+  for (const claim of claims) counts[claim.verdict]++;
+  yield {
+    type: "factcheck",
+    factcheck: {
+      draft: request.question,
+      claims,
+      counts,
+      sources: claims.some((c) => c.markers.length) ? SOURCES.slice(0, 1) : [],
+      elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
+    },
   };
 }
 
@@ -172,6 +210,7 @@ export const mockAgent: AgentClient = {
       return translatedFollowUp(request, signal);
     }
     if (!ON_TOPIC.test(request.question)) return declineRun(request, signal);
+    if (request.mode === "factcheck") return factCheckRun(request, signal);
     return request.mode === "deep" ? deepRun(request, signal) : quickRun(request, signal);
   },
 

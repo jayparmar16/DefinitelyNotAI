@@ -353,13 +353,54 @@ a.aw-btn{text-decoration:none}
 .aw-pdfpage .textLayer ::selection{background:rgba(0,0,255,.25)}
 .aw-pdfpage .textLayer mark.cite-highlight{color:transparent;background:rgba(255,213,0,.45);border-radius:2px;padding:0;margin:0}
 
-/* Recent chats menu */
-.aw-recent{display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:320px;text-align:left}
-.aw-recent .w{align-self:flex-start}
-.aw-recent .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.aw-recent .w{font-size:12px;color:var(--ink-muted)}
-.aw-recent.on .t{color:var(--link)}
 
 /* A follow-up as the agent read it in context */
 .aw-context{align-self:flex-end;max-width:80%;margin-top:calc(-1 * var(--space-200));font-size:12px;line-height:16px;color:var(--ink-muted);text-align:right}
 .aw-context q{font-style:italic;color:var(--ink)}
+
+/* Ask | Fact-check switch in the composer */
+.aw-seg{display:inline-flex;border:var(--border-thin) solid var(--line);border-radius:var(--radius-900);padding:2px;background:var(--surface-sunken);flex:none}
+.aw-seg button{border:0;background:none;font:inherit;font-size:12px;font-weight:600;line-height:16px;padding:4px var(--space-300);border-radius:var(--radius-900);color:var(--ink-muted);cursor:pointer}
+.aw-seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
+/* Fact-check result */
+.aw-fc-draft{white-space:pre-wrap;line-height:28px;padding:var(--space-300) var(--space-400);border-radius:var(--radius-300);background:var(--surface-sunken);margin-bottom:var(--space-400)}
+.aw-fc-quote{padding:1px 0;border-radius:2px;cursor:pointer;border-bottom:2px solid transparent;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.aw-fc-quote.supported{background:var(--success-100);border-bottom-color:var(--success-500)}
+.aw-fc-quote.contradicted{background:var(--error-100);border-bottom-color:var(--error-500)}
+.aw-fc-quote.outdated{background:var(--warning-100);border-bottom-color:var(--warning-500)}
+.aw-fc-quote.not_found{background:var(--neutral-300);border-bottom-color:var(--neutral-600)}
+.aw-fc-quote.on{outline:var(--border-thick) solid var(--control);outline-offset:1px}
+.aw-fc-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-200)}
+.aw-fc-row{display:flex;gap:var(--space-300);align-items:flex-start;padding:var(--space-300);border:var(--border-thin) solid var(--line);border-radius:var(--radius-500);scroll-margin:var(--space-400)}
+.aw-fc-row.on{border-color:var(--control)}
+.aw-fc-body{display:flex;flex-direction:column;gap:var(--space-100);min-width:0;flex:1}
+.aw-fc-claim{font-size:14px;line-height:20px}
+.aw-fc-fix{font-size:13px;line-height:20px;padding:var(--space-200) var(--space-300);border-radius:var(--radius-300);background:var(--success-100);color:var(--success-900)}
+.aw-verdict{flex:none;font-size:12px;line-height:16px;font-weight:700;padding:2px var(--space-200);border-radius:var(--radius-900);white-space:nowrap}
+.aw-verdict.supported{background:var(--success-100);color:var(--success-900)}
+.aw-verdict.contradicted{background:var(--error-100);color:var(--error-900)}
+.aw-verdict.outdated{background:var(--warning-100);color:var(--warning-900)}
+.aw-verdict.not_found{background:var(--neutral-300);color:var(--neutral-800)}
+@media (max-width: 640px) {
+  .aw-fc-row{flex-direction:column;gap:var(--space-200)}
+}
+
+/* Chats sidebar, as in Claude: the header spans the top, the sidebar sits left of the chat */
+.aw-app.with-sidebar{grid-template-columns:var(--sidebar-width) minmax(0,1fr)}
+.aw-app.with-sidebar > .aw-header{grid-column:1 / -1}
+.aw-sidebar{--sidebar-width:260px;width:var(--sidebar-width);display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:var(--border-thin) solid var(--line)}
+:root{--sidebar-width:260px}
+.aw-sidebar-top{display:flex;gap:var(--space-200);padding:var(--space-300)}
+.aw-sidebar-new{flex:1;justify-content:flex-start}
+.aw-sidebar-list{flex:1;overflow-y:auto;padding:0 var(--space-200) var(--space-300)}
+.aw-sidebar-h{margin:var(--space-300) var(--space-200) var(--space-100);font-size:12px;line-height:16px;font-weight:600;color:var(--ink-muted)}
+.aw-sidebar-chat{display:block;width:100%;text-align:left;border:0;background:none;font:inherit;font-size:14px;line-height:20px;color:var(--ink);padding:6px var(--space-200);border-radius:var(--radius-300);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.aw-sidebar-chat:hover{background:var(--surface-sunken)}
+.aw-sidebar-chat.on{background:var(--secondary-100);color:var(--secondary-700);font-weight:600}
+.aw-sidebar-empty{padding:var(--space-200)}
+.aw-sidebar-foot{display:flex;align-items:center;justify-content:space-between;padding:var(--space-200) var(--space-300);border-top:var(--border-thin) solid var(--line)}
+@media (max-width: 1000px) {
+  .aw-app.with-sidebar{grid-template-columns:minmax(0,1fr)}
+  .aw-sidebar{position:fixed;top:var(--header-height);bottom:0;left:0;z-index:20;box-shadow:4px 0 16px rgba(0,0,0,.12);max-width:85vw}
+}

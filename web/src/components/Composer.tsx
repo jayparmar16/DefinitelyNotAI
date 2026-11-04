@@ -24,6 +24,8 @@ type ComposerProps = {
   onDraft: (text: string) => void;
   deep: boolean;
   onDeep: (on: boolean) => void;
+  checking: boolean; // fact-check a pasted draft instead of asking a question
+  onChecking: (on: boolean) => void;
   filters: Filters;
   onFilters: (filters: Filters) => void;
   running: boolean;
@@ -67,9 +69,22 @@ export function Composer(props: ComposerProps) {
           value={draft}
           onChange={(event) => props.onDraft(event.target.value)}
           onKeyDown={onKey}
-          placeholder={'Ask about WRI research, e.g. "What has WRI published on electric buses in Latin America?"'}
+          placeholder={
+            props.checking
+              ? "Paste a draft, email or proposal: each claim is checked against WRI's publications"
+              : 'Ask about WRI research, e.g. "What has WRI published on electric buses in Latin America?"'
+          }
         />
         <div className="aw-composer-row">
+          <div className="aw-seg" role="radiogroup" aria-label="What to do">
+            <button type="button" role="radio" aria-checked={!props.checking} className={props.checking ? "" : "on"} onClick={() => props.onChecking(false)}>
+              Ask
+            </button>
+            <button type="button" role="radio" aria-checked={props.checking} className={props.checking ? "on" : ""} onClick={() => props.onChecking(true)}>
+              Fact-check
+            </button>
+          </div>
+          {!props.checking && (
           <button
             type="button"
             className={props.deep ? "aw-toggle on" : "aw-toggle"}
@@ -81,6 +96,7 @@ export function Composer(props: ComposerProps) {
             Deep research
             <span className="sub">{props.deep ? "searches wider, builds a report" : "off: Quick answer"}</span>
           </button>
+          )}
           <span className="spacer" />
 
           <Menu
@@ -130,8 +146,8 @@ export function Composer(props: ComposerProps) {
           </Menu>
 
           {/* Voice input is a to-do in the design doc; the mic stays hidden until it ships. */}
-          <button type="submit" className="aw-btn brand icon" disabled={!canSend} title="Ask">
-            <Icon name="send" label="Ask" />
+          <button type="submit" className="aw-btn brand icon" disabled={!canSend} title={props.checking ? "Check" : "Ask"}>
+            <Icon name="send" label={props.checking ? "Check" : "Ask"} />
           </button>
         </div>
       </form>

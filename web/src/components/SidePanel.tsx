@@ -225,7 +225,7 @@ function SourceBar({ source, onPdf }: { source: Source; onPdf: (source: Source) 
 
 export function SidePanel(props: SidePanelProps) {
   const { turn, tab } = props;
-  const sources = turn.answer?.sources ?? [];
+  const sources = turn.answer?.sources ?? turn.factcheck?.sources ?? [];
   const deep = turn.mode === "deep";
   const openSource = typeof tab === "number" ? sources.find((source) => source.marker === tab) : undefined;
   const markers = sources.map((source) => source.marker);

@@ -11,9 +11,12 @@ import { type Audience, type Filters, type Mode, type ReportFormat, type Source,
 import { type SavedChat, readChats, upsertChat, writeChats } from "@/lib/chats";
 import { unmatchedMarkers } from "@/lib/citations";
 import { answerMarkdown, formatCitation, saveFile, sourcesBibtex, sourcesCsv } from "@/lib/exports";
+import { factCheckMarkdown } from "@/lib/factcheck";
 import { AnswerCard } from "./AnswerCard";
 import { AppHeader, type DownloadChoice, LANGUAGES } from "./AppHeader";
+import { ChatSidebar } from "./ChatSidebar";
 import { Composer } from "./Composer";
+import { FactCheckCard } from "./FactCheckCard";
 import { DeclineCard, OutdatedFlag } from "./Feedback";
 import { ProgressTrace } from "./ProgressTrace";
 import { type PanelTab, SidePanel } from "./SidePanel";
@@ -45,6 +48,7 @@ export function ChatApp() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [deep, setDeep] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [language, setLanguage] = useState("en");
   const [audience, setAudience] = useState<Audience>("auto");
   const [format, setFormat] = useState<ReportFormat>("talking-points");
@@ -55,6 +59,7 @@ export function ChatApp() {
   const [active, setActive] = useState<{ turnId: string; marker: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [recent, setRecent] = useState<SavedChat[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const warmed = useRef<string | null>(null);
   const warming = useRef<Promise<void> | null>(null);
@@ -70,6 +75,8 @@ export function ChatApp() {
   useEffect(() => {
     const { chats, current } = readChats();
     setRecent(chats);
+    // Open on wide screens; on narrow ones it covers the chat, so it starts closed.
+    setSidebarOpen(window.matchMedia("(min-width: 1001px)").matches);
     const chat = chats.find((c) => c.sessionId === current);
     if (chat) {
       setTurns(chat.turns);
@@ -156,7 +163,7 @@ export function ChatApp() {
     const question = draft.trim();
     if (!question || running) return;
     setDraft("");
-    ask(question, deep ? "deep" : "quick");
+    ask(question, checking ? "factcheck" : deep ? "deep" : "quick");
   }
 
   // A suggested follow-up goes into the box, not straight to the agent, so it can be edited first.
@@ -178,7 +185,12 @@ export function ChatApp() {
     input.current?.focus();
   }
 
+  function closeSidebarIfNarrow() {
+    if (!window.matchMedia("(min-width: 1001px)").matches) setSidebarOpen(false);
+  }
+
   function openChat(chat: SavedChat) {
+    closeSidebarIfNarrow();
     abort.current?.abort();
     setTurns(chat.turns);
     setSessionId(chat.sessionId);
@@ -254,7 +266,7 @@ async function downloadPdf(source: Source) {
   const bodyStyle = { "--panel-width": `${panelWidth}px` } as CSSProperties;
 
   return (
-    <div className="aw-app">
+    <div className={sidebarOpen ? "aw-app with-sidebar" : "aw-app"}>
       <AppHeader
         mock={usingMock}
         language={language}
@@ -265,11 +277,22 @@ async function downloadPdf(source: Source) {
         hasReport={Boolean(lastAnswered?.answer?.report)}
         onDownload={(choice) => lastAnswered && download(lastAnswered, choice)}
         onNewChat={newChat}
-        recent={recent}
-        currentChat={sessionId}
-        onOpenChat={openChat}
-        onClearChats={clearChats}
+        sidebarOpen={sidebarOpen}
+        onSidebar={() => setSidebarOpen(true)}
       />
+      {sidebarOpen && (
+        <ChatSidebar
+          chats={recent}
+          current={sessionId}
+          onOpen={openChat}
+          onNew={() => {
+            closeSidebarIfNarrow();
+            newChat();
+          }}
+          onClear={clearChats}
+          onClose={() => setSidebarOpen(false)}
+        />
+      )}
       <div className={panelTurn ? "aw-body" : "aw-body no-panel"} style={bodyStyle}>
         <main className="aw-main">
           <div className="aw-scroll" ref={scroller}>
@@ -335,6 +358,32 @@ async function downloadPdf(source: Source) {
                           />
                         </>
                       )}
+                      {turn.factcheck && (
+                        <>
+                          <FactCheckCard
+                            turnId={turn.id}
+                            check={turn.factcheck}
+                            activeMarker={activeMarker}
+                            onMarker={onMarker}
+                            onCopy={() => copy(factCheckMarkdown(turn.factcheck!), "Fact-check")}
+                          />
+                          {turn.factcheck.sources.length > 0 && (
+                            <SourceCards
+                              turnId={turn.id}
+                              sources={turn.factcheck.sources}
+                              activeMarker={activeMarker}
+                              onOpen={onMarker}
+                              onPdf={downloadPdf}
+                              onCite={(source) => copy(formatCitation(source), "Citation")}
+                              onSources={(choice) => {
+                                const sources = turn.factcheck!.sources;
+                                if (choice === "csv") saveFile("fact-check-sources.csv", sourcesCsv(sources), "text/csv");
+                                else saveFile("fact-check-sources.bib", sourcesBibtex(sources), "application/x-bibtex");
+                              }}
+                            />
+                          )}
+                        </>
+                      )}
                       {turn.decline && (
                         <DeclineCard
                           decline={turn.decline}
@@ -363,6 +412,8 @@ async function downloadPdf(source: Source) {
             onDraft={setDraft}
             deep={deep}
             onDeep={setDeep}
+            checking={checking}
+            onChecking={setChecking}
             filters={filters}
             onFilters={setFilters}
             running={running}

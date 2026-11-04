@@ -5,7 +5,7 @@
  * array, and Deep research streams its progress as events so steps and sources show early.
  */
 
-export type Mode = "quick" | "deep";
+export type Mode = "quick" | "deep" | "factcheck";
 /** Who an answer is written for. */
 export type Reader = "researcher" | "policymaker" | "partnerships";
 /** "auto": nobody picks a persona when typing, so the agent infers the reader from the question. */
@@ -88,6 +88,26 @@ export type Decline = {
   related: { title: string; pubType: string; year: number | null; url: string | null }[];
 };
 
+export type Verdict = "supported" | "contradicted" | "outdated" | "not_found";
+
+/** One claim from a fact-checked draft. `quote` is its exact wording in the draft. */
+export type CheckedClaim = {
+  quote: string;
+  claim: string;
+  verdict: Verdict;
+  markers: number[]; // [n] into the fact-check's sources
+  correction: string; // for contradicted or outdated: the claim as WRI's passages support it
+  note: string; // why, with [n] markers
+};
+
+export type FactCheck = {
+  draft: string;
+  claims: CheckedClaim[];
+  counts: Record<Verdict, number>;
+  sources: Source[];
+  elapsedSeconds: number;
+};
+
 export type StepStatus = "done" | "now" | "next";
 
 /** Streamed while the agent works. A run ends with exactly one "answer" or "decline". */
@@ -96,6 +116,7 @@ export type AgentEvent =
   | { type: "source-found"; title: string; year: number | null }
   | { type: "outdated-figure"; text: string; markers: number[] }
   | { type: "answer"; answer: Answer }
+  | { type: "factcheck"; factcheck: FactCheck }
   | { type: "decline"; decline: Decline };
 
 /** A translated answer: every text the reader sees, in the target language. */
