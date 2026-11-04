@@ -88,6 +88,30 @@ It is safe to rerun.
 Interface endpoints and Aurora bill by the hour. After the event, tear everything down with
 `cd infra && terraform destroy`, then check that `askwri-rg` is empty.
 
+## Chat UI (`web/`)
+
+A Next.js app built from the AskWRI design system (WRI Design System colors and spacing): one
+search box with a Deep research toggle, answers with `[n]` citation markers, source cards, a
+side panel with the report or the source at its cited page, and the helpful decline. It builds
+to static files for S3 + CloudFront. Needs Node 22+.
+
+```sh
+cd web
+npm install
+npm run dev        # http://localhost:3000
+npm test           # citation, export and mock-data checks (Node's built-in test runner)
+npm run lint       # type check
+npm run build      # static site in web/out/
+```
+
+**Mock agent.** Until the API exists (runbook phase 5), the UI talks to a mock in
+`web/src/mock/` and shows a "Mock data" badge. Its titles, authors and figures are
+placeholders, not real WRI publications. Questions about transport (buses, transit, BRT) get a
+cited answer, or a streamed report with Deep research on; anything else gets the decline;
+"Now make it in Spanish" after a report reuses it, machine-translated. Everything goes through
+the contract in `web/src/lib/agent.ts`. To switch to the real agent: add the HTTP client in
+`getAgent()` there, set `usingMock` to false, and delete `web/src/mock/`.
+
 ## The rules
 
 - `main` is protected, so every change goes in through a pull request.
