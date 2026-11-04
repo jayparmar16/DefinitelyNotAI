@@ -32,13 +32,16 @@ def audit_chunks(pdf_path: Path, chunks: list[Chunk]) -> AuditResult:
     is not a contiguous run of one page's text, is unquotable: the layout model re-ordered it
     (diagram labels, a pull quote overlapping a paragraph), so it may be cited by page but not
     quoted. In a table chunk each row is checked on its own, since a text layer often reads a
-    table column by column and no table is one run. Matching ignores case, whitespace,
+    table column by column and no table is one run. A picture chunk is checked by its caption
+    alone, never by its description, and a picture with no caption is not checked. Matching ignores case, whitespace,
     punctuation, line-end hyphens and ligatures.
     """
     with pymupdf.open(pdf_path) as doc:
         page_texts = [page.get_text() for page in doc]
     failures, unquotable = [], []
     for chunk in chunks:
+        if chunk.figure and not chunk.text:
+            continue
         paragraphs = [p for p in chunk.text.split("\n\n") if p.strip()]
         if not 1 <= chunk.pdf_page <= chunk.pdf_page_end <= len(page_texts):
             failures.append(f"{chunk.chunk_id}: claims pages outside the PDF")
