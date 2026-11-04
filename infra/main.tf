@@ -37,3 +37,25 @@ resource "aws_resourcegroups_group" "askwri" {
     })
   }
 }
+
+module "tools" {
+  source                 = "./modules/tools"
+  region                 = var.region
+  account_id             = var.team_account_id
+  package_path           = "${path.root}/../build/tools.zip"
+  subnet_ids             = module.network.app_subnet_ids
+  security_group_id      = module.network.lambda_security_group_id
+  db_host                = module.database.endpoint
+  db_name                = module.database.database_name
+  db_cluster_resource_id = module.database.cluster_resource_id
+  embedding_model_id     = var.embedding_model_id
+  rerank_model_id        = var.rerank_model_id
+  translate_model_id     = var.small_model_id
+}
+
+module "gateway" {
+  source             = "./modules/gateway"
+  region             = var.region
+  account_id         = var.team_account_id
+  tool_function_arns = module.tools.function_arns
+}

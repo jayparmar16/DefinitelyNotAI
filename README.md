@@ -63,10 +63,25 @@ export TF_VAR_team_account_id=$(aws sts get-caller-identity --query Account --ou
 
 infra/bootstrap/create-state-bucket.sh        # once: S3 state bucket, writes infra/backend.hcl
 cp infra/terraform.tfvars.example infra/terraform.tfvars   # once: set the Team and Owner tags
+infra/build/tools.sh                          # package the tool Lambdas into build/tools.zip
 cd infra && terraform init -backend-config=backend.hcl
 terraform plan -out=plan.tfplan && terraform apply plan.tfplan
 cd .. && uv run python db/apply_schema.py     # tables, indexes and database users
 ```
+
+**Load documents.** `askwri.load` reads the ingestion pipeline's output folder (the one
+`python -m askwri.ingest ... --out <dir>` writes), stores each PDF in the corpus bucket under
+`raw/`, embeds every chunk and writes documents and chunks through the Data API. Rerunning
+replaces a document's chunks, so after an ingestion change, re-ingest and load again.
+
+```sh
+ASKWRI_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0 \
+  uv run python -m askwri.load <ingest out dir> --pdfs <folder with the source PDFs>
+```
+
+`ASKWRI_EMBEDDING_MODEL` must be the same model as Terraform's `embedding_model_id`. Model IDs
+are Terraform variables (`embedding_model_id`, `rerank_model_id`, `small_model_id`), never
+constants in code; the Lambdas get them as environment variables.
 
 `backend.hcl` and `terraform.tfvars` hold account-specific values and are gitignored; never
 commit the account ID or ARNs. Sandbox credentials expire: on `ExpiredToken`, refresh them
@@ -83,6 +98,8 @@ It is safe to rerun.
 | Corpus bucket | `askwri-corpus-<account-id>` | `raw/` PDFs, `text/`, `eval/`; private, encrypted, TLS only; objects readable only by the deploy role and the askwri-* roles |
 | Database | `askwri-db` | Aurora PostgreSQL 18 Serverless v2 with pgvector; Data API on; pauses after an hour idle (resume takes 15 s or more; set `db_min_capacity = 0.5` for demos) |
 | Secret | `askwri/db` | Master credentials, used only by the Data API. Lambdas sign in with IAM database auth as `askwri_ingest` or `askwri_tools` |
+| Tool Lambdas | `askwri-tool-search`, `-passage`, `-coverage`, `-authors`, `-translate` | In the app subnets; role `askwri-tools-role` (database as `askwri_tools`, the embedding, rerank and small models). Search is hybrid: pgvector + full text, fused, then reranked |
+| Gateway | `askwri-gateway` | AgentCore Gateway: the five tools over MCP. Callers need a token from Cognito `askwri-auth` (client `askwri-gateway-client`, credentials in secret `askwri/gateway-client`); the gateway invokes the tools as `askwri-gateway-role` |
 | Resource group | `askwri-rg` | Lists every resource tagged `Project = AskWRI` |
 
 Interface endpoints and Aurora bill by the hour. After the event, tear everything down with

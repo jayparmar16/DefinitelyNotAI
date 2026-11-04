@@ -42,3 +42,7 @@ node_modules/
 infra/terraform.tfvars
 infra/backend.hcl
 build/
+
+# Web app build output
+web/out/
+*.tsbuildinfo

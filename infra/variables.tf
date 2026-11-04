@@ -49,3 +49,23 @@ variable "db_seconds_until_auto_pause" {
   type        = number
   default     = 3600
 }
+
+# Model IDs live here, not in code. Claude models in us-west-2 run only through inference
+# profiles; the embedding and rerank models run in-region.
+variable "embedding_model_id" {
+  description = "Multilingual embedding model; its vector size must match vector(1024) in db/schema.sql."
+  type        = string
+  default     = "amazon.titan-embed-text-v2:0"
+}
+
+variable "rerank_model_id" {
+  description = "Rerank model for search results."
+  type        = string
+  default     = "amazon.rerank-v1:0"
+}
+
+variable "small_model_id" {
+  description = "Haiku-class model (inference profile) for translation, routing and checks."
+  type        = string
+  default     = "global.anthropic.claude-haiku-5-5"
+}
