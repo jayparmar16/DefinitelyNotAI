@@ -59,6 +59,16 @@ CREATE TABLE IF NOT EXISTS translations (
   text text NOT NULL
 );
 
+-- Fields from the ingestion pipeline (askwri.ingest), added to the tables above. Nullable, so
+-- rows loaded before the pipeline gained them stay valid.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS wri_type text;      -- wri.org's own type (Research, Data)
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_type text;      -- the sorter's type (working paper, report, ...)
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS deadline date;      -- RFPs
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS replaces text[];    -- older versions the sorter dropped
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS description text;      -- model-written table/figure summary: searchable, never quoted
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS number text;           -- table or figure number
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS figure_key text;       -- S3 key of the figure image
+
 -- Which WRI documents in the collection cite which others, found by python -m askwri.links:
 -- a DOI, wri.org link or title of one document appearing in another's text.
 CREATE TABLE IF NOT EXISTS citations (

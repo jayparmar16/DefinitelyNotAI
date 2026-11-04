@@ -9,7 +9,8 @@ Claude Code reads it through `CLAUDE.md`; Codex reads it directly.
 
 ## Stack
 
-- AWS only: Amazon Bedrock (models, embeddings, Knowledge Bases), Bedrock AgentCore, S3.
+- AWS only: Amazon Bedrock (models, embeddings, rerank), Aurora PostgreSQL with pgvector (the
+  search index; retrieval is our own code, not Bedrock Knowledge Bases), Bedrock AgentCore, S3.
   Lambda or ECS Fargate when compute is needed.
 - Python 3.12+, managed with `uv`. Lint and format with `ruff`.
 - TypeScript only for UI or infrastructure code.

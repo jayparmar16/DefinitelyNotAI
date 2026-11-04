@@ -109,7 +109,7 @@ def test_audit_keeps_a_reordered_passage_but_marks_it_not_quotable(report, resul
 
 
 def test_audit_fails_for_a_passage_claimed_on_the_wrong_page(report, result):
-    moved = dataclasses.replace(result.chunks[0], pdf_page=2)
+    moved = dataclasses.replace(result.chunks[0], pdf_page=2, pdf_page_end=2)
 
     audit = audit_chunks(report, [moved])
 
@@ -128,13 +128,15 @@ def test_audit_fails_for_empty_or_garbled_chunks(report, result, text, reason):
     assert audit.failures == [f"{bad.chunk_id}: {reason}" + (" characters" if text else "")]
 
 
-def test_long_section_splits_at_paragraphs_and_at_page_breaks(tmp_path):
+def test_long_section_splits_at_paragraphs_and_continues_across_the_page_break(tmp_path):
     result = ingest_document(long_section_report(tmp_path / "findings.pdf"))
 
     assert result.audit.passed, result.audit.failures
     assert {chunk.section for chunk in result.chunks} == {"Findings"}
     assert all(len(chunk.text) <= 2000 for chunk in result.chunks)
-    assert [c.pdf_page for c in result.chunks] == sorted(c.pdf_page for c in result.chunks)
-    assert len([c for c in result.chunks if c.pdf_page == 1]) > 1
-    assert [c.chunk_id for c in result.chunks if c.pdf_page == 2] == ["findings#p2-1"]
-    assert result.chunks[-1].text.startswith("Mangroves")
+    first, second = result.chunks
+    assert (first.pdf_page, first.pdf_page_end) == (1, 1)
+    assert (second.pdf_page, second.pdf_page_end) == (1, 2)
+    assert second.chunk_id == "findings#p1-2"
+    assert second.text.startswith("Region 3 forests")
+    assert "Mangroves store large amounts of carbon" in second.text
