@@ -34,7 +34,7 @@ that file). `getAgent()` returns the HTTP client (`src/lib/httpAgent.ts`) or the
 
 | Call | API | Notes |
 |---|---|---|
-| `ask(request, signal)` | `POST /chat` | Server-sent events (`src/lib/sse.ts`). The Stop button aborts `signal`. |
+| `ask(request, signal)` | `POST /chat` | Server-sent events (`src/lib/sse.ts`). The Stop button aborts `signal`. Modes: `quick`, `deep`, `factcheck`, `explore`, `visuals`. |
 | `warmup(sessionId)` | `POST /warm` | Starts the chat's agent at the first keystroke (cold start 6-9 s). **The first question must wait for an in-flight warm-up** (see `warming` in `ChatApp.tsx`), or the runtime rejects it. |
 | `sourceDownloadUrl(source)` | `GET /sources/download?key=raw/…pdf` | 5-minute presigned link to the stored PDF, served inline as `application/pdf`. |
 | `translate(paragraphs, language, sessionId)` | `POST /chat` with "Now in Spanish" | Follow-up on the same session; returns every translated section. |
@@ -138,24 +138,41 @@ styles are in `src/app/globals.css` (from the AskWRI design system artifact).
   (both cited, each citing at least two papers) and **What none of them covers** (uncited).
   Matrix as CSV; everything in the Markdown export. Types: `Answer.lens` + `Answer.dossier`.
 
-### 4.9 Languages
+### 4.9 Visuals and Explore
+- **Visuals** button on every answer opens the side panel's Visuals tab (request mode
+  `visuals`, sending the answer's paragraphs and sources back; event `visuals`):
+  - **Key figures**: up to 4 cards, each value quoted word for word from a cited passage.
+  - **Publication timeline**: the answer's documents (filled dots) and documents linked to
+    them by citations (hollow), on a year axis; undated ones listed underneath.
+  - **Citation flow** (the researcher's citation graph): choose a report; it shows the reports
+    it **builds on** and those **built on it** in AskWRI's collection, coloured by relation
+    (updates, uses data or method, extends, contrasts, supports, mentions), and the answer
+    sentence it supports. Clicking a linked report shows the citing sentence and opens that
+    page of the citing PDF. Links come only from DOIs, wri.org addresses or titles printed in
+    the documents.
+  - **Evidence matrix**: the lens or dossier matrix when the answer has one.
+- **Explore** (third composer option): a topic, no answer: the same visuals over the topic's
+  best publications, their sources, and "Ask about this".
+- Source rows say "cited by N in AskWRI" when other documents cite them (`Source.citedBy`).
+
+### 4.10 Languages
 - Language selector (English, Español, Português, Bahasa Indonesia). With English selected, a
   question asked in Spanish is answered in Spanish. Translated answers are labelled
   **Machine-translated**; sources keep their original titles and passages. Translate menu and
   "Show original" on each answer.
 
-### 4.10 Declines and errors
+### 4.11 Declines and errors
 - A decline shows the message, what was searched (chips), closest related WRI work, Rephrase
   and Copy what was searched. A failed run shows the API's message.
 
-### 4.11 Downloads
+### 4.12 Downloads
 - Answer/report as Markdown (includes scope, lens or evidence matrix, dossier comparisons,
   implications, limits, questions), sources as CSV/BibTeX, copy as Markdown. Fact-check
   report as Markdown. Evidence matrix as CSV.
 
 ## 5. Coming next (design room for them)
-- **Citation graph / research lineage** once older documents are loaded: "Cited by N in this
-  collection" in the source view and a lineage timeline tab.
+- **How WRI's thinking evolved / current position** in Deep research (periods, cited shifts,
+  freshness note) and a reading list; the timeline will show the periods when present.
 
 ## 6. Checks to keep green
 - `npm test`, `npm run lint`, `npm run build`.

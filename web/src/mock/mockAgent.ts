@@ -7,7 +7,7 @@
  * getAgent() in src/lib/agent.ts to the real client.
  */
 
-import type { AgentClient, AgentEvent, AskRequest, Answer, CheckedClaim, Reader, ReportFormat, Verdict } from "../lib/agent.ts";
+import type { AgentClient, AgentEvent, AskRequest, Answer, CheckedClaim, Reader, ReportFormat, Verdict, Visuals } from "../lib/agent.ts";
 import { QUICK_PARAGRAPHS, REPORT_POINTS, SOURCES, SUB_QUESTIONS, THIN_EVIDENCE } from "./fixtures.ts";
 
 const ON_TOPIC = /\b(bus|buses|transit|transport|electri\w*|mobility|fleets?|brt|briefing|talking points)\b/i;
@@ -171,6 +171,47 @@ async function* factCheckRun(request: AskRequest, signal: AbortSignal): AsyncGen
   };
 }
 
+// Visuals from the fixture sources: a timeline, one citation link each way, and two figures.
+function mockVisuals(): Visuals {
+  const [first, second, third] = SOURCES;
+  const link = (from: typeof first, relation: "extends" | "updates") => ({
+    docId: from.docId, title: from.title, year: from.year, relation, aspect: "fleet cost estimates",
+    sentence: `As ${from.title} showed, operators could run electric buses on existing routes.`,
+    page: 12, pdfKey: null, confidence: 0.8,
+  });
+  return {
+    keyFigures: {
+      caption: "Figures quoted word for word from the cited WRI passages",
+      cards: [
+        { value: "three", unit: "cities", what: "piloted battery-electric buses on existing routes", place: "Latin America", year: "2019", marker: 1, docId: first.docId, title: first.title },
+        { value: "half", unit: "", what: "of the 2019 cost gap, in updated estimates", place: "", year: "2022", marker: 5, docId: "costs", title: "Zero-emission bus costs" },
+      ],
+    },
+    timeline: {
+      caption: `${SOURCES.length} dated WRI publications, 2006 to 2022`,
+      newest: SOURCES[4].docId,
+      undated: [],
+      points: SOURCES.map((s, i) => ({ docId: s.docId, title: s.title, year: s.year, pubType: s.pubType, citedInAnswer: i < 4, citedBy: i === 2 ? 2 : 0 })),
+    },
+    citationFlow: {
+      caption: "2 of 4 reports link to other reports in AskWRI's collection",
+      defaultFocus: first.docId,
+      focusOptions: [first, second].map((s) => ({ docId: s.docId, title: s.title, year: s.year, markers: [s.marker] })),
+      flows: {
+        [first.docId]: { focus: { docId: first.docId, title: first.title, year: first.year, markers: [1] }, cites: [link(third, "extends")], moreCites: 0, citedBy: [link(second, "updates")], moreCitedBy: 0, mainPoint: "Pilots showed that operators could run battery-electric buses on existing routes [1]." },
+        [second.docId]: { focus: { docId: second.docId, title: second.title, year: second.year, markers: [2] }, cites: [link(first, "updates")], moreCites: 0, citedBy: [], moreCitedBy: 0, mainPoint: null },
+      },
+    },
+  };
+}
+
+async function* visualsRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  yield { type: "step", id: "visuals", label: "Drawing the timeline, citation flow and key figures", status: "now" };
+  await pause(700, signal);
+  yield { type: "step", id: "visuals", label: "Drew the visuals", status: "done" };
+  yield { type: "visuals", visuals: mockVisuals(), ...(request.mode === "explore" ? { sources: SOURCES, topic: request.question } : {}) };
+}
+
 async function* quickRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
   const startedAt = Date.now();
   yield { type: "step", id: "search", label: "Searching WRI publications", status: "now" };
@@ -257,6 +298,7 @@ export const mockAgent: AgentClient = {
     }
     if (!ON_TOPIC.test(request.question)) return declineRun(request, signal);
     if (request.mode === "factcheck") return factCheckRun(request, signal);
+    if (request.mode === "visuals" || request.mode === "explore") return visualsRun(request, signal);
     return request.mode === "deep" ? deepRun(request, signal) : quickRun(request, signal);
   },
 

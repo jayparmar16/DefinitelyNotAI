@@ -1,6 +1,6 @@
 /** One question and everything the agent streamed back for it, as the UI keeps it. */
 
-import type { AgentEvent, Answer, Decline, FactCheck, Mode, StepStatus, Translation } from "@/lib/agent";
+import type { AgentEvent, Answer, Decline, FactCheck, Mode, Source, StepStatus, Translation, Visuals } from "@/lib/agent";
 
 export type Step = { id: string; label: string; detail?: string; status: StepStatus };
 
@@ -15,6 +15,9 @@ export type Turn = {
   outdated: { text: string; markers: number[] }[];
   answer: Answer | null;
   factcheck?: FactCheck | null; // a fact-checked draft instead of an answer
+  visuals?: Visuals | null; // infographics: asked for on an answer, or an Explore result
+  visualsLoading?: boolean;
+  exploreSources?: Source[]; // Explore: the topic's best publications (no answer)
   decline: Decline | null;
   error: string | null;
   translation: (Translation & { language: string; showOriginal: boolean }) | null;
@@ -62,6 +65,8 @@ export function applyEvent(turn: Turn, event: AgentEvent): Turn {
       return { ...turn, answer: event.answer, status: "done" };
     case "factcheck":
       return { ...turn, factcheck: event.factcheck, status: "done" };
+    case "visuals":
+      return { ...turn, visuals: event.visuals, exploreSources: event.sources ?? turn.exploreSources, status: "done" };
     case "decline":
       return { ...turn, decline: event.decline, status: "done" };
   }

@@ -45,7 +45,8 @@ export function Passage({ source }: { source: Source }) {
 /** "Type · year · office · p. 12", shared by the rows and the side panel. */
 export function sourceMeta(source: Source): string {
   const progress = source.pubType === "Working paper" ? " (in progress)" : "";
-  return `${source.pubType}${progress} · ${citationYear(source)} · ${source.office} · p. ${source.printedPage ?? source.page}`;
+  const cited = source.citedBy ? ` · cited by ${source.citedBy} in AskWRI` : "";
+  return `${source.pubType}${progress} · ${citationYear(source)} · ${source.office} · p. ${source.printedPage ?? source.page}${cited}`;
 }
 
 export function SourceCards(props: SourceCardsProps) {

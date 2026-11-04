@@ -441,3 +441,44 @@ a.aw-btn{text-decoration:none}
 /* A narrow composer (sidebar and panel both open) wraps its controls instead of squashing them */
 .aw-composer-row{flex-wrap:wrap;row-gap:var(--space-200)}
 .aw-toggle .sub{white-space:nowrap}
+
+/* Visuals: key figures, timeline, citation flow (kept quiet: colour only on dots and relations) */
+.aw-visuals{display:flex;flex-direction:column;gap:var(--space-500);padding:var(--space-400)}
+.aw-answer .aw-visuals{padding:0}
+.aw-visual h4{margin:0 0 2px;font-size:14px;line-height:20px}
+.aw-visual > .aw-meta{margin:0 0 var(--space-300)}
+.aw-figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--space-200)}
+.aw-figure{display:flex;flex-direction:column;gap:2px;text-align:left;padding:var(--space-300);border:var(--border-thin) solid var(--line);border-radius:var(--radius-500);background:var(--surface);font:inherit;color:inherit;cursor:pointer}
+.aw-figure:hover{border-color:var(--secondary-300)}
+.aw-figure .v{font-size:24px;line-height:28px;font-weight:700}
+.aw-figure .v small{font-size:13px;font-weight:600;color:var(--ink-muted)}
+.aw-figure .w{font-size:13px;line-height:18px}
+.aw-timeline svg{width:100%;height:auto;overflow:visible}
+.aw-timeline .axis{stroke:var(--neutral-500);stroke-width:1}
+.aw-timeline text{font-size:11px;fill:var(--ink-muted)}
+.aw-timeline .dot{fill:var(--surface);stroke:var(--secondary-500);stroke-width:2;cursor:pointer}
+.aw-timeline .dot.cited{fill:var(--secondary-600)}
+.aw-timeline-pick{margin:var(--space-200) 0 0;font-size:13px;line-height:20px;display:flex;flex-wrap:wrap;gap:var(--space-200);align-items:center}
+.aw-legend{display:flex;flex-wrap:wrap;gap:var(--space-200);align-items:center;margin-top:var(--space-200)}
+.aw-legend .dot{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid var(--secondary-500)}
+.aw-legend .dot.cited{background:var(--secondary-600)}
+.aw-flow-focus{display:flex;flex-wrap:wrap;gap:var(--space-100);margin-bottom:var(--space-300)}
+.aw-flow-focus .aw-chip{cursor:pointer;font:inherit;font-size:12px}
+.aw-flow-focus .aw-chip.on{background:var(--secondary-600);border-color:var(--secondary-600);color:#fff}
+.aw-flow-col{display:flex;flex-direction:column;align-items:stretch;gap:var(--space-100)}
+.aw-flow-row{display:flex;flex-wrap:wrap;gap:var(--space-200);align-items:center}
+.aw-flow-row .lbl,.aw-flow-point .lbl{font-size:11px;line-height:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-muted);width:100%}
+.aw-flow-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;max-width:220px;padding:var(--space-200) var(--space-300);border:var(--border-thin) solid var(--line);border-radius:var(--radius-500);background:var(--surface);font:inherit;text-align:left;cursor:pointer}
+.aw-flow-card .t{font-size:13px;line-height:18px;font-weight:600}
+.aw-flow-card.on,.aw-flow-card:hover{border-color:var(--control)}
+.aw-flow-arrow{align-self:center;color:var(--ink-muted);font-size:16px;line-height:16px}
+.aw-flow-focus-card{display:flex;flex-direction:column;gap:2px;padding:var(--space-300);border:var(--border-thick) solid var(--secondary-600);border-radius:var(--radius-500);background:var(--secondary-100)}
+.aw-flow-point{display:flex;flex-direction:column;gap:2px;padding:var(--space-300);border:var(--border-thin) dashed var(--line);border-radius:var(--radius-500);background:var(--surface);font:inherit;font-size:13px;line-height:20px;text-align:left;cursor:pointer}
+.aw-flow-detail{margin-top:var(--space-300);padding:var(--space-300);border-radius:var(--radius-300);background:var(--surface-sunken);font-size:13px;line-height:20px;display:flex;flex-direction:column;gap:var(--space-200);align-items:flex-start}
+.aw-flow-detail blockquote{margin:0;font-style:italic;color:var(--ink)}
+.aw-rel{font-size:11px;line-height:16px;font-weight:700;padding:1px 6px;border-radius:var(--radius-900);background:var(--neutral-300);color:var(--neutral-800)}
+.aw-rel.uses_data_or_method{background:#d9f2ee;color:#0b5e52}
+.aw-rel.updates{background:#ece3fb;color:#4b2a8c}
+.aw-rel.extends{background:var(--secondary-100);color:var(--secondary-700)}
+.aw-rel.contrasts{background:var(--error-100);color:var(--error-900);outline:1px dashed var(--error-500)}
+.aw-rel.supports{background:var(--success-100);color:var(--success-900)}

@@ -7,18 +7,19 @@
 
 import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "react";
 
-import type { LensResult, ReportFormat, Source } from "@/lib/agent";
+import type { FlowLink, LensResult, ReportFormat, Source } from "@/lib/agent";
 import { citationYear, pageLink } from "@/lib/citations";
 import { matrixCsv, saveFile } from "@/lib/exports";
 import { AnswerSections, VerifiedChip, readerName } from "./AnswerSections";
 import { LensTable } from "./LensTable";
+import { VisualsView } from "./Visuals";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
 import { PdfPage } from "./PdfPage";
 import { Passage, sourceMeta } from "./SourceCards";
 import { type Turn, shownAnswer } from "./turn";
 
-export type PanelTab = "report" | "sources" | number; // a number is an open source's marker
+export type PanelTab = "report" | "sources" | "visuals" | number; // a number is an open source's marker
 
 const FORMATS: { value: ReportFormat; name: string }[] = [
   { value: "talking-points", name: "Talking points" },
@@ -48,6 +49,7 @@ type SidePanelProps = {
   onFollowUp: (question: string) => void;
   /** A short-lived link to the stored PDF, or null when there is none (the mock). */
   pdfUrl: (source: Source) => Promise<string | null>;
+  onOpenPage: (link: FlowLink) => void;
 };
 
 function ResizeHandle({ width, onWidth }: { width: number; onWidth: (width: number) => void }) {
@@ -278,7 +280,8 @@ function SourceBar({ source, onPdf }: { source: Source; onPdf: (source: Source) 
 
 export function SidePanel(props: SidePanelProps) {
   const { turn, tab } = props;
-  const sources = turn.answer?.sources ?? turn.factcheck?.sources ?? [];
+  const sources = turn.answer?.sources ?? turn.factcheck?.sources ?? turn.exploreSources ?? [];
+  const hasVisuals = Boolean(turn.visuals || turn.visualsLoading) && turn.mode !== "explore";
   const deep = turn.mode === "deep";
   const openSource = typeof tab === "number" ? sources.find((source) => source.marker === tab) : undefined;
   const markers = sources.map((source) => source.marker);
@@ -296,6 +299,11 @@ export function SidePanel(props: SidePanelProps) {
         {deep && (
           <button role="tab" aria-selected={tab === "report"} className={tab === "report" ? "aw-tab on" : "aw-tab"} onClick={() => props.onTab("report")}>
             <Icon name="file" small /> Report
+          </button>
+        )}
+        {hasVisuals && (
+          <button role="tab" aria-selected={tab === "visuals"} className={tab === "visuals" ? "aw-tab on" : "aw-tab"} onClick={() => props.onTab("visuals")}>
+            <Icon name="layers" small /> Visuals
           </button>
         )}
         <button role="tab" aria-selected={tab === "sources"} className={tab === "sources" ? "aw-tab on" : "aw-tab"} onClick={() => props.onTab("sources")}>
@@ -338,6 +346,20 @@ export function SidePanel(props: SidePanelProps) {
 
       <div className="aw-panel-body" style={tab === "report" || openSource ? { padding: 0 } : undefined}>
         {tab === "report" && <ReportView {...props} />}
+        {tab === "visuals" && (
+          turn.visuals ? (
+            <VisualsView
+              visuals={turn.visuals}
+              lens={turn.answer?.lens}
+              matrix={Boolean(turn.answer?.dossier)}
+              activeMarker={props.activeMarker}
+              onMarker={props.onMarker}
+              onOpenPage={props.onOpenPage}
+            />
+          ) : (
+            <div className="aw-empty">Drawing the timeline, citation flow and key figures…</div>
+          )
+        )}
         {tab === "sources" && (
           sources.length === 0 ? (
             <div className="aw-empty">Sources appear here once the answer is ready.</div>

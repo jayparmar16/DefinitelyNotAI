@@ -24,6 +24,7 @@ type AnswerCardProps = {
   onOpenReport: () => void;
   onReader: (reader: Reader) => void;
   onFollowUp: (question: string) => void;
+  onVisuals: () => void;
 };
 
 export function AnswerCard(props: AnswerCardProps) {
@@ -113,6 +114,9 @@ export function AnswerCard(props: AnswerCardProps) {
             }
           </Menu>
         )}
+        <button className="aw-btn sm" onClick={props.onVisuals} title="Timeline, citation flow and key figures">
+          <Icon name="layers" small /> Visuals
+        </button>
         {deep ? (
           <button className="aw-btn sm" onClick={props.onOpenReport}>
             <Icon name="file" small /> Open report

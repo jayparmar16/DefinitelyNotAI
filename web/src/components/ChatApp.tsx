@@ -7,7 +7,7 @@
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
-import { type Audience, type Filters, type Lens, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
+import { type Audience, type Filters, type FlowLink, type Lens, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
 import { type SavedChat, readChats, upsertChat, writeChats } from "@/lib/chats";
 import { unmatchedMarkers } from "@/lib/citations";
 import { answerMarkdown, formatCitation, saveFile, sourcesBibtex, sourcesCsv } from "@/lib/exports";
@@ -15,8 +15,10 @@ import { factCheckMarkdown } from "@/lib/factcheck";
 import { AnswerCard } from "./AnswerCard";
 import { AppHeader, type DownloadChoice, LANGUAGES } from "./AppHeader";
 import { ChatSidebar } from "./ChatSidebar";
-import { Composer } from "./Composer";
+import { Composer, type Tool } from "./Composer";
 import { FactCheckCard } from "./FactCheckCard";
+import { Icon } from "./Icon";
+import { VisualsView } from "./Visuals";
 import { DeclineCard, OutdatedFlag } from "./Feedback";
 import { ProgressTrace } from "./ProgressTrace";
 import { type PanelTab, SidePanel } from "./SidePanel";
@@ -48,7 +50,7 @@ export function ChatApp() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [deep, setDeep] = useState(false);
-  const [checking, setChecking] = useState(false);
+  const [tool, setTool] = useState<Tool>("ask");
   const [lens, setLens] = useState<Lens | null>(null);
   const [language, setLanguage] = useState("en");
   const [audience, setAudience] = useState<Audience>("auto");
@@ -140,7 +142,7 @@ export function ChatApp() {
       const request = {
         question, mode, language, audience: reader, format: reportFormat, filters, sessionId,
         deep: mode === "factcheck" && deep,
-        lens: mode === "factcheck" ? null : lens,
+        lens: mode === "quick" || mode === "deep" ? lens : null,
       };
       for await (const event of agent.ask(request, controller.signal)) {
         if (event.type === "answer") {
@@ -169,7 +171,36 @@ export function ChatApp() {
     const question = draft.trim();
     if (!question || running) return;
     setDraft("");
-    ask(question, checking ? "factcheck" : deep ? "deep" : "quick");
+    ask(question, tool === "factcheck" ? "factcheck" : tool === "explore" ? "explore" : deep ? "deep" : "quick");
+  }
+
+  // Visuals for an answer already shown: the agent gets the answer back and draws them.
+  async function loadVisuals(turn: Turn) {
+    setPanel({ turnId: turn.id, tab: "visuals", openDocs: [] });
+    if (turn.visuals || turn.visualsLoading || !turn.answer) return;
+    updateTurn(turn.id, (current) => ({ ...current, visualsLoading: true }));
+    try {
+      const agent = await getAgent();
+      const request = {
+        question: turn.question, mode: "visuals" as const, language, audience, format, filters, sessionId,
+        answer: { paragraphs: turn.answer.paragraphs, sources: turn.answer.sources },
+      };
+      for await (const event of agent.ask(request, new AbortController().signal)) {
+        if (event.type === "visuals") updateTurn(turn.id, (current) => ({ ...current, visuals: event.visuals }));
+      }
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Visuals failed");
+    } finally {
+      updateTurn(turn.id, (current) => ({ ...current, visualsLoading: false }));
+    }
+  }
+
+  // A citation link's sentence is in the citing report: open that PDF at the page.
+  async function openLinkPage(link: FlowLink) {
+    const agent = await getAgent();
+    const url = await agent.sourceDownloadUrl({ pdfKey: link.pdfKey } as Source);
+    if (url) window.open(`${url}#page=${link.page}`, "_blank", "noreferrer");
+    else setToast("Opening pages needs the API (presigned link from the corpus bucket)");
   }
 
   // A suggested follow-up goes into the box, not straight to the agent, so it can be edited first.
@@ -353,6 +384,7 @@ async function downloadPdf(source: Source) {
                             }}
                             onOpenReport={() => setPanel({ turnId: turn.id, tab: "report", openDocs: [] })}
                             onReader={(reader) => ask(turn.question, turn.mode, format, reader)}
+                            onVisuals={() => loadVisuals(turn)}
                             onFollowUp={followUp}
                           />
                           <SourceCards
@@ -365,6 +397,47 @@ async function downloadPdf(source: Source) {
                             onSources={(choice) => download(turn, choice)}
                           />
                         </>
+                      )}
+                      {turn.mode === "explore" && turn.visuals && (
+                        <div className="aw-answer">
+                          <div className="aw-answer-meta">
+                            <span className="aw-mode-chip"><Icon name="layers" small /> Explore</span>
+                            <span>{turn.exploreSources?.length ?? 0} publications · no answer written</span>
+                          </div>
+                          <VisualsView
+                            visuals={turn.visuals}
+                            activeMarker={activeMarker}
+                            onMarker={onMarker}
+                            onOpenPage={openLinkPage}
+                          />
+                          <div className="aw-actions">
+                            <button
+                              className="aw-btn sm"
+                              onClick={() => {
+                                setTool("ask");
+                                setDraft(`What does WRI say about ${turn.question}?`);
+                                input.current?.focus();
+                              }}
+                            >
+                              Ask about this
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {turn.mode === "explore" && turn.exploreSources && (
+                        <SourceCards
+                          turnId={turn.id}
+                          sources={turn.exploreSources}
+                          activeMarker={activeMarker}
+                          onOpen={onMarker}
+                          onPdf={downloadPdf}
+                          onCite={(source) => copy(formatCitation(source), "Citation")}
+                          onSources={(choice) => {
+                            const sources = turn.exploreSources!;
+                            if (choice === "csv") saveFile("explore-sources.csv", sourcesCsv(sources), "text/csv");
+                            else saveFile("explore-sources.bib", sourcesBibtex(sources), "application/x-bibtex");
+                          }}
+                        />
                       )}
                       {turn.factcheck && (
                         <>
@@ -420,8 +493,8 @@ async function downloadPdf(source: Source) {
             onDraft={setDraft}
             deep={deep}
             onDeep={setDeep}
-            checking={checking}
-            onChecking={setChecking}
+            tool={tool}
+            onTool={setTool}
             lens={lens}
             onLens={setLens}
             filters={filters}
@@ -440,6 +513,7 @@ async function downloadPdf(source: Source) {
             format={format}
             onFollowUp={followUp}
             pdfUrl={pdfUrl}
+            onOpenPage={openLinkPage}
             languageName={nameOf(
               panelTurn.translation && !panelTurn.translation.showOriginal
                 ? panelTurn.translation.language

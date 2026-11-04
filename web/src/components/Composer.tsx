@@ -20,14 +20,22 @@ const PUB_TYPES = [
   "Expert note",
 ];
 
+export type Tool = "ask" | "factcheck" | "explore";
+
+const TOOLS: { value: Tool; name: string; placeholder: string }[] = [
+  { value: "ask", name: "Ask", placeholder: 'Ask about WRI research, e.g. "How should civil society track adaptation finance?"' },
+  { value: "factcheck", name: "Fact-check", placeholder: "Paste a draft, email or proposal: each claim is checked against WRI's publications" },
+  { value: "explore", name: "Explore", placeholder: "A topic to explore, e.g. adaptation finance: timeline, citation links and key figures" },
+];
+
 type ComposerProps = {
   inputRef: RefObject<HTMLTextAreaElement | null>;
   draft: string;
   onDraft: (text: string) => void;
   deep: boolean;
   onDeep: (on: boolean) => void;
-  checking: boolean; // fact-check a pasted draft instead of asking a question
-  onChecking: (on: boolean) => void;
+  tool: Tool; // ask a question, fact-check a pasted draft, or explore a topic's visuals
+  onTool: (tool: Tool) => void;
   lens: Lens | null;
   onLens: (lens: Lens | null) => void;
   filters: Filters;
@@ -75,7 +83,7 @@ export function Composer(props: ComposerProps) {
             onCancel={() => setEditingLens(false)}
           />
         )}
-        {props.lens && !editingLens && !props.checking && (
+        {props.lens && !editingLens && props.tool === "ask" && (
           <LensBar lens={props.lens} onEdit={() => setEditingLens(true)} onClear={() => props.onLens(null)} />
         )}
         <label className="visually-hidden" htmlFor="aw-question">Your question</label>
@@ -87,39 +95,44 @@ export function Composer(props: ComposerProps) {
           value={draft}
           onChange={(event) => props.onDraft(event.target.value)}
           onKeyDown={onKey}
-          placeholder={
-            props.checking
-              ? "Paste a draft, email or proposal: each claim is checked against WRI's publications"
-              : 'Ask about WRI research, e.g. "What has WRI published on electric buses in Latin America?"'
-          }
+          placeholder={TOOLS.find((tool) => tool.value === props.tool)!.placeholder}
         />
         <div className="aw-composer-row">
           <div className="aw-seg" role="radiogroup" aria-label="What to do">
-            <button type="button" role="radio" aria-checked={!props.checking} className={props.checking ? "" : "on"} onClick={() => props.onChecking(false)}>
-              Ask
-            </button>
-            <button type="button" role="radio" aria-checked={props.checking} className={props.checking ? "on" : ""} onClick={() => props.onChecking(true)}>
-              Fact-check
-            </button>
+            {TOOLS.map((tool) => (
+              <button
+                key={tool.value}
+                type="button"
+                role="radio"
+                aria-checked={props.tool === tool.value}
+                className={props.tool === tool.value ? "on" : ""}
+                onClick={() => props.onTool(tool.value)}
+              >
+                {tool.name}
+              </button>
+            ))}
           </div>
+          {props.tool !== "explore" && (
           <button
             type="button"
             className={props.deep ? "aw-toggle on" : "aw-toggle"}
             role="switch"
             aria-checked={props.deep}
             onClick={() => props.onDeep(!props.deep)}
+            title={
+              props.tool === "factcheck"
+                ? "Check harder: more passages per claim, and a second search for unsettled claims"
+                : "Search wider over several rounds and build a report (about 30-60 s)"
+            }
           >
             <span className="aw-track" />
             Deep research
-            <span className="sub">
-              {props.checking
-                ? props.deep ? "more passages per claim, searches again" : "off: standard check"
-                : props.deep ? "searches wider, builds a report" : "off: Quick answer"}
-            </span>
+
           </button>
+          )}
           <span className="spacer" />
 
-          {!props.checking && !props.lens && !editingLens && (
+          {props.tool === "ask" && !props.lens && !editingLens && (
             <button type="button" className="aw-btn ghost sm" onClick={() => setEditingLens(true)} title="Summarise every paper for your goal and aspects">
               <Icon name="filter" small /> Lens
             </button>
@@ -172,8 +185,8 @@ export function Composer(props: ComposerProps) {
           </Menu>
 
           {/* Voice input is a to-do in the design doc; the mic stays hidden until it ships. */}
-          <button type="submit" className="aw-btn brand icon" disabled={!canSend} title={props.checking ? "Check" : "Ask"}>
-            <Icon name="send" label={props.checking ? "Check" : "Ask"} />
+          <button type="submit" className="aw-btn brand icon" disabled={!canSend} title={TOOLS.find((tool) => tool.value === props.tool)!.name}>
+            <Icon name="send" label={TOOLS.find((tool) => tool.value === props.tool)!.name} />
           </button>
         </div>
       </form>

@@ -36,9 +36,11 @@ export function LensEditor({ lens, onApply, onCancel }: LensEditorProps) {
   const [aspects, setAspects] = useState<string[]>(lens?.aspects ?? []);
   const [next, setNext] = useState("");
 
+  // Commas separate aspects, whether typed one at a time or pasted as a list.
+  const split = (text: string) => text.split(",").map((a) => a.trim()).filter(Boolean);
+  const merged = (more: string[]) => [...new Set([...aspects, ...more])].slice(0, MAX_ASPECTS);
   const add = () => {
-    const aspect = next.trim();
-    if (aspect && aspects.length < MAX_ASPECTS && !aspects.includes(aspect)) setAspects([...aspects, aspect]);
+    setAspects(merged(split(next)));
     setNext("");
   };
   const onAspectKey = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -47,14 +49,16 @@ export function LensEditor({ lens, onApply, onCancel }: LensEditorProps) {
       add();
     }
   };
-  const pending = next.trim() && aspects.length < MAX_ASPECTS ? [next.trim()] : [];
-  const ready = goal.trim() && aspects.length + pending.length > 0;
+  const ready = goal.trim() && merged(split(next)).length > 0;
 
   return (
     <div className="aw-lens-editor" role="group" aria-label="Research lens">
       <div className="aw-lens-h">
         <b>Research lens</b>
-        <span className="aw-meta">Every paper is summarised for your goal and aspects, and says when it doesn&apos;t discuss one.</span>
+        <span className="aw-meta">
+          Each answer then gets a table: every paper it uses, summarised for each aspect (or &ldquo;not
+          discussed&rdquo;). Separate aspects with commas.
+        </span>
       </div>
       <label className="aw-lens-field">
         <span>Your goal</span>
@@ -93,7 +97,7 @@ export function LensEditor({ lens, onApply, onCancel }: LensEditorProps) {
           type="button"
           className="aw-btn sm brand"
           disabled={!ready}
-          onClick={() => onApply({ goal: goal.trim(), aspects: [...aspects, ...pending].slice(0, MAX_ASPECTS) })}
+          onClick={() => onApply({ goal: goal.trim(), aspects: merged(split(next)) })}
         >
           Use this lens
         </button>

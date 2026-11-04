@@ -5,7 +5,7 @@
  * array, and Deep research streams its progress as events so steps and sources show early.
  */
 
-export type Mode = "quick" | "deep" | "factcheck";
+export type Mode = "quick" | "deep" | "factcheck" | "explore" | "visuals";
 /** Who an answer is written for. */
 export type Reader = "researcher" | "policymaker" | "partnerships";
 /** "auto": nobody picks a persona when typing, so the agent infers the reader from the question. */
@@ -27,6 +27,7 @@ export type AskRequest = {
   sessionId: string; // AgentCore Memory session, so follow-ups reuse gathered evidence
   deep?: boolean; // fact-check only: more passages per claim, and a second search for unsettled ones
   lens?: Lens | null; // the research lens, applied to every paper the answer uses
+  answer?: Pick<Answer, "paragraphs" | "sources">; // mode "visuals": the answer to draw
 };
 
 /** A researcher's goal and the 1-4 aspects every paper is summarised for. */
@@ -62,6 +63,7 @@ export type Source = {
   doi: string | null;
   authors: string[];
   pdfKey?: string | null; // stored copy in the corpus bucket, for the download link
+  citedBy?: number; // how many documents in AskWRI's collection cite this one
   why?: {
     by_meaning: boolean;
     by_keyword: boolean;
@@ -129,6 +131,36 @@ export type FactCheck = {
   elapsedSeconds: number;
 };
 
+/** Infographics for an answer or an Explore topic. A visual with too little data is empty. */
+export type Empty = { empty: true; reason: string };
+export type TimelinePoint = {
+  docId: string; title: string; year: number | null; pubType: string | null;
+  citedInAnswer: boolean; citedBy: number;
+};
+export type Timeline = { points: TimelinePoint[]; undated: TimelinePoint[]; newest: string; caption: string };
+export type Relation = "updates" | "uses_data_or_method" | "extends" | "contrasts" | "supports" | "background";
+export type FlowLink = {
+  docId: string; title: string; year: number | null; relation: Relation; aspect: string;
+  sentence: string; page: number | null; pdfKey: string | null; confidence: number | null;
+};
+export type Flow = {
+  focus: { docId: string; title: string; year: number | null; markers: number[] };
+  cites: FlowLink[]; moreCites: number; citedBy: FlowLink[]; moreCitedBy: number;
+  mainPoint: string | null;
+};
+export type CitationFlow = {
+  focusOptions: Flow["focus"][]; defaultFocus: string | null; flows: Record<string, Flow>; caption: string;
+};
+export type KeyFigure = {
+  value: string; unit: string; what: string; place: string; year: string;
+  marker: number; docId: string; title: string;
+};
+export type Visuals = {
+  timeline?: Timeline | Empty;
+  citationFlow?: CitationFlow;
+  keyFigures?: { cards: KeyFigure[]; caption: string } | Empty;
+};
+
 export type StepStatus = "done" | "now" | "next";
 
 /** Streamed while the agent works. A run ends with exactly one "answer" or "decline". */
@@ -138,6 +170,7 @@ export type AgentEvent =
   | { type: "outdated-figure"; text: string; markers: number[] }
   | { type: "answer"; answer: Answer }
   | { type: "factcheck"; factcheck: FactCheck }
+  | { type: "visuals"; visuals: Visuals; sources?: Source[]; topic?: string }
   | { type: "decline"; decline: Decline };
 
 /** A translated answer: every text the reader sees, in the target language. */
