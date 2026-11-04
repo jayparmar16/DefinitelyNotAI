@@ -268,3 +268,30 @@ button:disabled{cursor:not-allowed;opacity:.55}
 }
 a.aw-btn{text-decoration:none}
 .aw-user{scroll-margin-top:var(--space-400)}
+
+/* Panel tabs: one row that scrolls sideways; tabs never shrink into each other. */
+.aw-panel-tabs{align-items:center;gap:var(--space-100);padding:0 var(--space-200) 0 var(--space-300)}
+.aw-tablist{display:flex;align-items:stretch;height:100%;flex:1;min-width:0;overflow-x:auto;scrollbar-width:thin}
+.aw-tablist .aw-tab{flex:none;height:100%}
+.aw-tablist div.aw-tab{max-width:220px;padding-right:var(--space-200)}
+.aw-tab .t{border:0;background:none;padding:0;font:inherit;font-weight:600;color:inherit;cursor:pointer;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aw-tab .x{flex:none;line-height:1;padding:2px 4px;border-radius:var(--radius-300)}
+.aw-tab .x:hover{background:var(--surface-sunken)}
+.aw-panel-close{flex:none}
+
+/* Tidier panel bar and cards on narrow panels and phones. */
+.aw-panel-bar{flex-wrap:wrap;row-gap:var(--space-100);white-space:normal}
+.aw-panel-bar .spacer{min-width:var(--space-200)}
+.aw-panel-foot{flex-wrap:wrap;row-gap:var(--space-100);white-space:normal}
+.aw-card-top > div{min-width:0}
+.aw-card-title{overflow-wrap:anywhere}
+.aw-answer-meta .aw-verified,.aw-answer-meta .aw-mode-chip{flex:none}
+@media (max-width: 1000px) {
+  .aw-panel{width:min(100vw, var(--panel-width, var(--side-panel-width)))}
+}
+@media (max-width: 640px) {
+  .aw-answer{padding:var(--space-400)}
+  .aw-actions .aw-btn{flex:1 1 auto;justify-content:center}
+  .aw-panel{width:100vw}
+  .aw-tablist div.aw-tab{max-width:160px}
+}

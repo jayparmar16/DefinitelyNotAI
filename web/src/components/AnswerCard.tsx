@@ -47,7 +47,7 @@ export function AnswerCard(props: AnswerCardProps) {
 
       {answer.report && (
         <>
-          <h3 style={{ margin: "0 0 4px", fontSize: 20, lineHeight: "28px" }}>{answer.report.title}</h3>
+          <h3 style={{ margin: "0 0 4px", fontSize: 20, lineHeight: "28px" }}>{(showTranslation && translation.report?.title) || answer.report.title}</h3>
           <div className="aw-meta" style={{ marginBottom: 12 }}>{answer.report.builtFrom}</div>
         </>
       )}

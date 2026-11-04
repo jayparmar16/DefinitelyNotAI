@@ -44,12 +44,22 @@ export function ChatApp() {
   const [active, setActive] = useState<{ turnId: string; marker: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
+  const warmed = useRef<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
   const running = turns.some((turn) => turn.status === "running");
   const lastAnswered = [...turns].reverse().find((turn) => turn.answer);
   const panelTurn = panel ? turns.find((turn) => turn.id === panel.turnId) : undefined;
+
+  // Start this conversation's agent at the first keystroke: a new session's runtime takes 6-9 s
+  // to start, and that time passes while the user is still typing.
+  useEffect(() => {
+    if (!draft.trim() || warmed.current === sessionId) return;
+    warmed.current = sessionId;
+    // A failed warm-up only means the first answer starts cold; the question itself still works.
+    getAgent().then((agent) => agent.warmup(sessionId)).catch((error) => console.warn(error));
+  }, [draft, sessionId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -156,12 +166,12 @@ export function ChatApp() {
     const answer = turn.answer!;
     const texts = answer.report?.keyPoints ?? answer.paragraphs;
     const agent = await getAgent();
-    const paragraphs = await agent.translate(texts, target, sessionId);
+    const { paragraphs, report } = await agent.translate(texts, target, sessionId);
     if (paragraphs.every((text, i) => text === texts[i])) {
       setToast(usingMock ? "The mock agent only has Spanish translations" : "No translation returned");
       return;
     }
-    updateTurn(turn.id, (current) => ({ ...current, translation: { language: target, paragraphs, showOriginal: false } }));
+    updateTurn(turn.id, (current) => ({ ...current, translation: { language: target, paragraphs, report, showOriginal: false } }));
   }
 
   function download(turn: Turn, choice: DownloadChoice) {
@@ -296,7 +306,11 @@ export function ChatApp() {
             width={panelWidth}
             audience={audience}
             format={format}
-            languageName={nameOf(panelTurn.answer?.language ?? language)}
+            languageName={nameOf(
+              panelTurn.translation && !panelTurn.translation.showOriginal
+                ? panelTurn.translation.language
+                : panelTurn.answer?.language ?? language,
+            )}
             onTab={(tab) => setPanel({ ...panel, tab })}
             onCloseDoc={closeDoc}
             onMarker={(marker) => openMarker(panelTurn.id, marker)}

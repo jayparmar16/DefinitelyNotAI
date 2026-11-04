@@ -100,14 +100,16 @@ function ReportView(props: SidePanelProps) {
     );
   }
   const authors = [...new Set(turn.answer!.sources.flatMap((source) => source.authors))];
-  const translation = turn.translation && !turn.translation.showOriginal ? turn.translation.paragraphs : null;
+  const shown = turn.translation && !turn.translation.showOriginal ? turn.translation : null;
+  const translation = shown ? shown.paragraphs : null;
+  const translatedReport = shown?.report ?? null;
   return (
     <div className="aw-report">
       <div className="aw-meta">
         Briefing · for {AUDIENCE_NAMES[props.audience]} · {props.languageName}
         {(turn.answer!.machineTranslated || translation) && <> · <span className="aw-mt">Machine-translated</span></>}
       </div>
-      <h2>{report.title}</h2>
+      <h2>{translatedReport?.title ?? report.title}</h2>
       <div className="aw-meta">{report.builtFrom}</div>
       <h4>Key points</h4>
       <ul>
@@ -124,7 +126,7 @@ function ReportView(props: SidePanelProps) {
       ))}
       <h4>Where the evidence is thin</h4>
       <ul>
-        {report.thinEvidence.map((point) => (
+        {(translatedReport?.thinEvidence ?? report.thinEvidence).map((point) => (
           <li key={point}>{point}</li>
         ))}
       </ul>
@@ -198,7 +200,8 @@ export function SidePanel(props: SidePanelProps) {
   return (
     <aside className="aw-panel">
       <ResizeHandle width={props.width} onWidth={props.onWidth} />
-      <div className="aw-panel-tabs" role="tablist">
+      <div className="aw-panel-tabs">
+        <div className="aw-tablist" role="tablist">
         {deep && (
           <button role="tab" aria-selected={tab === "report"} className={tab === "report" ? "aw-tab on" : "aw-tab"} onClick={() => props.onTab("report")}>
             <Icon name="file" small /> Report
@@ -212,15 +215,15 @@ export function SidePanel(props: SidePanelProps) {
           if (!source) return null;
           return (
             <div key={marker} className={tab === marker ? "aw-tab on" : "aw-tab"}>
-              <button role="tab" aria-selected={tab === marker} className="t" style={{ border: 0, background: "none", padding: 0, fontWeight: 600, color: "inherit" }} onClick={() => props.onTab(marker)}>
+              <button role="tab" aria-selected={tab === marker} className="t" title={source.title} onClick={() => props.onTab(marker)}>
                 [{marker}] {source.title}
               </button>
               <button className="x" onClick={() => props.onCloseDoc(marker)} aria-label={`Close ${source.title}`}>×</button>
             </div>
           );
         })}
-        <span className="spacer" />
-        <button className="aw-btn ghost icon" onClick={props.onClose} title="Close panel">
+        </div>
+        <button className="aw-btn ghost icon aw-panel-close" onClick={props.onClose} title="Close panel">
           <Icon name="close" small label="Close panel" />
         </button>
       </div>

@@ -1,6 +1,6 @@
 /** One question and everything the agent streamed back for it, as the UI keeps it. */
 
-import type { AgentEvent, Answer, Decline, Mode, StepStatus } from "@/lib/agent";
+import type { AgentEvent, Answer, Decline, Mode, Report, StepStatus } from "@/lib/agent";
 
 export type Step = { id: string; label: string; detail?: string; status: StepStatus };
 
@@ -16,7 +16,7 @@ export type Turn = {
   answer: Answer | null;
   decline: Decline | null;
   error: string | null;
-  translation: { language: string; paragraphs: string[]; showOriginal: boolean } | null;
+  translation: { language: string; paragraphs: string[]; report: Report | null; showOriginal: boolean } | null;
 };
 
 export function newTurn(id: string, question: string, mode: Mode): Turn {

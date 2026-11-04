@@ -87,13 +87,18 @@ export type AgentEvent =
   | { type: "answer"; answer: Answer }
   | { type: "decline"; decline: Decline };
 
+/** A translated answer: its texts and, for a report, the translated report. */
+export type Translation = { paragraphs: string[]; report: Report | null };
+
 export type AgentClient = {
   /** Streams events for one question; stops early when `signal` aborts (the Stop button). */
   ask(request: AskRequest, signal: AbortSignal): AsyncIterable<AgentEvent>;
   /** A short-lived (5 minute) download link for the stored PDF, or null if there is none. */
   sourceDownloadUrl(source: Source): Promise<string | null>;
   /** The session's last answer machine-translated, with numbers checked by the agent. */
-  translate(paragraphs: string[], language: string, sessionId: string): Promise<string[]>;
+  translate(paragraphs: string[], language: string, sessionId: string): Promise<Translation>;
+  /** Start the session's agent while the user is still typing, so the first answer is faster. */
+  warmup(sessionId: string): Promise<void>;
 };
 
 const apiUrl = process.env.NEXT_PUBLIC_ASKWRI_API_URL;

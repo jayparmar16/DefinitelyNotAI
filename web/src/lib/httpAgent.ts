@@ -49,7 +49,14 @@ export function httpAgent(baseUrl: string, apiKey: string): AgentClient {
         if (event.type === "decline") throw new Error(event.decline.message);
       }
       if (!answer) throw new Error("No translation came back");
-      return answer.report?.keyPoints ?? answer.paragraphs;
+      return { paragraphs: answer.report?.keyPoints ?? answer.paragraphs, report: answer.report };
+    },
+
+    async warmup(sessionId) {
+      const response = await fetch(`${base}/warm`, {
+        method: "POST", headers, body: JSON.stringify({ sessionId }),
+      });
+      if (!response.ok) throw new Error(`Warm-up failed (${response.status})`);
     },
   };
 }
