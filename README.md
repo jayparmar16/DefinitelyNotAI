@@ -136,7 +136,10 @@ scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
 - **Every run:** applies `db/schema.sql` (safe to rerun), then `python -m askwri.ingest.load`:
   sort the corpus, ingest each kept PDF, upload it to `s3://$CORPUS_BUCKET/raw/<doc_id>.pdf`,
   embed its chunks with Cohere Embed v4 and replace the document's rows in `documents` and
-  `chunks` in one transaction.
+  `chunks` in one transaction. Each informative chart, map or image is rendered to a PNG,
+  described by the `vision` model, and uploaded to `s3://$CORPUS_BUCKET/figures/<chunk id>.png`
+  (`#` becomes `-`); the line for each document counts its pictures small, scanned, decorative
+  and described.
 - **Reruns** skip documents already loaded with the same file hash. A document whose audit
   fails or whose model call is refused is reported as `SKIPPED` and not written.
 - Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
@@ -200,7 +203,7 @@ It is safe to rerun.
 | VPC | `askwri-vpc` (10.20.0.0/16) | Private subnets `askwri-app-a/b` and `askwri-db-a/b`; no internet route, no NAT |
 | VPC endpoints | `askwri-vpce-*` | S3 (gateway), bedrock-runtime, bedrock-agent-runtime, secretsmanager, logs |
 | Security groups | `askwri-sg-lambda`, `askwri-sg-db`, `askwri-sg-endpoints` | Only Lambda to Aurora (5432) and Lambda to endpoints/S3 (443) |
-| Corpus bucket | `askwri-corpus-<account-id>` | `raw/` PDFs, `text/`, `eval/`; private, encrypted, TLS only; objects readable only by the deploy role and the askwri-* roles |
+| Corpus bucket | `askwri-corpus-<account-id>` | `raw/` PDFs, `figures/` PNGs, `text/`, `eval/`; private, encrypted, TLS only; objects readable only by the deploy role and the askwri-* roles |
 | Database | `askwri-db` | Aurora PostgreSQL 18 Serverless v2 with pgvector; Data API on; pauses after an hour idle (resume takes 15 s or more; set `db_min_capacity = 0.5` for demos) |
 | Secret | `askwri/db` | Master credentials, used only by the Data API. Lambdas sign in with IAM database auth as `askwri_ingest` or `askwri_tools` |
 | Resource group | `askwri-rg` | Lists every resource tagged `Project = AskWRI` |

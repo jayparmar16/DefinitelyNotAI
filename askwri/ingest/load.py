@@ -37,7 +37,7 @@ DOCUMENT_COLUMNS = [
 CHUNK_COLUMNS = [
     "chunk_id", "doc_id", "seq", "kind", "pdf_page", "pdf_page_end", "printed_page",
     "printed_page_end", "printed_page_fallback", "section", "content", "description", "number",
-    "quotable", "embedding",
+    "figure_key", "quotable", "embedding",
 ]  # fmt: skip
 CASTS = {
     "pub_date": "CAST(:pub_date AS date)",
@@ -93,6 +93,7 @@ def chunk_row(chunk: Chunk, embedding: list[float]) -> dict:
         "content": chunk.text,
         "description": chunk.description or None,
         "number": chunk.number,
+        "figure_key": figure_key(chunk.chunk_id) if chunk.figure else None,
         "quotable": chunk.quotable,
         "embedding": json.dumps(embedding),
     }
@@ -101,6 +102,11 @@ def chunk_row(chunk: Chunk, embedding: list[float]) -> dict:
 def pdf_key(doc_id: str) -> str:
     """Where the stored PDF lives in the corpus bucket: the citation fallback."""
     return f"raw/{doc_id}.pdf"
+
+
+def figure_key(chunk_id: str) -> str:
+    """Where a picture chunk's PNG lives in the corpus bucket, e.g. "figures/doc-p3-1.png"."""
+    return f"figures/{chunk_id.replace('#', '-')}.png"
 
 
 def replace_document(data_api, target: dict, doc_row: dict, chunk_rows: list[dict]) -> None:
@@ -212,10 +218,21 @@ def _load_one(job: tuple[KeptDocument, str]) -> str:
     if not result.audit.passed:
         return f"SKIPPED {kept.doc_id}: audit failed: {result.audit.failures[0]}"
     aws["s3"].upload_file(str(kept.path), os.environ["CORPUS_BUCKET"], pdf_key(result.doc_id))
+    for chunk in result.chunks:
+        if chunk.figure:
+            aws["s3"].put_object(
+                Bucket=os.environ["CORPUS_BUCKET"],
+                Key=figure_key(chunk.chunk_id),
+                Body=chunk.figure.png,
+                ContentType="image/png",
+            )
     vectors = embed(aws["bedrock"], [chunk.indexed_text for chunk in result.chunks])
     rows = [chunk_row(chunk, vector) for chunk, vector in zip(result.chunks, vectors, strict=True)]
     replace_document(aws["data_api"], aws["target"], document_row(kept, result, file_sha256), rows)
-    return f"LOADED {result.doc_id}: {len(rows)} chunks, labels {result.labels.label_source}"
+    return (
+        f"LOADED {result.doc_id}: {len(rows)} chunks, labels {result.labels.label_source}, "
+        f"{result.pictures.summary}"
+    )
 
 
 def main() -> int:

@@ -7,6 +7,8 @@ from pathlib import Path
 
 from askwri.ingest.audit import AuditResult, audit_chunks
 from askwri.ingest.chunks import Chunk, build_chunks
+from askwri.ingest.figure_description import describe_figures
+from askwri.ingest.figures import PictureReport
 from askwri.ingest.labels import DocumentLabels, chunk_label_fields, label_document
 from askwri.ingest.pdf import ParsedPdf, parse_pdf
 from askwri.ingest.table_summary import summarize_tables
@@ -22,6 +24,7 @@ class IngestResult:
     labels: DocumentLabels
     doc_id: str
     pdf_file: str  # the stored PDF a citation falls back to when there is no wri.org page
+    pictures: PictureReport
 
 
 def ingest_document(pdf_path: Path, site: WriSite | None = None, client=None) -> IngestResult:
@@ -31,20 +34,27 @@ def ingest_document(pdf_path: Path, site: WriSite | None = None, client=None) ->
     With no site, nothing is looked up; with no client, the model is never called and a document
     without a page is labelled "no page". The same model writes each table chunk's description,
     but only once the audit has passed, so a document that will not be indexed costs no calls.
-    A model error fails the document; with no client, table chunks have no description.
+    The same goes for the picture chunks: the `vision` model describes each informative picture,
+    and the labeler first drops uncaptioned decorative ones. Picture chunks are never quotable.
+    A model error fails the document; with no client, table and picture chunks have no
+    description, and uncaptioned pictures are kept unjudged.
     """
     parsed = parse_pdf(pdf_path)
     title = _title(parsed, pdf_path)
     doc_id = doc_id_for(pdf_path)
     chunks = build_chunks(doc_id, title, parsed.blocks, parsed.printed_pages)
     audit = audit_chunks(pdf_path, chunks)
+    pictures = parsed.pictures
     if client and audit.passed:
         chunks = summarize_tables(client, chunks)
+        chunks, pictures = describe_figures(client, chunks, pictures)
     unquotable = set(audit.unquotable)
     labels = label_document(pdf_path, title, site, client)
     chunks = [
         dataclasses.replace(
-            chunk, quotable=chunk.chunk_id not in unquotable, **chunk_label_fields(labels)
+            chunk,
+            quotable=chunk.chunk_id not in unquotable and chunk.figure is None,
+            **chunk_label_fields(labels),
         )
         for chunk in chunks
     ]
@@ -54,6 +64,7 @@ def ingest_document(pdf_path: Path, site: WriSite | None = None, client=None) ->
         labels=labels,
         doc_id=doc_id,
         pdf_file=pdf_path.name,
+        pictures=pictures,
     )
 
 

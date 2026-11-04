@@ -72,7 +72,7 @@ def claim_tables(regions: list[Region]) -> list[TableClaim]:
         (score, table, caption)
         for table in tables
         for caption, region in enumerate(regions)
-        if _is_caption(region) and (score := _caption_score(regions[table], region)) is not None
+        if _is_caption(region) and (score := caption_score(regions[table], region)) is not None
     )
     caption_of: dict[int, int] = {}
     for _, table, caption in candidates:
@@ -96,13 +96,16 @@ def _is_caption(region: Region) -> bool:
     )
 
 
-def _caption_score(table: Region, caption: Region) -> float | None:
-    """Distance from table to caption, or None if too far or beside it."""
+def caption_score(table: Region, caption: Region, overlap: float = 2) -> float | None:
+    """Distance from table (or picture) to caption, or None if too far or beside it.
+
+    A caption may overlap the region by up to `overlap` points and still count as above or below.
+    """
     above = table.top - caption.bottom
     below = caption.top - table.bottom
-    if above >= -2:
+    if above >= -overlap:
         gap, penalty = max(above, 0), 0
-    elif below >= -2:
+    elif below >= -overlap:
         gap, penalty = max(below, 0), BELOW_PENALTY
     else:
         return None

@@ -6,6 +6,7 @@ from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 
+from askwri.ingest.figures import Figure
 from askwri.ingest.pages import PrintedPage
 from askwri.ingest.pdf import Block
 from askwri.ingest.tables import split_table
@@ -41,16 +42,17 @@ class Chunk:
     printed_page_end: str
     printed_page_fallback: bool  # True when no printed number was found: the PDF page stands in
     section: str  # section path, e.g. "Supply risks › Lithium"
-    kind: str  # "source_text" or "table"
-    text: str  # passage text; paragraphs separated by blank lines
+    kind: str  # "source_text", "table", "chart" or "image"
+    text: str  # passage text, paragraphs separated by blank lines; a figure's caption
     quotable: bool = True  # False when the audit found the words re-ordered against the PDF
-    number: str | None = None  # "Table 2", on every piece of a table that has a number
+    number: str | None = None  # "Table 2", on every piece of a table that has a number; "Figure 3"
     # chunk_id of the first piece of this table: set on later pieces, whether split by rows or
     # continued on the next page, so all pieces can be found; None on the first piece
     table_first_chunk: str | None = None
-    # Model-written summary, for search only: it is embedded with the passage but is not in `text`, so
-    # an answer can never quote it as WRI's words. Empty for text chunks.
+    # Model-written summary or description, for search only: it is embedded with the passage but is
+    # not in `text`, so an answer can never quote it as WRI's words. Empty for text chunks.
     description: str = ""
+    figure: Figure | None = None  # the picture of a chart or image chunk
     # The document's labels, copied onto every chunk so retrieval can filter on them.
     label_source: str = "no page"  # "wri.org", or "no page" (the citation then cites the PDF)
     link: str | None = None
@@ -81,7 +83,8 @@ def build_chunks(
     cut at sentence boundaries, and a section whose whole text is short stays one short chunk.
     A table is always its own chunk, or several cut by rows if it is over the maximum. Later
     pieces point at the first through `table_first_chunk`, and so does a table whose number
-    repeats on the same or the next page (a continuation).
+    repeats on the same or the next page (a continuation). A picture is always its own chunk,
+    text the caption, kind "image" until the vision model says whether it is a chart.
     """
     chunks: list[Chunk] = []
     per_start_page = Counter()
@@ -93,7 +96,7 @@ def build_chunks(
             per_start_page[start] += 1
             first, last = printed_pages[start - 1], printed_pages[end - 1]
             chunk_id = f"{doc_id}#p{start}-{per_start_page[start]}"
-            table = group[0].table
+            table, figure = group[0].table, group[0].figure
             if table:
                 if table.part == 1:
                     table_head = _earlier_part(earlier, table.number, start) or chunk_id
@@ -111,9 +114,10 @@ def build_chunks(
                     printed_page_end=last.label,
                     printed_page_fallback=first.fallback or last.fallback,
                     section=section,
-                    kind="table" if table else "source_text",
+                    kind="table" if table else "image" if figure else "source_text",
                     text=_joined(group),
-                    number=table.number if table else None,
+                    number=table.number if table else figure.number if figure else None,
+                    figure=figure,
                     table_first_chunk=table_head if table and table_head != chunk_id else None,
                 )
             )
@@ -149,15 +153,18 @@ def _earlier_part(earlier: dict[str, tuple[str, int]], number: str | None, page:
 
 
 def _group_section(body: list[Block]) -> list[list[Block]]:
-    """Split a section's blocks into groups in reading order: tables alone, text chunk-sized."""
+    """Split a section's blocks into groups in reading order: tables and pictures alone, text chunk-sized."""
     groups: list[list[Block]] = []
     run: list[Block] = []
     for block in body:
-        if block.table is None:
+        if block.table is None and block.figure is None:
             run.append(block)
             continue
         groups += _group_text(run)
         run = []
+        if block.table is None:
+            groups.append([block])
+            continue
         groups += [
             [replace(block, text=piece.text, table=piece)]
             for piece in split_table(block.table, MAX_CHUNK_CHARS)
