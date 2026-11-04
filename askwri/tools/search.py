@@ -58,7 +58,7 @@ SELECT f.fused_score, f.by_meaning, f.by_keyword,
        ts_headline('simple', c.content, (SELECT t FROM q),
                    'MaxFragments=0, StartSel=«, StopSel=»') AS matched,
        d.title, d.url, d.doi, d.year, d.date_source, d.date_confidence, d.pub_type, d.office,
-       d.topic, d.label_source, d.language
+       d.topic, d.label_source, d.language, d.pdf_key
 FROM fused f JOIN chunks c USING (chunk_id) JOIN documents d USING (doc_id)
 ORDER BY f.fused_score DESC
 LIMIT {RERANK_POOL}
@@ -106,6 +106,7 @@ def to_result(row: dict, relevance: float) -> dict:
         "office": row["office"],
         "topic": row["topic"],
         "language": row["language"],
+        "pdf_key": row["pdf_key"],  # stored PDF in the corpus bucket, for download links
         "page": row["page"],
         "printed_page": row["printed_page"],
         "section": row["section"],

@@ -45,6 +45,7 @@ ROW = {
     "by_keyword": False,
     "matched": "«Cities» warm fast.",
     "label_source": "wri.org",
+    "pdf_key": "raw/heat.pdf",
 }
 
 

@@ -481,14 +481,20 @@ class Agent:
         supported = {v["index"] for v in reply["verdicts"] if v["supported"]}
         groups = drop_unsupported(groups, supported)
         kept = sum(len(g) for g in groups)
-        if groups and self.settings.guardrail_id and not self._grounded(question, groups, labels):
-            groups = []
-        yield step(
-            "verify",
-            f"Verified {kept} of {len(claims)} claims",
-            "done",
-            None if groups else "not enough verified claims to answer",
-        )
+        if not groups:
+            yield step(
+                "verify", f"Verified 0 of {len(claims)} claims", "done", "nothing to answer with"
+            )
+            return groups
+        if self.settings.guardrail_id and not self._grounded(question, groups, labels):
+            yield step(
+                "verify",
+                f"Verified {kept} of {len(claims)} claims",
+                "done",
+                "grounding check failed: answer not shown",
+            )
+            return []
+        yield step("verify", f"Verified {kept} of {len(claims)} claims", "done")
         return groups
 
     def _grounded(self, question, groups, labels) -> bool:

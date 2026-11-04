@@ -76,3 +76,13 @@ module "agent" {
   grounding_threshold           = var.grounding_threshold
   relevance_grounding_threshold = var.relevance_grounding_threshold
 }
+
+module "api" {
+  source                = "./modules/api"
+  package_path          = "${path.root}/../build/api.zip"
+  runtime_arn           = module.agent.runtime_arn
+  corpus_bucket         = module.storage.corpus_bucket
+  allowed_origins       = var.allowed_origins
+  max_concurrency       = var.api_max_concurrency
+  web_adapter_layer_arn = var.web_adapter_layer_arn
+}

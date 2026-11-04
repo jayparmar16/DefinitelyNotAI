@@ -77,6 +77,7 @@ def source_entry(marker: int, result: dict, authors: list[str]) -> dict:
         "quotable": result.get("quotable", True),
         "url": result.get("url"),
         "doi": result.get("doi"),
+        "pdfKey": result.get("pdf_key"),
         "authors": authors,
         "why": result.get("why"),
     }

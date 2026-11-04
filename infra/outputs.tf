@@ -22,3 +22,13 @@ output "agent_runtime_name" {
   description = "AgentCore Runtime agent: ask it with `uv run python -m askwri.agent.ask \"question\"`."
   value       = module.agent.runtime_name
 }
+
+output "api_url" {
+  description = "askwri-api URL for the UI (NEXT_PUBLIC_ASKWRI_API_URL)."
+  value       = module.api.url
+}
+
+output "api_key_secret" {
+  description = "Secret holding the key the UI sends as X-AskWRI-Key."
+  value       = module.api.api_key_secret_name
+}

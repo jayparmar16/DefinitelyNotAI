@@ -103,7 +103,25 @@ variable "grounding_threshold" {
 }
 
 variable "relevance_grounding_threshold" {
-  description = "Bedrock Guardrails relevance threshold for answers (0-0.99)."
+  description = "Bedrock Guardrails relevance threshold for answers (0-0.99). Its score is noisy (0.51 on a good answer), so it is low; grounding does the real work."
   type        = number
-  default     = 0.5
+  default     = 0.2
+}
+
+variable "allowed_origins" {
+  description = "Browser origins allowed to call askwri-api. Add the CloudFront domain when the UI is hosted."
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+}
+
+variable "api_max_concurrency" {
+  description = "Most API requests served at once (Lambda reserved concurrency)."
+  type        = number
+  default     = 5
+}
+
+variable "web_adapter_layer_arn" {
+  description = "AWS Lambda Web Adapter layer for arm64 (published by AWS), for response streaming."
+  type        = string
+  default     = "arn:aws:lambda:us-west-2:753240598075:layer:LambdaAdapterLayerArm64:25"
 }

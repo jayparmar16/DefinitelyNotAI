@@ -1,0 +1,175 @@
+"""HTTP routes: POST /chat (server-sent events), GET /sources/download?key=..., GET /ping.
+
+Environment: ASKWRI_RUNTIME_ARN (the agent), ASKWRI_CORPUS_BUCKET (stored PDFs),
+ASKWRI_ALLOWED_ORIGINS (comma-separated browser origins for CORS), ASKWRI_API_KEY_SECRET
+(optional: when set, requests must send its value in the X-AskWRI-Key header), PORT (8080).
+"""
+
+import hmac
+import json
+import logging
+import os
+import re
+import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlsplit
+
+import boto3
+
+DOWNLOAD_SECONDS = 300  # the design's 5-minute presigned link
+SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{33,100}$")  # AgentCore runtime session IDs: 33+ chars
+PDF_KEY = re.compile(r"^raw/[^/]+\.pdf$")
+MODES, FORMATS = {"quick", "deep"}, {"summary", "issue-brief", "talking-points"}
+log = logging.getLogger("askwri.api")
+
+
+class BadRequest(Exception):
+    """The request can't be served; the message is safe to show the caller."""
+
+
+def chat_payload(body: dict) -> dict:
+    """Validate a chat request (the UI's AskRequest) and return the agent payload.
+
+    A missing or malformed session ID gets a fresh one, so the agent always has a session.
+    """
+    question = (body.get("question") or "").strip()
+    if not question or len(question) > 4000:
+        raise BadRequest("question must be 1 to 4000 characters")
+    session = body.get("sessionId") or ""
+    if not SESSION_ID.match(session):
+        session = f"askwri-{uuid.uuid4()}"
+    filters = body.get("filters") or {}
+    return {
+        "question": question,
+        "mode": body.get("mode") if body.get("mode") in MODES else "quick",
+        "language": str(body.get("language") or "en")[:5],
+        "audience": str(body.get("audience") or "researcher")[:40],
+        "format": body.get("format") if body.get("format") in FORMATS else "summary",
+        "filters": {k: filters[k] for k in ("yearFrom", "pubType") if filters.get(k)},
+        "sessionId": session,
+    }
+
+
+def download_key(query: str) -> str:
+    """The stored-PDF key from ?key=..., refusing anything outside raw/*.pdf."""
+    key = (parse_qs(query).get("key") or [""])[0]
+    if not PDF_KEY.match(key) or ".." in key:
+        raise BadRequest("key must name a stored PDF under raw/")
+    return key
+
+
+def key_matches(expected: str | None, sent: str | None) -> bool:
+    """True when no key is required, or the sent key equals it (constant-time compare)."""
+    return expected is None or (sent is not None and hmac.compare_digest(expected, sent))
+
+
+class Api:
+    """The API's AWS clients and settings, built once per process."""
+
+    def __init__(self):
+        self.runtime_arn = os.environ["ASKWRI_RUNTIME_ARN"]
+        self.bucket = os.environ["ASKWRI_CORPUS_BUCKET"]
+        self.origins = {
+            o.strip() for o in os.environ.get("ASKWRI_ALLOWED_ORIGINS", "").split(",") if o.strip()
+        }
+        self.agentcore = boto3.client("bedrock-agentcore")
+        self.s3 = boto3.client("s3")
+        secret = os.environ.get("ASKWRI_API_KEY_SECRET")
+        self.api_key = (
+            boto3.client("secretsmanager").get_secret_value(SecretId=secret)["SecretString"]
+            if secret
+            else None
+        )
+
+
+class Handler(BaseHTTPRequestHandler):
+    api: Api  # set by serve()
+
+    def _cors(self) -> None:
+        origin = self.headers.get("Origin")
+        if origin and origin in self.api.origins:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+
+    def _json(self, status: int, body: dict) -> None:
+        data = json.dumps(body).encode()
+        self.send_response(status)
+        self._cors()
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _authorized(self) -> bool:
+        if key_matches(self.api.api_key, self.headers.get("X-AskWRI-Key")):
+            return True
+        self._json(401, {"error": "missing or wrong X-AskWRI-Key"})
+        return False
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self._cors()
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-AskWRI-Key")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.end_headers()
+
+    def do_GET(self):
+        url = urlsplit(self.path)
+        if url.path == "/ping":
+            self._json(200, {"status": "Healthy"})
+            return
+        if url.path != "/sources/download":
+            self._json(404, {"error": "not found"})
+            return
+        if not self._authorized():
+            return
+        try:
+            key = download_key(url.query)
+        except BadRequest as error:
+            self._json(400, {"error": str(error)})
+            return
+        link = self.api.s3.generate_presigned_url(
+            "get_object", Params={"Bucket": self.api.bucket, "Key": key}, ExpiresIn=DOWNLOAD_SECONDS
+        )
+        self._json(200, {"url": link, "expiresIn": DOWNLOAD_SECONDS})
+
+    def do_POST(self):
+        if urlsplit(self.path).path != "/chat":
+            self._json(404, {"error": "not found"})
+            return
+        if not self._authorized():
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            payload = chat_payload(json.loads(self.rfile.read(min(length, 100_000)) or b"{}"))
+        except (BadRequest, ValueError) as error:
+            self._json(400, {"error": str(error)})
+            return
+        response = self.api.agentcore.invoke_agent_runtime(
+            agentRuntimeArn=self.api.runtime_arn,
+            runtimeSessionId=payload["sessionId"],
+            payload=json.dumps(payload).encode(),
+        )
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        # The agent already sends server-sent events: pass each line through as it arrives.
+        for line in response["response"].iter_lines():
+            self.wfile.write(line + b"\n" if line else b"\n")
+            if not line:
+                self.wfile.flush()
+        self.wfile.flush()
+
+    def log_message(self, format, *args):
+        log.info(format, *args)
+
+
+def serve() -> None:
+    """Serve on PORT (default 8080), one thread per request."""
+    logging.basicConfig(level=logging.INFO)
+    Handler.api = Api()
+    port = int(os.environ.get("PORT", "8080"))
+    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
