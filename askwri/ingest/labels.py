@@ -41,6 +41,9 @@ CONCEPT_BY_KEY = {concept.casefold(): concept for concept in CONCEPTS}
 # A chunk's context line names only the first few: a long list would crowd out the passage.
 CONTEXT_CONCEPTS = 6
 CONTEXT_PLACES = 6
+# A document's topics: the main one and at most one more. Past two, the labeler's choice
+# changed from run to run; WRI's choices come first, and `tags` keeps all of WRI's.
+MAX_TOPICS = 2
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,7 @@ class DocumentLabels:
     abstract: str | None = None  # the wri.org page's description: WRI's own words
     initiatives: tuple[str, ...] = ()  # from the page's "part of ... within ..." line
     programs: tuple[str, ...] = ()
-    # Every topic the document covers, `topic` first. `topic` stays the one that is counted.
+    # At most MAX_TOPICS, `topic` first. `topic` stays the one that is counted.
     topics: tuple[str, ...] = ()
     concepts: tuple[str, ...] = ()  # of vocabulary.CONCEPTS: WRI's tags, then the labeler's
     acronyms: tuple[str, ...] = ()  # "OSW = Offshore wind", as the text defines them
@@ -125,10 +128,13 @@ def with_year(labels: DocumentLabels, pdf_path: Path) -> DocumentLabels:
 
 
 def with_enrichment(labels: DocumentLabels, more: Enrichment) -> DocumentLabels:
-    """Add the labeler's richer labels after the document's own; none of them is replaced."""
+    """Add the labeler's richer labels after the document's own; none of them is replaced.
+
+    Topics stop at MAX_TOPICS, so the labeler adds one only where WRI gave fewer than two.
+    """
     return replace(
         labels,
-        topics=_merged(labels.topics, more.topics),
+        topics=_merged(labels.topics, more.topics)[:MAX_TOPICS],
         concepts=_merged(labels.concepts, more.concepts),
         countries=_merged(labels.countries, more.countries),
         keywords=more.keywords,
@@ -300,9 +306,9 @@ def _page_labels(page: Page, doi: str | None) -> DocumentLabels:
 
 
 def _topics(topic: str | None, tags: Iterable[str]) -> tuple[str, ...]:
-    """The main topic first, then every other one of the 11 that WRI's tags name."""
+    """The main topic first, then the first other one of the 11 that WRI's tags name."""
     main = [topic] if topic and topic != NO_TOPIC else []
-    return _merged(main, (SITE_TOPICS.get(tag, "") for tag in tags))
+    return _merged(main, (SITE_TOPICS.get(tag, "") for tag in tags))[:MAX_TOPICS]
 
 
 def _abstract(meta: dict[str, list[str]]) -> str | None:

@@ -24,7 +24,7 @@ On 4 Nov, "What are the trends for ocean renewable energies published in 2025?" 
 | `year`, `date_source` | documents | publication date (wri.org or labeler), else the corpus folder (`2025/x.pdf`) | no |
 | `abstract` | documents | wri.org page `description` meta tag | no |
 | `initiatives`, `programs` | documents | wri.org "This ... is part of X within Y" line (link texts) | no |
-| `topics` | documents | `topic` first, then WRI tags that are one of the 11, then the labeler's | partly |
+| `topics` | documents | at most 2: `topic` first, then a WRI tag that is one of the 11, else the labeler's second | partly |
 | `concepts` | documents | WRI tags in `askwri/ingest/vocabulary.py` CONCEPTS (case-insensitive), then the labeler's | partly |
 | `acronyms` | documents | "Long form (SHORT)" in the text, e.g. `OSW = Offshore wind` | no |
 | `role` | chunks | section path: references, notes, contents, acknowledgements, about, abbreviations | no |
@@ -32,6 +32,10 @@ On 4 Nov, "What are the trends for ocean renewable energies published in 2025?" 
 | `countries` | documents | existing labeler countries, plus the enrichment call's | yes |
 | `doc_tsv`, `card_embedding` | documents | the document card (title, abstract or summary, labels, key findings), plus acronyms in `doc_tsv` | built from the above |
 | context line in each chunk's embedding | chunks (`embedding`) | year, topics, first 6 concepts, initiatives, first 6 places | built from the above |
+
+The labeler's answers can differ between runs. Capping topics at two and asking only for
+regions a document is about made topics and regions the same in three runs of both test
+PDFs; the tail of `concepts` and `keywords` still varies a little.
 
 Rules kept from before: model labels never replace WRI's (they are appended), `tags` keeps
 WRI's original tags, `topic` stays the single counted topic, and model-written text
@@ -82,7 +86,7 @@ Check `/tmp/try/out/catalog.json`. For the offshore wind paper, expect:
 - `year` 2025 and `date_source` `wri.org`.
 - `initiatives` `["Ocean Climate Diplomacy"]` and `programs` `["Energy", "Clean Energy"]`.
 - `abstract` starting "Offshore wind (OSW) projects are a new source of renewable energy...".
-- `topics` starting with `Energy`, and probably `Ocean` added by the labeler.
+- `topics` `["Energy", "Ocean"]`: at most two, `Ocean` added by the labeler.
 - `concepts` including `Clean Energy` and `renewable energy` from WRI's tags, then the
   labeler's.
 - `acronyms` including `OSW = Offshore wind` if the PDF defines it the way its abstract does.

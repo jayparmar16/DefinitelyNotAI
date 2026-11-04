@@ -59,7 +59,11 @@ def _string_list(description: str, allowed: tuple[str, ...] = ()) -> dict:
 
 
 ENRICH_PROPERTIES = {
-    "topics": _string_list("Every topic the document substantially covers, main one first", TOPICS),
+    "topics": _string_list(
+        "The document's main topic, then the one other topic it covers most, if it covers "
+        "one substantially; at most two",
+        TOPICS,
+    ),
     "concepts": _string_list("Up to 8 concepts the document is mainly about", CONCEPTS),
     "keywords": _string_list(
         "5 to 15 phrases a researcher would search to find this document: technologies, "
@@ -67,7 +71,8 @@ ENRICH_PROPERTIES = {
     ),
     "countries": _string_list("Countries the document focuses on, by English short name"),
     "regions": _string_list(
-        "Regions the document covers, including those of its countries; Global if worldwide",
+        "Regions the document is about, including those of its focus countries; not regions "
+        "it mentions only for comparison or as examples; Global if worldwide",
         REGIONS,
     ),
     "key_findings": _string_list(
