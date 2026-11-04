@@ -22,6 +22,7 @@ from askwri.agent.citations import (
     source_entry,
 )
 from askwri.agent.factcheck import fact_check
+from askwri.agent.lens import lens_from, lens_papers, search_papers, summarise_paper
 from askwri.agent.tracing import agent_span, finish_agent_span
 
 PASSAGES = {"quick": 8, "deep": 14}  # passages given to the draft step
@@ -101,6 +102,8 @@ EXTRAS = (
     "numbers. limits - 0 to 3 things the question asks that these passages don't cover "
     "(describe only these passages, not all of WRI's work); empty when the passages cover it. "
     "questions - 2 or 3 short follow-up questions the user could ask next."
+    " Write everything in English whatever the question's language (AskWRI translates the "
+    "answer afterwards), and set question_language to the language the question is written in."
 )
 
 
@@ -280,12 +283,16 @@ class Agent:
         started = time.monotonic()
         mode = request.get("mode", "quick")
         if mode == "factcheck":
-            yield from fact_check(self.deps, question, request.get("filters") or {})
+            yield from fact_check(
+                self.deps, question, request.get("filters") or {}, request.get("deep") is True
+            )
             return
         previous = self.deps.memory.last_turn(session) if self.deps.memory and session else None
         if previous:
             follow = self._follow_up(question, previous)
-            if follow["kind"] == "translate":
+            if follow["message_language"] in LANGUAGE_NAMES:
+                request = {**request, "question_language": follow["message_language"]}
+            if follow["kind"] == "translate" and follow["language"] in LANGUAGE_NAMES:
                 yield from self._translate_previous(
                     previous["answer"], follow["language"], question, session, started
                 )
@@ -381,7 +388,16 @@ class Agent:
             )
             return
 
-        texts, order = number_markers(groups)
+        lens = lens_from(request)
+        lens_rows = []
+        if lens:
+            lens_rows, labels = yield from self._read_through_lens(
+                question, lens, labels, evidence, groups
+            )
+        # Lens cells share the answer's [n] numbering and sources list.
+        lens_groups = [cell["sentences"] for row in lens_rows for cell in row["cells"]]
+        numbered, order = number_markers(groups + lens_groups)
+        texts, cell_texts = numbered[: len(groups)], iter(numbered[len(groups) :])
         sources = [
             source_entry(i + 1, labels[label], authors.get(labels[label]["doc_id"], []))
             for i, label in enumerate(order)
@@ -414,11 +430,77 @@ class Agent:
             "elapsedSeconds": round(time.monotonic() - started),
             "report": report,
         }
+        if lens:
+            answer["lens"] = {
+                **lens,
+                "rows": [
+                    {
+                        "docId": row["paper"]["doc_id"],
+                        "title": row["paper"]["title"],
+                        "year": row["paper"].get("year"),
+                        "pubType": row["paper"].get("pub_type"),
+                        "cells": [
+                            {"status": cell["status"], "text": next(cell_texts)}
+                            for cell in row["cells"]
+                        ],
+                    }
+                    for row in lens_rows
+                ],
+            }
+        # The answer goes out in the language picked in the UI; with English picked, in the
+        # language the question was asked in. Sources keep their original titles and passages.
+        asked = request.get("question_language") or draft["question_language"]
+        if language == "en" and asked in LANGUAGE_NAMES:
+            language = asked
         answer = yield from self._translate_answer(answer, language)
         answer["elapsedSeconds"] = round(time.monotonic() - started)
         if self.deps.memory and session:
             self.deps.memory.save_turn(session, question, answer)
         yield {"type": "answer", "answer": answer}
+
+    def _read_through_lens(self, question, lens, labels, evidence, groups):
+        """Read the answer's papers through the lens. Returns one row per paper (each aspect's
+        cell: summarised with verified sentences, not_discussed, or unverified) and the labels
+        extended with the passages the lens found."""
+        cited = list(
+            dict.fromkeys(labels[p]["doc_id"] for g in groups for s in g for p in s.passages)
+        )
+        papers = lens_papers(evidence, cited)
+        yield step("lens", f"Reading {len(papers)} papers through your lens", "now")
+        found = search_papers(self.deps.gateway, lens, papers)
+        labels = dict(labels)
+        by_chunk = {r["chunk_id"]: label for label, r in labels.items()}
+        for results in (r for paper in found for aspect in paper for r in aspect):
+            if results["chunk_id"] not in by_chunk:
+                by_chunk[results["chunk_id"]] = label = f"P{len(labels) + 1}"
+                labels[label] = results
+        ids = [[[by_chunk[r["chunk_id"]] for r in aspect] for aspect in paper] for paper in found]
+        with ThreadPoolExecutor(max_workers=len(papers) or 1) as pool:
+            cells = list(
+                pool.map(
+                    lambda i: summarise_paper(self.deps.llm, lens, papers[i], ids[i], labels),
+                    range(len(papers)),
+                )
+            )
+        yield step("lens", f"Read {len(papers)} papers through your lens", "done")
+        summarised = [cell for paper in cells for cell in paper if cell]
+        survivors = set()
+        if summarised:
+            kept = yield from self._verify(question, summarised, labels, "verify-lens")
+            survivors = {s for g in kept for s in g}
+        rows = []
+        for paper, paper_cells in zip(papers, cells, strict=True):
+            row = []
+            for cell in paper_cells:
+                if cell is None:
+                    row.append({"status": "not_discussed", "sentences": []})
+                    continue
+                verified = [s for s in cell if s in survivors]
+                row.append(
+                    {"status": "summarised" if verified else "unverified", "sentences": verified}
+                )
+            rows.append({"paper": paper, "cells": row})
+        return rows, labels
 
     def _collection_size(self) -> int:
         """How many documents AskWRI has indexed (asked once per runtime, then remembered)."""
@@ -525,7 +607,7 @@ class Agent:
             llm.SMALL,
             step="rewrite",
             system="You rewrite search queries for WRI's publication archive. Earlier queries "
-            "found only weak evidence. Write one new query with different wording: "
+            "found only weak evidence. Write one new query, in English, with different wording: "
             "synonyms, broader terms, or older terminology (WRI has published since the "
             "1980s, e.g. 'global warming' before 'climate change'). Search ranking rewards "
             "specific terms, not broad ones: when the closest passages found are on a narrower "
@@ -580,13 +662,24 @@ class Agent:
                 "Write a short answer: 1 or 2 paragraphs of 2 to 4 sentences. Each sentence lists "
                 "the IDs of the passages that support it."
             )
-        properties |= {"implications": texts, "limits": texts, "questions": texts}
+        properties |= {
+            "implications": texts,
+            "limits": texts,
+            "questions": texts,
+            "question_language": {"type": "string", "enum": [*LANGUAGE_NAMES, "other"]},
+        }
         if audience == "auto":
             # First in the reply, so the model settles the reader before it writes for them.
             properties = {"audience": {"type": "string", "enum": list(AUDIENCES)}} | properties
         strict = ""
+        lens = lens_from(request)
+        if lens:
+            strict += (
+                f"\nThe user's research goal: {lens['goal']}. Aspects they care about: "
+                f"{', '.join(lens['aspects'])}. Favour findings on these where the passages allow."
+            )
         if removed:
-            strict = (
+            strict += (
                 "\nA previous draft had sentences the passages did not support: "
                 + " | ".join(removed[:6])
                 + ". This time write only what the passages state, staying close to their wording."
@@ -613,6 +706,7 @@ class Agent:
             "limits": reply["limits"][:3],
             "questions": reply["questions"][:3],
             "audience": reply.get("audience", audience),
+            "question_language": reply["question_language"],
         }
         if mode == "deep":
             draft["title"] = reply["title"]
@@ -724,16 +818,21 @@ class Agent:
             return texts, False
         name = LANGUAGE_NAMES.get(language, language)
         yield step("translate", f"Translating to {name}; checking every number survives", "now")
-        out, kept = [], 0
-        for text in texts:
-            result = self.deps.gateway.call(
-                "translate", {"text": text, "target_language": language}
+        # In parallel: an answer has 8-12 texts, and one at a time took 10-15 s.
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(
+                pool.map(
+                    lambda text: self.deps.gateway.call(
+                        "translate", {"text": text, "target_language": language}
+                    ),
+                    texts,
+                )
             )
-            if result["numbers_preserved"]:
-                out.append(result["translation"])
-            else:
-                out.append(text)
-                kept += 1
+        out = [
+            r["translation"] if r["numbers_preserved"] else t
+            for r, t in zip(results, texts, strict=True)
+        ]
+        kept = sum(not r["numbers_preserved"] for r in results)
         detail = f"{kept} kept in English because a number changed" if kept else None
         yield step("translate", f"Translated to {name}", "done", detail)
         return out, kept < len(texts)
@@ -749,13 +848,17 @@ class Agent:
             llm.SMALL,
             step="follow-up",
             system="You read a user's next message in a research chat. Decide its kind:\n"
-            "- translate: it only asks to see the previous answer in another language.\n"
+            "- translate: it only asks to see the previous answer in another language (e.g. "
+            "'now in Spanish'). A new question that is itself written in another language is "
+            "new, not translate.\n"
             "- rewrite: it asks for the previous answer in another form - shorter, simpler, more "
             "detail from the same sources, talking points, for another reader - and needs no "
             "new information.\n"
-            "- new: anything else. Write standalone: the message as a full question that makes "
-            "sense without the conversation (resolve 'it', 'they', 'that city', 'what about "
-            "X'). If it already stands alone, repeat it unchanged.\n"
+            "- new: anything else. Write standalone: the message as a short, plain question in "
+            "English that makes sense without the conversation (resolve 'it', 'they', 'that "
+            "city', 'what about X'); add only what the conversation implies, no padding like "
+            "'according to WRI's analysis'. If it already stands alone, keep it (in English).\n"
+            "message_language: the language the message is written in.\n"
             "audience: the reader the message names (a funder or partner is partnerships, a "
             "minister or city official is policymaker), else auto.",
             prompt=f"Previous question: {previous['question']}\n"
@@ -768,8 +871,9 @@ class Agent:
                     "language": {"type": "string", "enum": [*LANGUAGE_NAMES, "none"]},
                     "standalone": {"type": "string"},
                     "audience": {"type": "string", "enum": ["auto", *AUDIENCES]},
+                    "message_language": {"type": "string", "enum": [*LANGUAGE_NAMES, "other"]},
                 },
-                "required": ["kind", "language", "standalone", "audience"],
+                "required": ["kind", "language", "standalone", "audience", "message_language"],
                 "additionalProperties": False,
             },
         )

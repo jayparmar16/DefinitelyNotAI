@@ -71,7 +71,18 @@ def chat_payload(body: dict) -> dict:
         "format": body.get("format") if body.get("format") in FORMATS else "summary",
         "filters": {k: filters[k] for k in ("yearFrom", "pubType") if filters.get(k)},
         "sessionId": session,
+        "deep": body.get("deep") is True,  # fact-check: search harder
+        "lens": research_lens(body.get("lens")),
     }
+
+
+def research_lens(lens) -> dict | None:
+    """The research lens from a request: a goal and up to 4 aspects, as short strings."""
+    if not isinstance(lens, dict) or not isinstance(lens.get("aspects"), list):
+        return None
+    goal = str(lens.get("goal") or "").strip()[:200]
+    aspects = [str(a).strip()[:60] for a in lens["aspects"][:4] if str(a).strip()]
+    return {"goal": goal, "aspects": aspects} if goal and aspects else None
 
 
 def warm_session(body: dict) -> str:

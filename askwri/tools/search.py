@@ -1,7 +1,8 @@
 """search tool: hybrid vector + keyword search over WRI passages, then Bedrock reranking.
 
 Event: {"query": str, "k": int, "year_from": int, "year_to": int, "include_undated": bool,
-"pub_type": str, "topic": str, "country": str, "language": str}; only query is required.
+"pub_type": str, "topic": str, "country": str, "language": str, "doc_id": str}; only query is
+required. doc_id searches inside one document (the research lens reads each paper this way).
 """
 
 import json
@@ -29,6 +30,7 @@ FILTERS = """
   AND (%(topic)s::text IS NULL OR d.topic ILIKE %(topic)s OR %(topic)s ILIKE ANY (d.tags))
   AND (%(country)s::text IS NULL OR %(country)s ILIKE ANY (d.countries))
   AND (%(language)s::text IS NULL OR d.language = %(language)s)
+  AND (%(doc_id)s::text IS NULL OR d.doc_id = %(doc_id)s)
 """
 
 SQL = f"""
@@ -82,6 +84,7 @@ def search_parameters(event: dict) -> dict:
         "topic": event.get("topic"),
         "country": event.get("country"),
         "language": event.get("language"),
+        "doc_id": event.get("doc_id"),
     }
 
 

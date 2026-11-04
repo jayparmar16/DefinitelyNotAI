@@ -18,6 +18,7 @@ locals {
         { name = "topic", type = "string", description = "One of WRI's topics (e.g. Cities, Climate, Forests) or a tag." },
         { name = "country", type = "string", description = "Country the document covers." },
         { name = "language", type = "string", description = "ISO 639-1 language of the document, e.g. en, es, pt." },
+        { name = "doc_id", type = "string", description = "Search inside this one document only (a doc_id from earlier results)." },
       ]
     }
     get_passage = {

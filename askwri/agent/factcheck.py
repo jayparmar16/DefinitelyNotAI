@@ -13,10 +13,10 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 
 from askwri.agent import llm
-from askwri.agent.citations import label_passages, numbers_not_in, source_entry
+from askwri.agent.citations import numbers_not_in, source_entry
 
 MAX_CLAIMS = 12
-PASSAGES_PER_CLAIM = 4
+PASSAGES_PER_CLAIM = {False: 4, True: 8}  # deep fact-check reads more passages per claim
 VERDICTS = ("supported", "contradicted", "outdated", "not_found")
 
 
@@ -61,6 +61,23 @@ def split_claims(client, draft: str) -> list[dict]:
         },
     )
     return [c for c in reply["claims"] if c["claim"].strip()][:MAX_CLAIMS]
+
+
+def search_all(gateway, queries: list[str], k: int, filters: dict) -> list[list[dict]]:
+    """Search each query in parallel."""
+    arguments = [{"query": q, "k": k, **filters} for q in queries]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return list(pool.map(lambda a: gateway.call("search", a)["results"], arguments))
+
+
+def add_found(labels: dict[str, dict], found: list[list[dict]]) -> list[list[str]]:
+    """Label new passages (P1, P2, ... continuing) and return each search's labels."""
+    by_chunk = {r["chunk_id"]: label for label, r in labels.items()}
+    for result in (r for results in found for r in results):
+        if result["chunk_id"] not in by_chunk:
+            by_chunk[result["chunk_id"]] = label = f"P{len(labels) + 1}"
+            labels[label] = result
+    return [[by_chunk[r["chunk_id"]] for r in results] for results in found]
 
 
 def judge(client, claims: list[dict], labels: dict[str, dict], evidence: list[list[str]]) -> list:
@@ -139,8 +156,10 @@ def checked_verdict(claim: dict, verdict: dict | None, allowed: list[str], label
     }
 
 
-def fact_check(deps, draft: str, filters: dict) -> Iterator[dict]:
-    """Yield progress steps, then one "factcheck" event with every claim's verdict."""
+def fact_check(deps, draft: str, filters: dict, deep: bool = False) -> Iterator[dict]:
+    """Yield progress steps, then one "factcheck" event with every claim's verdict. Deep reads
+    more passages per claim and searches again, with the claim's own words, for any claim the
+    first round couldn't settle."""
     started = time.monotonic()
     yield step("claims", "Finding the claims in your draft", "now")
     claims = split_claims(deps.llm, draft)
@@ -150,14 +169,11 @@ def fact_check(deps, draft: str, filters: dict) -> Iterator[dict]:
         return
 
     yield step("search", f"Searching WRI publications for {len(claims)} claims", "now")
-    arguments = [{"query": c["query"], "k": PASSAGES_PER_CLAIM, **filters} for c in claims]
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        found = list(pool.map(lambda a: deps.gateway.call("search", a)["results"], arguments))
-    unique = {r["chunk_id"]: r for results in found for r in results}
-    labels = label_passages(list(unique.values()))
-    by_chunk = {r["chunk_id"]: label for label, r in labels.items()}
-    evidence = [[by_chunk[r["chunk_id"]] for r in results] for results in found]
-    yield step("search", f"Found {len(unique)} passages", "done")
+    k = PASSAGES_PER_CLAIM[deep]
+    found = search_all(deps.gateway, [c["query"] for c in claims], k, filters)
+    labels: dict[str, dict] = {}
+    evidence = add_found(labels, found)
+    yield step("search", f"Found {len(labels)} passages", "done")
 
     yield step("judge", "Checking each claim against the passages", "now")
     verdicts = {v["index"]: v for v in judge(deps.llm, claims, labels, evidence)}
@@ -165,6 +181,22 @@ def fact_check(deps, draft: str, filters: dict) -> Iterator[dict]:
         checked_verdict(c, verdicts.get(i), evidence[i], labels) for i, c in enumerate(claims)
     ]
     yield step("judge", "Checked every claim", "done")
+
+    unsettled = [i for i, c in enumerate(checked) if c["verdict"] == "not_found"]
+    if deep and unsettled:
+        yield step("deep", f"Searching again for {len(unsettled)} unsettled claims", "now")
+        again = search_all(deps.gateway, [claims[i]["claim"] for i in unsettled], k, filters)
+        more = add_found(labels, again)
+        retry = [claims[i] for i in unsettled]
+        ids = [
+            evidence[i] + [p for p in more[n] if p not in evidence[i]]
+            for n, i in enumerate(unsettled)
+        ]
+        second = {v["index"]: v for v in judge(deps.llm, retry, labels, ids)}
+        for n, i in enumerate(unsettled):
+            checked[i] = checked_verdict(claims[i], second.get(n), ids[n], labels)
+        settled = sum(checked[i]["verdict"] != "not_found" for i in unsettled)
+        yield step("deep", f"Searched again: {settled} more settled", "done")
     yield {"type": "factcheck", "factcheck": result(draft, claims, checked, labels, started)}
 
 

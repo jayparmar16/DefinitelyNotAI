@@ -205,7 +205,7 @@ class FakeMemory:
         self.saved.append((session, question, answer))
 
 
-DRAFT_EXTRAS = {"implications": [], "limits": [], "questions": []}
+DRAFT_EXTRAS = {"implications": [], "limits": [], "questions": [], "question_language": "en"}
 PROMPTS = []
 
 
@@ -509,8 +509,14 @@ class RecordingGateway(FakeGateway):
         return super().call(tool, arguments)
 
 
-def follow_up(kind, standalone="", audience="auto"):
-    return {"kind": kind, "language": "none", "standalone": standalone, "audience": audience}
+def follow_up(kind, standalone="", audience="auto", language="none", message_language="en"):
+    return {
+        "kind": kind,
+        "language": language,
+        "standalone": standalone,
+        "audience": audience,
+        "message_language": message_language,
+    }
 
 
 def test_a_follow_up_question_is_searched_and_stored_in_context(monkeypatch):
@@ -625,3 +631,138 @@ def test_fact_check_notes_show_the_readers_markers_not_internal_labels():
 
     assert readable_note("P2 says 181; P7 agrees.", ["P7", "P2"]) == "[2] says 181; [1] agrees."
     assert readable_note("P9 was not cited.", ["P1"]) == "a passage was not cited."
+
+
+# --- languages ---
+
+
+def run_spanish(monkeypatch, follow=None, previous=None, language="en"):
+    """Run with a translating gateway; the drafter says the question was in Spanish."""
+    fake_models(monkeypatch, {**DRAFT, "question_language": "es"}, {0}, follow=follow)
+    gateway = TranslatingGateway(0.3)
+    agent = Agent(
+        Deps(llm=None, gateway=gateway, memory=FakeMemory(previous), bedrock=None), SETTINGS
+    )
+    request = {
+        "question": "¿Cómo se enfrían las ciudades?",
+        "sessionId": "s" * 40,
+        "language": language,
+    }
+    return list(agent.run(request))[-1]
+
+
+def test_a_question_asked_in_spanish_is_answered_in_spanish_with_original_sources(monkeypatch):
+    answer = run_spanish(monkeypatch)["answer"]
+    assert answer["language"] == "es" and answer["machineTranslated"]
+    assert answer["paragraphs"] == ["ES: Cool roofs lowered surface heat [1]."]
+    assert answer["sources"][0]["title"] == "Heat-resilient cities"  # titles stay original
+
+
+def test_a_new_question_in_spanish_is_not_mistaken_for_translate(monkeypatch):
+    # The classifier says "translate" but names no language it can translate into.
+    follow = follow_up("translate", "How do cities cool down?", message_language="es")
+    final = run_spanish(monkeypatch, follow=follow, previous=PREVIOUS)
+    assert final["type"] == "answer"
+    assert final["answer"]["language"] == "es"
+    assert final["answer"]["paragraphs"] != PREVIOUS["answer"]["paragraphs"]
+
+
+def test_deep_fact_check_searches_again_for_claims_not_found(monkeypatch):
+    judged = []
+
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "claims":
+            return {
+                "claims": [
+                    {"quote": "Roofs cool", "claim": "Cool roofs lowered heat.", "query": "q"}
+                ]
+            }
+        if step == "judge":
+            judged.append(kwargs["prompt"])
+            settled = len(judged) == 2
+            return {
+                "verdicts": [
+                    {
+                        "index": 0,
+                        "verdict": "supported" if settled else "not_found",
+                        "passages": ["P1"] if settled else [],
+                        "correction": "",
+                        "note": "",
+                    }
+                ]
+            }
+        raise AssertionError(step)
+
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    gateway = RecordingGateway(0.3)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=None, bedrock=None), SETTINGS)
+    request = {"question": "Roofs cool.", "mode": "factcheck", "deep": True}
+    check = list(agent.run(request))[-1]["factcheck"]
+    assert gateway.queries == ["q", "Cool roofs lowered heat."]  # second round: the claim itself
+    assert check["claims"][0]["verdict"] == "supported"
+
+
+# --- research lens ---
+
+
+def test_lens_is_cleaned_and_papers_put_the_cited_ones_first():
+    from askwri.agent.lens import lens_from, lens_papers
+
+    assert lens_from({"lens": {"goal": " ", "aspects": ["cost"]}}) is None
+    lens = lens_from({"lens": {"goal": "Heat plan", "aspects": ["cost", " ", "a", "b", "c", "d"]}})
+    assert lens == {"goal": "Heat plan", "aspects": ["cost", "a", "b", "c"]}
+    evidence = {
+        "x#1": {"chunk_id": "x#1", "doc_id": "x", "relevance": 0.9},
+        "y#1": {"chunk_id": "y#1", "doc_id": "y", "relevance": 0.5},
+        "x#2": {"chunk_id": "x#2", "doc_id": "x", "relevance": 0.4},
+    }
+    assert [p["doc_id"] for p in lens_papers(evidence, ["y"])] == ["y", "x"]
+
+
+def test_lens_cells_are_cited_summaries_or_not_discussed_and_are_verified(monkeypatch):
+    def ask_json(client, size, *, step, **kwargs):
+        PROMPTS.append((step, kwargs))
+        if step == "draft":
+            return {**DRAFT_EXTRAS, **DRAFT}
+        if step == "lens":
+            return {
+                "aspects": [
+                    {
+                        "discussed": True,
+                        "sentences": [{"text": "Roofs were cheap.", "passages": ["P2"]}],
+                    },
+                    {"discussed": False, "sentences": []},
+                    {
+                        "discussed": True,
+                        "sentences": [{"text": "Invented claim.", "passages": ["P9"]}],
+                    },
+                ]
+            }
+        if step == "verify":  # first claim in each check holds: answer's roofs, lens's cost cell
+            return {"verdicts": [{"index": i, "supported": i == 0} for i in range(10)]}
+        raise AssertionError(step)
+
+    PROMPTS.clear()
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+
+    class LensGateway(RecordingGateway):
+        def call(self, tool, arguments):
+            if tool == "search" and arguments.get("doc_id"):
+                self.queries.append(arguments["query"])
+                return {"results": [{**RESULT, "chunk_id": "heat#p9-1", "relevance": 0.2}]}
+            return super().call(tool, arguments)
+
+    gateway = LensGateway(0.3)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=None, bedrock=None), SETTINGS)
+    lens = {"goal": "Heat plan", "aspects": ["cost", "equity", "speed"]}
+    answer = list(agent.run({"question": "q", "lens": lens}))[-1]["answer"]
+    cells = answer["lens"]["rows"][0]["cells"]
+    # "speed" was summarised, but only by citing a passage not found for it: unverified, which
+    # the UI shows as "No verified summary" rather than claiming the paper is silent.
+    assert [c["status"] for c in cells] == ["summarised", "not_discussed", "unverified"]
+    # The cost cell cites the passage found inside the paper, numbered into the sources list.
+    assert cells[0]["text"] == "Roofs were cheap [2]."
+    assert answer["sources"][1]["chunkId"] == "heat#p9-1"
+    assert "cost (Heat plan)" in gateway.queries
+    draft_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
+    assert "research goal: Heat plan" in draft_prompt
