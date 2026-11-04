@@ -163,7 +163,9 @@ class Handler(BaseHTTPRequestHandler):
         # The agent already sends server-sent events: forward each event (its lines up to the
         # blank line that ends it) as one chunk, as soon as it arrives.
         event = b""
-        for line in response["response"].iter_lines():
+        # chunk_size=1: a bigger read waits until that many bytes arrive, which holds back the
+        # end of each small event until the next one starts. These streams are a few kB.
+        for line in response["response"].iter_lines(chunk_size=1):
             event += line + b"\n"
             if not line:
                 self._chunk(event)
