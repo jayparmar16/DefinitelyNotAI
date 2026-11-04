@@ -437,3 +437,7 @@ a.aw-btn{text-decoration:none}
 .aw-doc-lens dt{font-weight:600;text-transform:capitalize}
 .aw-doc-lens dd{margin:0}
 .aw-doc-lens dd.empty{color:var(--ink-muted);font-style:italic}
+
+/* A narrow composer (sidebar and panel both open) wraps its controls instead of squashing them */
+.aw-composer-row{flex-wrap:wrap;row-gap:var(--space-200)}
+.aw-toggle .sub{white-space:nowrap}

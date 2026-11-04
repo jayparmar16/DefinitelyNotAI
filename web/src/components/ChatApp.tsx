@@ -82,16 +82,17 @@ export function ChatApp() {
     if (chat) {
       setTurns(chat.turns);
       setSessionId(chat.sessionId);
+      setLens(chat.lens ?? null);
     }
   }, []);
 
   // Save the chat whenever a turn finishes.
   useEffect(() => {
     if (!turns.length || turns.some((turn) => turn.status === "running")) return;
-    const chats = upsertChat(readChats().chats, sessionId, turns, Date.now());
+    const chats = upsertChat(readChats().chats, sessionId, turns, Date.now(), lens);
     writeChats(chats, sessionId);
     setRecent(chats);
-  }, [turns, sessionId]);
+  }, [turns, sessionId, lens]);
 
   // Start this conversation's agent at the first keystroke: a new session's runtime takes 6-9 s
   // to start, and that time passes while the user is still typing.
@@ -199,6 +200,7 @@ export function ChatApp() {
     closeSidebarIfNarrow();
     abort.current?.abort();
     setTurns(chat.turns);
+    setLens(chat.lens ?? null);
     setSessionId(chat.sessionId);
     setPanel(null);
     setActive(null);

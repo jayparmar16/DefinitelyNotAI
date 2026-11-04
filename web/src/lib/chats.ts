@@ -5,18 +5,21 @@
  */
 
 import type { Turn } from "../components/turn.ts";
+import type { Lens } from "./agent.ts";
 
-export type SavedChat = { sessionId: string; title: string; updatedAt: number; turns: Turn[] };
+export type SavedChat = { sessionId: string; title: string; updatedAt: number; turns: Turn[]; lens?: Lens | null };
 
 const CHATS_KEY = "askwri.chats.v1";
 const CURRENT_KEY = "askwri.current";
 const MAX_CHATS = 10;
 
 /** Put this chat first (replacing its older copy), keep only finished turns, and cap the list. */
-export function upsertChat(chats: SavedChat[], sessionId: string, turns: Turn[], now: number): SavedChat[] {
+export function upsertChat(
+  chats: SavedChat[], sessionId: string, turns: Turn[], now: number, lens: Lens | null = null,
+): SavedChat[] {
   const finished = turns.filter((turn) => turn.status !== "running");
   if (!finished.length) return chats;
-  const chat = { sessionId, title: finished[0].question.slice(0, 80), updatedAt: now, turns: finished };
+  const chat = { sessionId, title: finished[0].question.slice(0, 80), updatedAt: now, turns: finished, lens };
   return [chat, ...chats.filter((c) => c.sessionId !== sessionId)].slice(0, MAX_CHATS);
 }
 

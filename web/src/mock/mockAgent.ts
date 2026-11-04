@@ -16,6 +16,7 @@ const FORMAT_TITLES: Record<ReportFormat, string> = {
   summary: "Researcher summary",
   "issue-brief": "Issue brief",
   "talking-points": "Talking points",
+  dossier: "Topic dossier",
 };
 
 // Sessions that already have a report, so a follow-up can reuse the gathered evidence.
@@ -77,6 +78,33 @@ function quickAnswer(request: AskRequest, language: string, startedAt: number): 
   };
 }
 
+// A dossier reads every paper through fixed aspects (its evidence matrix) and compares them.
+function mockDossier(): Pick<Answer, "lens" | "dossier"> {
+  const aspects = ["main findings", "key figures", "places covered", "methods and data"];
+  return {
+    lens: {
+      goal: "Topic dossier",
+      aspects,
+      rows: SOURCES.map((source, row) => ({
+        docId: source.docId,
+        title: source.title,
+        year: source.year,
+        pubType: source.pubType,
+        cells: aspects.map((_, i) =>
+          (row + i) % 3 === 2
+            ? { status: "not_discussed" as const, text: "" }
+            : { status: "summarised" as const, text: `${source.passage} [${source.marker}].` },
+        ),
+      })),
+    },
+    dossier: {
+      agree: ["Both reports find pilots on existing routes lower the risk of a fleet change [1][2]."],
+      differ: ["The 2008 baseline puts diesel emissions higher than the 2022 brief does [3][4]."],
+      missing: ["None of these papers compares maintenance costs across cities."],
+    },
+  };
+}
+
 function deepAnswer(request: AskRequest, language: string, startedAt: number): Answer {
   const translated = language === "es";
   const keyPoints = translated ? REPORT_POINTS.es : REPORT_POINTS.en;
@@ -97,6 +125,7 @@ function deepAnswer(request: AskRequest, language: string, startedAt: number): A
     },
     audience: reader(request),
     scope: `Based on ${SOURCES.length} of the 1,200 WRI publications indexed in AskWRI`,
+    ...(request.format === "dossier" ? mockDossier() : {}),
     implications: ["A partner conversation could open with the pilot results before costs."],
     limits: [],
     questions: ["Which cities moved first, and why?"],

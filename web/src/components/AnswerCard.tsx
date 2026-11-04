@@ -71,7 +71,9 @@ export function AnswerCard(props: AnswerCardProps) {
         ))
       )}
 
-      {answer.lens && <LensTable lens={answer.lens} activeMarker={props.activeMarker} onMarker={props.onMarker} />}
+      {answer.lens && !answer.dossier && (
+        <LensTable lens={answer.lens} activeMarker={props.activeMarker} onMarker={props.onMarker} />
+      )}
       <AnswerSections answer={answer} onFollowUp={props.onFollowUp} showLimits={!deep} />
 
       <div className="aw-actions">

@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import type { Source } from "./agent.ts";
 import { citationYear, markersIn, metaLine, pageLink, splitMarkers, unmatchedMarkers } from "./citations.ts";
-import { answerMarkdown, formatCitation, sourcesBibtex, sourcesCsv } from "./exports.ts";
+import { answerMarkdown, formatCitation, matrixCsv, sourcesBibtex, sourcesCsv } from "./exports.ts";
 
 function source(overrides: Partial<Source> = {}): Source {
   return {
@@ -127,4 +127,26 @@ test("the Markdown export labels the interpretation and keeps scope and follow-u
   assert.match(markdown, /## Possible implications \(AskWRI's interpretation, not WRI findings\)\n\n- Focus on transposition\./);
   assert.match(markdown, /## What this can't tell you\n\n- No ranking of other laws\./);
   assert.ok(markdown.indexOf("Questions to explore") < markdown.indexOf("## Sources"));
+});
+
+
+test("a dossier's matrix exports as CSV and its comparisons go into the Markdown", () => {
+  const lens = {
+    goal: "Topic dossier",
+    aspects: ["main findings", "key figures"],
+    rows: [{ docId: "a", title: "Heat, cities", year: 2024, pubType: "Report", cells: [
+      { status: "summarised" as const, text: "Roofs cool [1]." },
+      { status: "not_discussed" as const, text: "" },
+    ] }],
+  };
+  assert.equal(matrixCsv(lens), 'paper,type,year,main findings,key figures\n"Heat, cities",Report,2024,Roofs cool [1].,\n');
+  const markdown = answerMarkdown("Heat", {
+    mode: "deep", language: "en", machineTranslated: false, paragraphs: ["P [1]."], sources: [source()],
+    claimsTotal: 1, claimsVerified: 1, elapsedSeconds: 9, report: null,
+    lens, dossier: { agree: ["Both agree [1]."], differ: [], missing: ["No costs."] },
+  });
+  assert.match(markdown, /## Evidence matrix\n\n\| Paper \| main findings \| key figures \|/);
+  assert.match(markdown, /\| Heat, cities \| Roofs cool \[1\]\. \| Not discussed \|/);
+  assert.match(markdown, /## Where the papers agree\n\n- Both agree \[1\]\./);
+  assert.match(markdown, /## What none of them covers\n\n- No costs\./);
 });

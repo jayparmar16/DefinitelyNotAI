@@ -9,7 +9,9 @@ import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "rea
 
 import type { LensResult, ReportFormat, Source } from "@/lib/agent";
 import { citationYear, pageLink } from "@/lib/citations";
+import { matrixCsv, saveFile } from "@/lib/exports";
 import { AnswerSections, VerifiedChip, readerName } from "./AnswerSections";
+import { LensTable } from "./LensTable";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
 import { PdfPage } from "./PdfPage";
@@ -22,6 +24,7 @@ const FORMATS: { value: ReportFormat; name: string }[] = [
   { value: "talking-points", name: "Talking points" },
   { value: "issue-brief", name: "Issue brief" },
   { value: "summary", name: "Researcher summary" },
+  { value: "dossier", name: "Topic dossier" },
 ];
 const MIN_WIDTH = 360;
 const MAX_WIDTH = 760;
@@ -125,6 +128,38 @@ function ReportView(props: SidePanelProps) {
           <Icon name="warning" small /> {flag.text}
         </p>
       ))}
+      {answer.dossier && answer.lens && (
+        <>
+          <LensTable lens={answer.lens} activeMarker={props.activeMarker} onMarker={props.onMarker} matrix />
+          <button
+            className="aw-btn sm"
+            style={{ marginTop: 8 }}
+            onClick={() => saveFile("evidence-matrix.csv", matrixCsv(answer.lens!), "text/csv")}
+          >
+            <Icon name="download" small /> Matrix as CSV
+          </button>
+          {(
+            [
+              ["Where the papers agree", answer.dossier.agree, true],
+              ["Where they differ", answer.dossier.differ, true],
+              ["What none of them covers", answer.dossier.missing, false],
+            ] as const
+          ).map(([heading, items, cited]) =>
+            items.length ? (
+              <div key={heading}>
+                <h4>{heading}</h4>
+                <ul>
+                  {items.map((item) => (
+                    <li key={item}>
+                      {cited ? <MarkedText text={item} activeMarker={props.activeMarker} onMarker={props.onMarker} /> : item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null,
+          )}
+        </>
+      )}
       <h4>Where the evidence is thin</h4>
       <ul>
         {shownReport.thinEvidence.map((point) => (

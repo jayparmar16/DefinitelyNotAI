@@ -1,6 +1,6 @@
 /** Downloads built in the browser: answer or report as Markdown, sources as CSV or BibTeX. */
 
-import type { Answer, Source } from "./agent.ts";
+import type { Answer, LensResult, Source } from "./agent.ts";
 import { citationYear, pageLink } from "./citations.ts";
 
 /** One reference line: title, WRI, year, URL, DOI when present (the "Cite" button). */
@@ -35,7 +35,19 @@ export function answerMarkdown(question: string, answer: Answer): string {
   } else {
     lines.push(...answer.paragraphs.flatMap((paragraph) => [paragraph, ""]));
   }
+  if (answer.lens) {
+    lines.push(`## ${answer.dossier ? "Evidence matrix" : `Through your lens: ${answer.lens.goal}`}`, "");
+    lines.push(`| Paper | ${answer.lens.aspects.join(" | ")} |`, `|---|${answer.lens.aspects.map(() => "---").join("|")}|`);
+    for (const row of answer.lens.rows) {
+      const cells = row.cells.map((cell) => (cell.status === "summarised" ? cell.text : "Not discussed").replaceAll("|", "/"));
+      lines.push(`| ${row.title} | ${cells.join(" | ")} |`);
+    }
+    lines.push("");
+  }
   const sections: [string, string[] | undefined][] = [
+    ["Where the papers agree", answer.dossier?.agree],
+    ["Where they differ", answer.dossier?.differ],
+    ["What none of them covers", answer.dossier?.missing],
     ["Possible implications (AskWRI's interpretation, not WRI findings)", answer.implications],
     ["What this can't tell you", answer.report ? [] : answer.limits],
     ["Questions to explore", answer.questions],
@@ -45,6 +57,17 @@ export function answerMarkdown(question: string, answer: Answer): string {
   }
   lines.push("## Sources", "", sourcesMarkdown(answer.sources), "");
   return lines.join("\n");
+}
+
+/** The lens or evidence matrix as CSV: one row per paper, one column per aspect. */
+export function matrixCsv(lens: LensResult): string {
+  const header = ["paper", "type", "year", ...lens.aspects];
+  const rows = lens.rows.map((row) =>
+    [row.title, row.pubType, row.year, ...row.cells.map((cell) => (cell.status === "summarised" ? cell.text : ""))]
+      .map(csvCell)
+      .join(","),
+  );
+  return [header.map(csvCell).join(","), ...rows].join("\n") + "\n";
 }
 
 function csvCell(value: string | number | null): string {

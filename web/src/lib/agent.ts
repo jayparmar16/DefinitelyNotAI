@@ -10,7 +10,7 @@ export type Mode = "quick" | "deep" | "factcheck";
 export type Reader = "researcher" | "policymaker" | "partnerships";
 /** "auto": nobody picks a persona when typing, so the agent infers the reader from the question. */
 export type Audience = "auto" | Reader;
-export type ReportFormat = "summary" | "issue-brief" | "talking-points";
+export type ReportFormat = "summary" | "issue-brief" | "talking-points" | "dossier";
 
 export type Filters = {
   yearFrom?: number;
@@ -96,8 +96,12 @@ export type Answer = {
   limits?: string[]; // what the question asks that the evidence doesn't cover (Quick answer)
   questions?: string[]; // follow-ups the user could ask next
   removedClaims?: string[]; // drafted claims verification removed
-  lens?: LensResult; // with a research lens: each paper summarised for its aspects
+  lens?: LensResult; // with a research lens, or a dossier's evidence matrix: papers × aspects
+  dossier?: Dossier; // Deep research in the "dossier" format
 };
+
+/** A topic dossier's comparison of its papers. agree/differ carry [n] markers; missing doesn't. */
+export type Dossier = { agree: string[]; differ: string[]; missing: string[] };
 
 export type Decline = {
   message: string;

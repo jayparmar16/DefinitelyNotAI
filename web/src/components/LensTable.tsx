@@ -10,13 +10,19 @@ const EMPTY = {
   unverified: "No verified summary",
 } as const;
 
-type LensTableProps = { lens: LensResult; activeMarker: number | null; onMarker: (marker: number) => void };
+type LensTableProps = {
+  lens: LensResult;
+  activeMarker: number | null;
+  onMarker: (marker: number) => void;
+  matrix?: boolean; // a dossier's evidence matrix rather than the user's lens
+};
 
-export function LensTable({ lens, activeMarker, onMarker }: LensTableProps) {
+export function LensTable({ lens, activeMarker, onMarker, matrix }: LensTableProps) {
+  const title = matrix ? "Evidence matrix" : "Through your lens";
   return (
-    <section className="aw-lens" aria-label="Through your lens">
+    <section className="aw-lens" aria-label={title}>
       <h5>
-        Through your lens <span>{lens.goal}</span>
+        {title} <span>{matrix ? `${lens.rows.length} documents` : lens.goal}</span>
       </h5>
       <div className="aw-lens-scroll">
         <table>
