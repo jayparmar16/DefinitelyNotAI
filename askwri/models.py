@@ -17,7 +17,7 @@ MODELS = {
     "vision": "global.anthropic.claude-sonnet-5-5",
     "labeler": "global.anthropic.claude-haiku-5-5",
     "answerer": "global.anthropic.claude-sonnet-5-5",
-    "embedder": "amazon.titan-embed-text-v2:0",
+    "embedder": "us.cohere.embed-v4:0",  # multilingual, 1,024 dimensions (#33)
     "reranker": "amazon.rerank-v1:0",
 }
 CLAUDE_ROLES = ("vision", "labeler", "answerer")

@@ -121,6 +121,26 @@ model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model
 - **Quotable:** the audit checks each row of a table on its own (a text layer often reads a
   table column by column, so no whole table is one run of text).
 
+## Load the corpus into Aurora
+
+One command runs the whole ingestion pipeline against the team sandbox:
+
+```sh
+scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
+```
+
+- **First run:** if the Aurora cluster `askwri-db` or the corpus bucket is missing, it creates
+  the Terraform state bucket and runs `terraform apply` in `infra/` (no prompt). It uses
+  `TF_VAR_team` (default `DefinitelyNotAI`), `TF_VAR_owner` (default your git email) and
+  `TF_VAR_db_min_capacity` (default 0.5).
+- **Every run:** applies `db/schema.sql` (safe to rerun), then `python -m askwri.ingest.load`:
+  sort the corpus, ingest each kept PDF, upload it to `s3://$CORPUS_BUCKET/raw/<doc_id>.pdf`,
+  embed its chunks with Cohere Embed v4 and replace the document's rows in `documents` and
+  `chunks` in one transaction.
+- **Reruns** skip documents already loaded with the same file hash. A document whose audit
+  fails or whose model call is refused is reported as `SKIPPED` and not written.
+- Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
+
 ## Models
 
 Every model call picks its model by role from the registry in `askwri/models.py`, so swapping
@@ -130,7 +150,7 @@ a model is a one-line change:
 |---|---|
 | `vision`, `answerer` | `global.anthropic.claude-sonnet-5-5` |
 | `labeler` | `global.anthropic.claude-haiku-5-5` |
-| `embedder` | `amazon.titan-embed-text-v2:0` |
+| `embedder` | `us.cohere.embed-v4:0` (Cohere Embed v4, 1,024 dimensions) |
 | `reranker` | `amazon.rerank-v1:0` |
 
 Region is **us-west-2**: set `AWS_DEFAULT_REGION=us-west-2` (or `AWS_REGION`). Claude is

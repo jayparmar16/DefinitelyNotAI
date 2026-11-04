@@ -203,7 +203,8 @@ def layer_text(page: pymupdf.Page, bbox: tuple[float, float, float, float]) -> s
 def plain_text(markdown: str) -> str:
     """Strip the Markdown and HTML that PyMuPDF adds, so the text reads as it does in the PDF."""
     text = re.sub(r"<br\s*/?>", " ", markdown)
-    text = re.sub(r"_{3,}|\.{4,}|…{2,}", " ", text)  # blank form lines and dot leaders
+    text = re.sub(r"<!--.*?-->", " ", text)  # PyMuPDF's "Start of picture text" markers
+    text = re.sub(r"_{3,}|(?:\. ?){4,}|…{2,}", " ", text)  # blank form lines and dot leaders
     text = re.sub(r"</?[a-z]+>", "", text)
     text = re.sub(r"^#+\s*", "", text)
     text = re.sub(r"^\s*[-*]\s+", "", text, flags=re.MULTILINE)

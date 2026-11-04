@@ -1,5 +1,6 @@
 """Citation audit: check every chunk against the PDF's own text layer before it is indexed."""
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -91,5 +92,6 @@ def _not_on_claimed_pages(chunk: Chunk, paragraphs: list[str], texts: list[str])
 
 
 def _mostly_non_text(text: str) -> bool:
+    text = re.sub(r"\||-{3,}", "", text)  # Markdown table syntax isn't garble
     visible = [char for char in text if not char.isspace()]
     return sum(char.isalnum() for char in visible) < len(visible) / 2
