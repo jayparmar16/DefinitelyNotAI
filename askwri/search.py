@@ -6,6 +6,7 @@ Needs AWS credentials in the environment; reads through the RDS Data API (no VPC
 
 import argparse
 import json
+import re
 import sys
 from functools import cache
 
@@ -40,6 +41,16 @@ FILTERS = """c.role IS NULL
   AND (CAST(:topic AS text) IS NULL OR d.topic = CAST(:topic AS text))
   AND (CAST(:doc_type AS text) IS NULL OR d.doc_type = CAST(:doc_type AS text))
   AND (CAST(:country AS text) IS NULL OR CAST(:country AS text) = ANY(d.countries))"""
+# "published in 2025", "what did WRI publish in 2024", "published between 2024 and 2025",
+# "published since 2024". Only a publication phrase: "investment in 2025" is about events in
+# 2025, and documents published in 2026 cover them.
+PUBLISHED = re.compile(
+    r"\b(?:published|publish|released)\s+(?:"
+    r"(?:in|during)\s+(?P<year>20\d\d)"
+    r"|(?:between|from)\s+(?P<start>20\d\d)\s+(?:and|to)\s+(?P<end>20\d\d)"
+    r"|(?:since|after)\s+(?P<since>20\d\d))\b",
+    re.IGNORECASE,
+)
 RANK = "ts_rank(c.tsv, websearch_to_tsquery('english', :q))"
 HYBRID_SQL = f"""
 WITH meaning AS (
@@ -102,12 +113,18 @@ def search_passages(
     statement, chunks with a role such as references skipped, at most 6 chunks per document),
     reranks the top 25 with Amazon Rerank 1.0 and keeps the best 10 scoring at least
     MIN_RELEVANCE. Never padded.
+    With no year filter given, a question that names its publication years ("published in
+    2025") is filtered to them (publication_years).
     Each result has the citation fields plus `score` (the rerank relevance) and `neighbours`:
     the previous and next chunk of the same section, for the answering model to read around it.
     """
+    if year_from is None and year_to is None:
+        year_from, year_to, keywords = publication_years(question)
+    else:
+        keywords = question
     aws = _aws()
     params = {
-        "q": question,
+        "q": keywords,
         "vec": json.dumps(_embed_query(aws["bedrock"], question)),
         "year_from": year_from,
         "year_to": year_to,
@@ -119,6 +136,27 @@ def search_passages(
     results = _rerank(aws["rerank"], question, candidates)
     _attach_neighbours(aws["data_api"], aws["target"], results)
     return results
+
+
+def publication_years(question: str) -> tuple[int | None, int | None, str]:
+    """The publication years a question asks for, and the question without that phrase.
+
+    "What did WRI publish in 2024 about heat?" gives (2024, 2024, "What did WRI about heat?"):
+    the years become a filter, and the phrase leaves the keyword search, where "published"
+    and "2024" would match most documents. A question without the phrase gives (None, None)
+    and the question unchanged.
+    """
+    match = PUBLISHED.search(question)
+    if match is None:
+        return None, None, question
+    if match["year"]:
+        start = end = int(match["year"])
+    elif match["since"]:
+        start, end = int(match["since"]), None
+    else:
+        start, end = int(match["start"]), int(match["end"])
+    rest = " ".join((question[: match.start()] + question[match.end() :]).split())
+    return start, end, rest
 
 
 def _embed_query(bedrock, question: str) -> list[float]:

@@ -73,7 +73,7 @@ def run(monkeypatch):
     """Run search_passages against a fake database that returns `candidates`."""
     reranker = FakeRerank()
 
-    def go(candidates, near=(), **filters):
+    def go(candidates, near=(), question="how much water?", **filters):
         data_api = FakeDataApi(candidates, near)
         monkeypatch.setattr(
             search,
@@ -85,7 +85,7 @@ def run(monkeypatch):
                 "target": TARGET,
             },
         )
-        return search.search_passages("how much water?", **filters), data_api, reranker
+        return search.search_passages(question, **filters), data_api, reranker
 
     return go
 
@@ -140,3 +140,43 @@ def test_hits_below_min_relevance_are_dropped(run, monkeypatch):
     monkeypatch.setattr(FakeRerank, "rerank", rerank)
     results, _, _ = run([row("a", content="answer"), row("b", content="noise")])
     assert [r["chunk_id"] for r in results] == ["a"]
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        (
+            "What are the trends for ocean renewable energies published in 2025?",
+            (2025, 2025, "What are the trends for ocean renewable energies ?"),
+        ),
+        ("What did WRI publish in 2024 about heat?", (2024, 2024, "What did WRI about heat?")),
+        (
+            "Reports published between 2024 and 2026 on mangroves",
+            (2024, 2026, "Reports on mangroves"),
+        ),
+        ("Anything released since 2025 on lithium?", (2025, None, "Anything on lithium?")),
+        (
+            "How did clean energy investment change in 2025?",
+            (None, None, "How did clean energy investment change in 2025?"),
+        ),
+    ],
+)
+def test_publication_years_come_only_from_a_publication_phrase(question, expected):
+    assert search.publication_years(question) == expected
+
+
+def test_a_publication_phrase_becomes_the_filter_unless_one_is_given(run):
+    question = "Ocean energy published in 2025?"
+    _, inferred, _ = run([row("a")], question=question)
+    _, given, _ = run([row("a")], question=question, year_from=2023)
+
+    def hybrid_params(api):
+        hybrid = next(s for s in api.statements if "WITH meaning" in s["sql"])
+        return {p["name"]: p["value"] for p in hybrid["parameters"]}
+
+    assert hybrid_params(inferred)["year_from"] == {"longValue": 2025}
+    assert hybrid_params(inferred)["year_to"] == {"longValue": 2025}
+    assert hybrid_params(inferred)["q"] == {"stringValue": "Ocean energy ?"}
+    assert hybrid_params(given)["year_from"] == {"longValue": 2023}
+    assert hybrid_params(given)["year_to"] == {"isNull": True}
+    assert hybrid_params(given)["q"] == {"stringValue": question}

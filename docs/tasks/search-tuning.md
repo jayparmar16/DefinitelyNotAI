@@ -14,6 +14,10 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
 - [x] More passages go to the answering model; scored as `cap-more`.
 - [x] More surrounding text goes to the answering model (neighbours of every hit, in place of
       bigger embedded chunks); scored as `cap-more-neighbours`.
+- [x] A publication phrase ("published in 2025") becomes the year filter and leaves the
+      keyword text; scored as `years`.
+- [x] Keyword search matching any word of the question instead of all; scored as
+      `years-anyword`.
 - [x] Each step's scores are recorded below, and only steps that raised them are kept.
 
 ## Scores (4 Nov, 14 answerable questions, 2 unanswerable)
@@ -25,9 +29,15 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
 | `cap6` (6 per document) | 13 | 46 of 63 | 2.1 | 0.97 |
 | `cap6-more` (+ up to 10 results) | 12 | 53 of 76 | 2.3 | 0.90 |
 | `cap6-more-neighbours` (+ neighbours of every hit) | 13 | 56 of 76 | 2.3 | 0.97 |
+| `years` (+ publication-year filter) | 13 | 56 of 76 | 2.3 | 0.97 |
+| `years-anyword` (+ keywords match any word) | 13 | 52 of 74 | 2.3 | 0.97 |
 
-Both unanswerable questions were declined in every run. Kept: a cap of 6, up to 10 results
-and neighbours on every hit. A cap of 3 starved questions answered by one document (offshore
+Both unanswerable questions were declined in every run. Kept: a cap of 6, up to 10 results,
+neighbours on every hit and the publication-year filter. The year filter changed no score:
+both "published in" questions already got only documents from their year, so it is kept for
+correctness, not for these scores. Any-word keywords were dropped: without a weight for rare
+words, common ones pushed good passages out (climate finance fell from 3 helping passages to
+1, school-bus barriers from 7 to 5). A cap of 3 starved questions answered by one document (offshore
 wind India fell from 5 helping passages to 1). One question's results differ by a passage
 between identical runs (the vector index scan is approximate), so a change of one passage on
 one question is noise; read the totals.

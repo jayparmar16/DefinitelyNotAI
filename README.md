@@ -196,7 +196,9 @@ what the answering agent calls. It embeds the question with Cohere Embed v4, run
 statement over `chunks` through the RDS Data API (pgvector cosine search and full-text search
 fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
 on, at most 6 chunks per document), reranks the top 25 with Amazon Rerank 1.0 and returns at
-most 10 passages with their citation fields and rerank `score`. Fewer matches return fewer
+most 10 passages with their citation fields and rerank `score`. With no year filter given, a
+question that names its publication years ("published in 2025", "published since 2024")
+is filtered to them. Fewer matches return fewer
 results, and none returns an empty list. Chunks with a `role` (references, notes,
 contents...) are never returned. Every hit carries its previous and next chunk of the same
 section as `neighbours`, for the answering model to read the passage in context.
