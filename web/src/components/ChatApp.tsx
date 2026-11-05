@@ -83,8 +83,11 @@ export function ChatApp() {
   // pre-rendered without browser storage.
   useEffect(() => {
     // /?demo=load: replace this browser's chats with the ready-made demo chats, then start fresh.
+    // The page opens on an empty chat, so no earlier chat is shown or saved back into the list.
     if (new URLSearchParams(window.location.search).get("demo") === "load") {
       window.history.replaceState(null, "", "/");
+      loadSpaces().then(setSpaces);
+      setSidebarOpen(window.matchMedia("(min-width: 1001px)").matches);
       fetchDemoChats(Date.now()).then(
         (demo) => {
           writeChats(demo, null);
@@ -95,6 +98,7 @@ export function ChatApp() {
         },
         (error: Error) => setToast(error.message),
       );
+      return;
     }
     const { chats, current } = readChats();
     setRecent(chats);
