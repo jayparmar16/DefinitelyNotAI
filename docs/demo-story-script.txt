@@ -39,14 +39,14 @@ PASTE 2 - Step 2 question   [tool: Ask · Deep research ON · Report type: Issue
 AI data centers and the clean energy transition
 >>>
 
-PASTE 4 - optional maps & charts question (Step 3b)   [tool: Ask · Deep research OFF]
->>>
-Which WRI maps show water stress near ethanol refineries in the US Midwest?
->>>
-
 PASTE 3 - Step 4 draft to fact-check   [tool: Fact-check]
 >>>
 AI data centers already use most of America's electricity growth, and a PJM study found that data center load added $94 billion to capacity costs in 2024. WRI expects renewables to supply all new data center demand, and grid planners have nearly doubled their five-year demand forecasts.
+>>>
+
+PASTE 4 - Step 5 maps & charts question   [tool: Ask · Deep research OFF]
+>>>
+Which WRI maps show water stress near ethanol refineries in the US Midwest?
 >>>
 
 
@@ -66,7 +66,7 @@ D6  Protects WRI's credibility ......... fact-checks a draft against WRI's own w
                                           it goes out.                                      (Step 4)
 D7  Built on WRI's own knowledge ....... 580 WRI publications, organised in WRI's topics,
                                           with WRI's own labels - even its charts and maps are
-                                          searchable.                              (Tour, Step 3b)
+                                          searchable.                              (Tour, Step 5) 
 D8  Ready for real use ................. runs on AWS with sign-in, and is measured against
                                           WRI's own targets on an admin scorecard.          (Close)
 
@@ -118,7 +118,7 @@ office and need to know: what does the evidence actually say? Let me ask - live.
 
 
 ---------------------------------------------------------------------
-STEP 1 - ASK A QUICK QUESTION  (0:30 - 1:05)
+STEP 1 - ASK A QUICK QUESTION  (0:30 - 1:00)
 ---------------------------------------------------------------------
 DO: paste this (PASTE 1) into the box and press Enter.  (~20 s)
     >>>
@@ -146,7 +146,7 @@ DO: point at "Written for: Researcher".
 
 
 ---------------------------------------------------------------------
-STEP 2 - TURN IT INTO A POLICY BRIEF  (1:05 - 1:45)
+STEP 2 - TURN IT INTO A POLICY BRIEF  (1:00 - 1:35)
 ---------------------------------------------------------------------
 SAY:
 "Now I need to brief a policymaker. A paragraph isn't enough."
@@ -176,7 +176,7 @@ DO: point at the summary, and the "What this can't tell you" list under the brie
 
 
 ---------------------------------------------------------------------
-STEP 3 - SEE HOW THE RESEARCH CONNECTS  (1:45 - 2:15)
+STEP 3 - SEE HOW THE RESEARCH CONNECTS  (1:35 - 2:00)
 ---------------------------------------------------------------------
 DO: under the brief, click "Visuals".  (~5 s)
     Point at the Key figures (for example $9.4 billion; they can vary a little run to run).
@@ -191,36 +191,7 @@ DO: click Close.
 
 
 ---------------------------------------------------------------------
-STEP 3b (OPTIONAL, ~25 s) - SEARCH WRI'S MAPS AND CHARTS
-Use it if you have time, or swap it in for the Spanish/extra questions. Ready-made copy in the
-sidebar: "10 · Search WRI's maps and charts".
----------------------------------------------------------------------
-SAY:
-"WRI's reports are full of maps and charts. Normally a search engine can't see what's inside
-them. AskWRI can."
-
-DO: click "New chat", make sure the tool is "Ask" and Deep research is OFF, then paste this
-    (PASTE 4) and press Enter.  (~20-30 s)
-    >>>
-    Which WRI maps show water stress near ethanol refineries in the US Midwest?
-    >>>
-    (Short on time? Open the ready-made chat "10 · Search WRI's maps and charts" instead.)
-
-DO: when the answer appears, point at the first sentence - it names the map itself: "Figure 7
-    in Rethinking Biofuels in the US Midwest". Then click its citation number [1].
-    The report opens on the right, at the page with the map.
-SAY:
-"It found the map itself - Figure 7 - and opened it. Every WRI chart and map was read and
-described when we loaded the reports, so you can search what a map SHOWS, not just its title.
-And here's the finding next to it: 51 of 161 ethanol refineries in the Midwest sit in areas of
-high or extremely high water stress."
-★ D7  "Even WRI's maps and charts are searchable - about 2,300 of them."
-
-DO: go back to the story chat (★ or your live chat) for Step 4.
-
-
----------------------------------------------------------------------
-STEP 4 - FACT-CHECK A DRAFT  (2:15 - 2:50)
+STEP 4 - FACT-CHECK A DRAFT  (2:00 - 2:30)
 ---------------------------------------------------------------------
 SAY:
 "Last step. A colleague wrote this for a blog post. Before it goes out, let's check it."
@@ -247,11 +218,37 @@ DO: point at each verdict:
 
 
 ---------------------------------------------------------------------
-CLOSE  (2:50 - 3:00)
+STEP 5 - SEARCH WRI'S MAPS AND CHARTS  (2:30 - 2:52)   - the last step
+---------------------------------------------------------------------
+SAY:
+"One more thing. WRI's reports are full of maps and charts. Normally a search engine can't see
+what's inside them. AskWRI can."
+
+DO: in the same chat, click "Ask" (next to "Fact-check") and switch Deep research OFF.
+    Paste this (PASTE 4) and press Enter.  (~20-30 s)
+    >>>
+    Which WRI maps show water stress near ethanol refineries in the US Midwest?
+    >>>
+    Short on time? Open the ready-made chat "10 · Search WRI's maps and charts" instead.
+
+DO: when the answer appears, point at the first sentence - it names the map itself: "Figure 7
+    in Rethinking Biofuels in the US Midwest". Then click its citation number [1].
+    The report opens on the right, at the page with the map.
+SAY:
+"It found the map itself - Figure 7 - and opened it. Every WRI chart and map was read and
+described when we loaded the reports, so you can search what a map SHOWS, not just its title.
+And here's the finding: 51 of 161 ethanol refineries in the Midwest sit in areas of high or
+extremely high water stress."
+★ D7  "Even WRI's maps and charts are searchable - about 2,300 of them."
+
+
+---------------------------------------------------------------------
+CLOSE  (2:52 - 3:00)
 ---------------------------------------------------------------------
 SAY:
 "So: every claim verified and cited to the page. Written for whoever is asking. Honest about what
-the evidence can't say. And it protects WRI's credibility before anything goes out.
+the evidence can't say. It protects WRI's credibility before anything goes out - and it can even
+search inside WRI's maps and charts.
 ★ D8  It runs on AWS - Bedrock AgentCore, Bedrock Guardrails and Aurora - with sign-in, and we
       measure it against WRI's own targets on an admin scorecard. Thank you."
 
@@ -263,6 +260,8 @@ IF SOMETHING GOES WRONG
   Still nothing? Open "★ Story · AI data centers and the grid" in the sidebar - the same four
   steps, finished - and carry on from the same step.
 - An error appears: open the ★ Story chat and continue.
+- Step 5 (maps) is slow or errors: open "10 · Search WRI's maps and charts" - same question,
+  already answered.
 - Don't click another chat while an answer is still appearing.
 
 
@@ -272,8 +271,6 @@ FOR QUESTIONS AFTERWARDS (each shows a differentiator)
 - "Other languages?" (D3) -> under the brief, click "Translate" -> Español. Or open chat
   "6 · Ask in Spanish, cite in the original".
 - "Does it ever say no?" (D4) -> open chat "4 · Won't make things up".
-- "Can it search charts and maps?" (D7) -> open chat "10 · Search WRI's maps and charts" (or
-  paste PASTE 4): it names the map (Figure 7) and opens it at its page.
 - "Can it compare reports?" (D5) -> open chat "8 · Compare 8 papers at once", or
   "9 · Read every paper through your lens" (the lens is under Options).
 - "How do you know it's accurate?" (D8) -> open LINK 3, the admin page:

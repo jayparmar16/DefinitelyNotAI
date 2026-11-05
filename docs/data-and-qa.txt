@@ -103,6 +103,71 @@ PART 2 - WHAT HAPPENS WHEN SOMEONE ASKS A QUESTION
 
 
 =====================================================================
+PART 2b - THE EVALUATION SET (what the admin page's scorecard is based on)
+=====================================================================
+
+WHAT IT IS
+A fixed set of 30 test questions about WRI's own reports, each with a known correct answer.
+Whenever AskWRI changes, all 30 are run through the live system and scored. The admin page's
+"Quality scorecard" shows the latest run; the run is labelled with its ID and date.
+
+HOW IT WAS BUILT - working backwards from WRI's reports
+ 1. Pick a real passage from a WRI research publication (reference lists and contents pages
+    excluded).
+ 2. Have a model write the question that passage answers.
+ 3. Record the expected answer: which report and which PDF page it should cite, the key facts
+    the answer must contain, who is asking (researcher, policymaker or partnerships), and the
+    language.
+ The three "unanswerable" questions are written by hand: things WRI has never published on.
+ A person reviews the questions; WRI's own questions can be added in the same format.
+ (One was replaced on Nov 5: "nuclear power plant safety" became answerable once the full
+ collection was loaded - it now mentions nuclear safety standards.)
+
+WHAT'S IN IT (30 questions)
+  Factual ................. 8   e.g. "What is the projected additional cost per passenger for a
+                                 cross-country flight if the 2035 sustainable aviation fuel
+                                 requirement is met...?" (must say "$20 per passenger")
+  Methods ................. 4   how a study was done
+  Decisions (policymaker) . 5   e.g. "Given that 35 percent of marine fish stocks were overfished
+                                 as of 2019 ... what should ...?"
+  Partnerships ............ 3   e.g. "Can you pull together the key talking points about why we
+                                 need to invest in wildfire resilience...?"
+  Older reports ........... 2   e.g. "What percentage target should be set for native species
+                                 planting according to restoration guidelines?" (pre-2019)
+  Other languages ......... 3   asked in Spanish, French and Portuguese
+                                 (e.g. flood and heat risk in Kochi, in Spanish)
+  Synthesis (Deep) ........ 2   e.g. "What financing mechanisms could help scale nature-based
+                                 solutions...?"
+  Unanswerable ............ 3   e.g. "How did WRI rank the world's best football stadiums for
+                                 energy efficiency?" (must decline)
+
+WHAT IS MEASURED, AND WHERE IT SHOWS ON THE ADMIN PAGE
+ Quality scorecard (from the latest evaluation run, 20261105-050756)
+   Citation coverage ...... answers where every figure is cited ................ 100%  (target 100%)
+   Retrieval recall@5 ..... the expected report is in the top 5 found ........... 92%  (target >= 75%)
+   Retrieval precision@5 .. how many of the top 5 are relevant .................. 67%  (monitored)
+   Abstention accuracy .... unanswerable questions correctly declined ........ 3 of 3  (target all)
+   Median latency ......... time to a cited answer, Quick / Deep (from live use) ~13-20 s (< 1 min)
+ Model-graded quality - AgentCore Evaluations (Amazon's built-in judge models grade all 30)
+   Response relevance 0.97 · Correctness 0.88 · Faithfulness 0.82 · Helpfulness 0.72
+ Also recorded per run (in the results file): page match, must-include facts found, claims kept
+ after verification (90%), reader inferred correctly (96%), language correct (100%), cost.
+
+THE OTHER ADMIN SECTIONS (live, not from the test set)
+ Every real question is logged: time taken, estimated cost, tokens, claims removed by
+ verification, and whether it declined. That feeds "Cost and usage" and "Live quality signals".
+ The Traffic switch separates real users from evaluation runs; Window picks 24 h, 7 or 30 days.
+ Click any of the "Highest-cost requests" to review that question: its answer, the claims that
+ were removed, and the sources.
+
+ONE-LINE VERSION
+"We test AskWRI on 30 questions built from WRI's own reports, each with a known answer - the
+ right report, the right page, the facts it must contain, and some it must refuse. Every change
+ is re-run and scored against WRI's targets, and AgentCore's independent judges grade every
+ answer. That's this scorecard."
+
+
+=====================================================================
 PART 3 - EXPECTED QUESTIONS AND SUGGESTED ANSWERS
 =====================================================================
 
@@ -118,6 +183,17 @@ A: We evaluate it on a 30-question test set built from WRI's reports: the right 
    every question WRI's research can't answer was declined (3 of 3). Independent model graders
    in AgentCore Evaluations score relevance 0.97, correctness 0.88, faithfulness 0.82. It's all
    on the admin page.
+
+Q: What is the evaluation set? Isn't 30 questions small?
+A: 30 questions built backwards from real WRI passages - each with the report and page it must
+   cite, the facts it must contain, the reader and the language - plus three it must refuse
+   (see Part 2b). It's a seed set: the format is ready for WRI's own questions, and a teammate
+   is adding feature checks (topic spaces, charts, fact-check, languages).
+
+Q: Aren't the questions biased toward your system?
+A: They're written from WRI's text, not from AskWRI's answers, and reviewed by a person. The
+   unanswerable ones are hand-written to catch guessing. And the AgentCore judges are
+   independent of our own scoring.
 
 Q: What happens when WRI hasn't published anything on a question?
 A: It says so, shows what it searched and the closest related WRI work. It also declines
