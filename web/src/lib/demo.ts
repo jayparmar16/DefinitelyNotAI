@@ -5,7 +5,7 @@
  */
 
 import { applyEvent, newTurn, type Turn } from "../components/turn.ts";
-import type { AgentEvent, Mode, ReportFormat } from "./agent.ts";
+import type { AgentEvent, Lens, Mode, ReportFormat } from "./agent.ts";
 import type { SavedChat } from "./chats.ts";
 
 export type RecordedChat = {
@@ -15,6 +15,7 @@ export type RecordedChat = {
   question: string;
   mode: Mode;
   format?: ReportFormat; // Deep research: the report type it was asked as
+  lens?: Lens | null; // the research lens it was asked through
   events: AgentEvent[];
 };
 
@@ -26,7 +27,10 @@ export function demoChat(recorded: RecordedChat, updatedAt: number): SavedChat {
     ...(recorded.format && { format: recorded.format }),
   };
   const turn: Turn = { ...recorded.events.reduce(applyEvent, start), status: "done" };
-  return { sessionId: recorded.sessionId, title: recorded.title, named: true, updatedAt, turns: [turn], space: recorded.space };
+  return {
+    sessionId: recorded.sessionId, title: recorded.title, named: true, updatedAt, turns: [turn], space: recorded.space,
+    lens: recorded.lens ?? null,
+  };
 }
 
 /** The demo chats, first one newest so the sidebar lists them in order. */

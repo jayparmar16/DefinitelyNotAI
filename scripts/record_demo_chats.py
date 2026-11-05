@@ -1,6 +1,7 @@
 """Record the demo chats: ask each use-case question on the deployed API and save what it streams.
 
 `AWS_PROFILE=<team profile> uv run python scripts/record_demo_chats.py > web/public/demo-chats.json`
+records them all; `... record_demo_chats.py "9 ·"` records only the chats whose titles start so.
 Opening the UI at /?demo=load replaces that browser's chats with these, titled by use case, so a
 short demo can open finished answers instead of waiting for each. Uses the server key (Secrets
 Manager askwri/api-key) and marks the traffic as eval, so it stays out of the live numbers.
@@ -33,6 +34,10 @@ CHATS = [
     ("7 · How WRI's research connects", None, "explore", "adaptation finance", {}),
     ("8 · Compare 8 papers at once", None, "deep",
      "Adaptation finance accountability", {"format": "dossier"}),
+    ("9 · Read every paper through your lens", None, "quick",
+     "How should developing countries finance climate adaptation?",
+     {"lens": {"goal": "Advise a finance ministry on adaptation funding",
+               "aspects": ["funding sources", "returns on investment", "barriers"]}}),
     ("Ocean · what WRI published in 2025", "Ocean", "quick",
      "What did WRI publish in 2025 on ocean?", {}),
 ]  # fmt: skip
@@ -81,14 +86,16 @@ def record(api: str, key: str, chat: tuple) -> dict:
         events += [e for e in drawn if e.get("type") == "visuals"]
     print(f"{title}: {final['type']}", file=sys.stderr, flush=True)
     return {"title": title, "space": space, "sessionId": session, "question": question,
-            "mode": mode, "format": extra.get("format"), "events": events}  # fmt: skip
+            "mode": mode, "format": extra.get("format"), "lens": extra.get("lens"),
+            "events": events}  # fmt: skip
 
 
 def main() -> int:
     key = boto3.client("secretsmanager").get_secret_value(SecretId="askwri/api-key")["SecretString"]
     api = api_url()
+    wanted = [c for c in CHATS if not sys.argv[1:] or c[0].startswith(tuple(sys.argv[1:]))]
     with ThreadPoolExecutor(3) as pool:
-        chats = list(pool.map(lambda chat: record(api, key, chat), CHATS))
+        chats = list(pool.map(lambda chat: record(api, key, chat), wanted))
     json.dump({"chats": chats}, sys.stdout, ensure_ascii=False)
     return 0
 
