@@ -232,7 +232,7 @@ whether they should be an admin.
 same browser window. It replaces that browser's chats with eleven ready-made example chats:
 **"★ Story · AI data centers and the grid"** (one topic followed from a quick answer to a policy
 brief, its citation map and a fact-check), then one chat per feature. Use a private (Incognito)
-window and keep it open: closing it forgets the chats. Demo scripts: `docs/demo-story-script.txt`
+window and keep it open: closing it forgets the chats. How the data was prepared, and likely panel questions: `docs/data-and-qa.txt`. Demo scripts: `docs/demo-story-script.txt`
 (the 3-minute story on AI data centers) and `docs/demo-script.md` (one example per feature).
 
 ## For the technical team
