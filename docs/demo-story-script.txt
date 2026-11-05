@@ -223,3 +223,41 @@ IF YOU HAVE EXTRA TIME, OR FOR QUESTIONS
 STEP 4 DRAFT - copy and paste this exactly
 ---------------------------------------------------------------------
 AI data centers already use most of America's electricity growth, and a PJM study found that data center load added $94 billion to capacity costs in 2024. WRI expects renewables to supply all new data center demand, and grid planners have nearly doubled their five-year demand forecasts.
+
+
+=====================================================================
+COPY-PASTE SHEET - everything you type, in order
+(Keep this window next to the browser. Copy the line between the ">>>" markers.)
+=====================================================================
+
+STEP 1 · Quick answer
+   Settings: tool "Ask" · Deep research OFF · in "All of WRI"
+   >>>
+   How are AI data centers affecting electricity demand and clean energy in the US?
+   >>>
+   Then: click a number like [1] to open the report at the highlighted page.
+
+STEP 2 · Policy brief
+   Settings: tool "Ask" · Deep research ON · Report type "Issue brief" · same chat
+   >>>
+   AI data centers and the clean energy transition
+   >>>
+   Then: point at "Deep research · Issue brief", "Written for: Policymaker", the key points.
+
+STEP 3 · How the research connects
+   Nothing to type. Under the brief, click "Visuals", then "Expand" on the Citation map,
+   then click a report card. Click "Close" when done.
+
+STEP 4 · Fact-check
+   Settings: tool "Fact-check" · same chat
+   >>>
+   AI data centers already use most of America's electricity growth, and a PJM study found that data center load added $94 billion to capacity costs in 2024. WRI expects renewables to supply all new data center demand, and grid planners have nearly doubled their five-year demand forecasts.
+   >>>
+   Expect: $94 billion CONTRADICTED (WRI says $9.4 billion) · "most of the growth" NOT FOUND ·
+           "renewables supply all" NOT FOUND · "forecasts nearly doubled" SUPPORTED
+
+OPTIONAL · Same brief in Spanish (only if you have 15 seconds left)
+   Nothing to type. Under the brief, click "Translate" and choose "Español".
+
+BACKUP · If anything is slow
+   Open "★ Story · AI data centers and the grid" in the sidebar: the same four steps, finished.
