@@ -6,7 +6,7 @@
  * visual stands alone and says when it's empty.
  */
 
-import { useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { CitationFlow, Empty, FlowLink, KeyFigure, LensResult, Relation, Source, Timeline, Visuals } from "@/lib/agent";
 import { CARD_H, CARD_W, citationMap } from "@/lib/citationMap";
@@ -27,13 +27,62 @@ function isEmpty<T extends object>(visual: T | Empty | undefined): visual is Emp
   return !visual || "empty" in visual;
 }
 
-function Section({ title, caption, children }: { title: string; caption?: string; children: React.ReactNode }) {
+type SectionProps = {
+  title: string;
+  caption?: string;
+  children: ReactNode;
+  // The same visual drawn again at full size in a popup, for a closer look.
+  expanded?: ReactNode;
+};
+
+function Section({ title, caption, children, expanded }: SectionProps) {
+  const [open, setOpen] = useState(false);
   return (
     <section className="aw-visual">
-      <h4>{title}</h4>
+      <div className="aw-visual-head">
+        <h4>{title}</h4>
+        {expanded && (
+          <button type="button" className="aw-btn sm" onClick={() => setOpen(true)} aria-haspopup="dialog">
+            Expand
+          </button>
+        )}
+      </div>
       {caption && <p className="aw-meta">{caption}</p>}
       {children}
+      {open && (
+        <VisualDialog title={title} caption={caption} onClose={() => setOpen(false)}>
+          {expanded}
+        </VisualDialog>
+      )}
     </section>
+  );
+}
+
+/** A full-screen popup (the browser's modal dialog: Esc and the backdrop close it too). */
+function VisualDialog({ title, caption, onClose, children }: { title: string; caption?: string; onClose: () => void; children: ReactNode }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="aw-visual-dialog"
+      aria-label={title}
+      onClose={onClose}
+      onClick={(event) => event.target === dialog.current && dialog.current?.close()}
+    >
+      <div className="aw-visual-dialog-head">
+        <div>
+          <h3>{title}</h3>
+          {caption && <p className="aw-meta">{caption}</p>}
+        </div>
+        <button type="button" className="aw-btn sm" onClick={() => dialog.current?.close()} autoFocus>
+          Close
+        </button>
+      </div>
+      <div className="aw-visual-dialog-body">{children}</div>
+    </dialog>
   );
 }
 
@@ -69,11 +118,12 @@ type MapProps = {
   timeline: Timeline;
   flow?: CitationFlow;
   onOpenPage: (link: FlowLink) => void;
+  full?: boolean; // in the popup: drawn at its natural size and scrolled, never shrunk
 };
 
 /** The citation map as a family tree: a generation per year, elbow connectors from each report
  * down to the later reports that build on it, and undated reports listed under the tree. */
-function CitationMapView({ timeline, flow, onOpenPage }: MapProps) {
+function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
   const map = citationMap(timeline, flow);
   const linked = new Set(map.links.flatMap((e) => [e.from, e.to]));
   const [picked, setPicked] = useState<string | null>(map.edges[0]?.to ?? map.links[0]?.to ?? timeline.newest);
@@ -89,7 +139,7 @@ function CitationMapView({ timeline, flow, onOpenPage }: MapProps) {
     <div className="aw-map">
       {map.nodes.length > 0 && (
         <div className="aw-map-scroll">
-          <svg viewBox={`0 0 ${map.width} ${map.height}`} style={{ maxWidth: map.width * 1.25 }} role="img" aria-label="Citation tree of the reports">
+          <svg viewBox={`0 0 ${map.width} ${map.height}`} style={full ? { width: map.width * 1.25, maxWidth: "none" } : { maxWidth: map.width * 1.25 }} role="img" aria-label="Citation tree of the reports">
             <defs>
               {(Object.keys(RELATION_COLORS) as Relation[]).map((relation) => (
                 <marker key={relation} id={`arrow-${relation}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -236,7 +286,7 @@ export function VisualsView({ visuals, answer, lens, matrix, activeMarker, onMar
   return (
     <div className="aw-visuals">
       {!isEmpty(figures) && figures.cards.length > 0 && (
-        <Section title="Key figures" caption={figures.caption}>
+        <Section title="Key figures" caption={figures.caption} expanded={<KeyFigures cards={figures.cards} onMarker={onMarker} />}>
           <KeyFigures cards={figures.cards} onMarker={onMarker} />
         </Section>
       )}
@@ -246,6 +296,7 @@ export function VisualsView({ visuals, answer, lens, matrix, activeMarker, onMar
         <Section
           title="Citation map"
           caption={`${visuals.timeline.caption}. ${visuals.citationFlow?.caption ?? ""}. Click a report to see what it builds on and what builds on it.`}
+          expanded={<CitationMapView timeline={visuals.timeline} flow={visuals.citationFlow} onOpenPage={onOpenPage} full />}
         >
           <CitationMapView timeline={visuals.timeline} flow={visuals.citationFlow} onOpenPage={onOpenPage} />
         </Section>
@@ -255,7 +306,11 @@ export function VisualsView({ visuals, answer, lens, matrix, activeMarker, onMar
           <LensTable lens={lens} activeMarker={activeMarker} onMarker={onMarker} matrix={matrix} />
         </section>
       ) : claims ? (
-        <Section title="Evidence matrix" caption="Which publication backs which point of the answer. Hover a heading for the full point; for a matrix by aspect, use a Lens or a Topic dossier.">
+        <Section
+          title="Evidence matrix"
+          caption="Which publication backs which point of the answer. Hover a heading for the full point; for a matrix by aspect, use a Lens or a Topic dossier."
+          expanded={<ClaimsMatrixTable matrix={claims} />}
+        >
           <ClaimsMatrixTable matrix={claims} />
         </Section>
       ) : answer ? (
