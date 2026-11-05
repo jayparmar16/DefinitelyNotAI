@@ -46,7 +46,7 @@ LANGUAGE_NAMES = {
     "id": "Indonesian",
     "hi": "Hindi",
 }
-TRANSLATED_FIELDS = ("summary", "paragraphs", "implications", "limits", "questions")
+TRANSLATED_FIELDS = ("summary", "paragraphs", "themes", "implications", "limits", "questions")
 SUMMARY_TASK = (
     "Write a summary that synthesises what these WRI publications, taken together, say about "
     "the request: exactly 2 or 3 items, each ONE plain sentence of at most 35 words. The first "
@@ -54,6 +54,11 @@ SUMMARY_TASK = (
     "each other. Draw on as many different publications as the point allows. The summary is "
     "read first, on its own: never refer back to anything ('these measures', 'as above'). "
     "Put the passage IDs only in each item's passages list, never in its text. Write in English."
+)
+THEMES_TASK = (
+    "Fill `themes` with one heading per paragraph (or key point), in the same order: 1 to 3 "
+    "plain words naming what it is about, such as 'Bus speeds' or 'Emissions share'. They head "
+    "a table's columns, so keep them general and short."
 )
 # Passage IDs a model sometimes writes into the text anyway: "[P1]", "(P3)", "[P4, P5]".
 INLINE_LABELS = re.compile(r"\s*[\[(]P\d+(?:\s*(?:,|and)\s*P\d+)*[\])]")
@@ -213,6 +218,18 @@ def search_arguments(query: str, mode: str, filters: dict) -> dict:
     if filters.get("region"):
         arguments["country"] = filters["region"]  # the tool matches countries and regions
     return arguments
+
+
+def group_themes(drafted: list[list], themes: list[str], kept: list[list]) -> list[str]:
+    """The drafted theme of each paragraph or key point that survived verification, in order.
+    A kept group is matched to the drafted one it came from by any sentence they share; a
+    group with no theme gets "" (the UI falls back to "Point n")."""
+    origin = {s.text.strip(): i for i, g in enumerate(drafted) for s in g}
+    out = []
+    for group in kept:
+        index = next((origin[s.text] for s in group if s.text in origin), None)
+        out.append(themes[index].strip()[:40] if index is not None and index < len(themes) else "")
+    return out
 
 
 def passages_block(labels: dict[str, dict]) -> str:
@@ -605,6 +622,7 @@ class Agent:
             ]
         )
         texts = numbered[: len(groups)]
+        themes = group_themes(draft["groups"], draft.get("themes") or [], groups)
         cell_texts = iter(numbered[len(groups) : len(groups) + len(lens_groups)])
         compare_texts = numbered[
             len(groups) + len(lens_groups) : len(numbered) - len(summary_groups)
@@ -636,6 +654,7 @@ class Agent:
             "audience": draft["audience"],
             "scope": f"Based on {cited_docs} of the {size} WRI publications indexed in AskWRI",
             "paragraphs": texts,
+            "themes": themes,
             "implications": [readers_words(t) for t in implications],
             "limits": [] if report else [readers_words(t) for t in draft["limits"]],
             "questions": [readers_words(t) for t in draft["questions"]],
@@ -1137,6 +1156,8 @@ class Agent:
             )
         # The summary comes from this same call (a separate one added 2-4 s to every answer).
         properties |= {
+            # Column headings for the evidence matrix: one per paragraph or key point.
+            "themes": texts,
             "summary": claims,
             "implications": texts,
             "limits": texts,
@@ -1166,6 +1187,7 @@ class Agent:
             effort=DRAFT_EFFORT[mode],
             system=f"{RULES}\n\n{AUTO if audience == 'auto' else AUDIENCES[audience]}",
             prompt=f"Question: {question}\n\n{task}\nAlso fill `summary`. {SUMMARY_TASK}\n"
+            f"{THEMES_TASK}\n"
             f"{EXTRAS}{strict}\n\nPassages:\n\n"
             f"{passages_block(labels)}",
             schema={
@@ -1178,6 +1200,7 @@ class Agent:
         yield step(step_id, "Redrafted" if removed else "Drafted a cited answer", "done")
         draft = {
             "answerable": reply["answerable"],
+            "themes": reply["themes"],
             "summary": to_sentences(
                 [
                     {**item, "text": INLINE_LABELS.sub("", item["text"]).strip()}

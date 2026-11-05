@@ -53,8 +53,8 @@ export function httpAgent(baseUrl: string): AgentClient {
         if (event.type === "decline") throw new Error(event.decline.message);
       }
       if (!answer) throw new Error("No translation came back");
-      const { summary, report, implications, limits, questions } = answer;
-      return { summary, paragraphs: report?.keyPoints ?? answer.paragraphs, report, implications, limits, questions };
+      const { summary, themes, report, implications, limits, questions } = answer;
+      return { summary, paragraphs: report?.keyPoints ?? answer.paragraphs, themes, report, implications, limits, questions };
     },
 
     async warmup(sessionId) {

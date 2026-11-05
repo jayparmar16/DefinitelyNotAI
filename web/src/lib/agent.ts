@@ -94,6 +94,7 @@ export type Answer = {
   language: string;
   machineTranslated: boolean;
   paragraphs: string[]; // every sentence ends with one or more [n] markers
+  themes?: string[]; // 1-3 word heading per paragraph or key point: the evidence matrix's columns
   sources: Source[];
   claimsTotal: number;
   claimsVerified: number;
@@ -185,7 +186,7 @@ export type AgentEvent =
   | { type: "decline"; decline: Decline };
 
 /** A translated answer: every text the reader sees, in the target language. */
-export type Translation = Pick<Answer, "summary" | "paragraphs" | "report" | "implications" | "limits" | "questions">;
+export type Translation = Pick<Answer, "summary" | "paragraphs" | "themes" | "report" | "implications" | "limits" | "questions">;
 
 export type AgentClient = {
   /** Streams events for one question; stops early when `signal` aborts (the Stop button). */

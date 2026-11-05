@@ -359,7 +359,7 @@ export function SidePanel(props: SidePanelProps) {
           turn.visuals ? (
             <VisualsView
               visuals={turn.visuals}
-              answer={turn.answer ? { paragraphs: turn.answer.paragraphs, sources: turn.answer.sources } : undefined}
+              answer={turn.answer ? { paragraphs: turn.answer.paragraphs, sources: turn.answer.sources, themes: turn.answer.themes } : undefined}
               lens={turn.answer?.lens}
               matrix={Boolean(turn.answer?.dossier)}
               activeMarker={props.activeMarker}

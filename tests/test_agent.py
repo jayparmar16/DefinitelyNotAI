@@ -225,6 +225,7 @@ DRAFT_EXTRAS = {
     "limits": [],
     "questions": [],
     "question_language": "en",
+    "themes": ["Cool roofs"],
     **SUMMARY,
 }
 PROMPTS = []
@@ -1332,6 +1333,7 @@ def test_an_answer_opens_with_a_verified_summary_citing_its_sources(monkeypatch)
     answer = events[-1]["answer"]
     assert answer["summary"] == ["In short, roofs cool cities [1]."]
     assert answer["sources"][0]["marker"] == 1  # the summary's marker is in the sources list
+    assert answer["themes"] == ["Cool roofs"]  # one matrix column heading per paragraph
     assert memory.saved[0][2]["summary"] == answer["summary"]
     # Written by the draft call itself: no second model call for it.
     prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
@@ -1396,3 +1398,13 @@ def test_passage_labels_written_into_a_summary_never_reach_the_reader(monkeypatc
     agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
     answer = list(agent.run({"question": "How do cities cool down?"}))[-1]["answer"]
     assert answer["summary"] == ["Roofs cool cities and parks help [1]."]
+
+
+def test_each_kept_paragraph_keeps_its_theme_for_the_matrix_columns():
+    a = [loop.Sentence("Roofs cool.", ("P1",)), loop.Sentence("Paint helps.", ("P2",))]
+    b = [loop.Sentence("Buses are faster.", ("P3",))]
+    c = [loop.Sentence("Trees shade.", ("P4",))]
+    # The second paragraph failed verification; the first lost one sentence.
+    kept = [[a[1]], c]
+    assert loop.group_themes([a, b, c], ["Roofs", "Buses", "Trees"], kept) == ["Roofs", "Trees"]
+    assert loop.group_themes([a], [], [[a[0]]]) == [""]

@@ -11,6 +11,7 @@ import { useState } from "react";
 import type { CitationFlow, Empty, FlowLink, KeyFigure, LensResult, Relation, Source, Timeline, Visuals } from "@/lib/agent";
 import { CARD_H, CARD_W, citationMap } from "@/lib/citationMap";
 import { type ClaimsMatrix, claimsMatrix } from "@/lib/matrix";
+import { MatrixTable } from "./MatrixTable";
 import { LensTable } from "./LensTable";
 
 const RELATION_LABELS: Record<Relation, string> = {
@@ -206,41 +207,22 @@ function CitationMapView({ timeline, flow, onOpenPage }: MapProps) {
 
 function ClaimsMatrixTable({ matrix }: { matrix: ClaimsMatrix }) {
   return (
-    <div className="aw-lens aw-claims">
-      <div className="aw-lens-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Report</th>
-              {matrix.columns.map((column, i) => (
-                <th key={i} scope="col" title={column.text}>{column.label}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {matrix.rows.map((row, r) => (
-              <tr key={row.docId}>
-                <th scope="row">
-                  {row.title}
-                  <span className="aw-meta">{row.year ?? "n.d."}</span>
-                </th>
-                {matrix.cells[r].map((backs, c) => (
-                  <td key={c} className={backs ? "aw-tick" : "empty"} aria-label={backs ? "cited for this point" : "not cited"}>
-                    {backs ? "✓" : "–"}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <MatrixTable
+      label="Evidence matrix"
+      columns={matrix.columns.map((column) => ({ label: column.label, title: column.text }))}
+      rows={matrix.rows.map((row, r) => ({
+        ...row,
+        cells: matrix.cells[r].map((backs) =>
+          backs ? { content: "✓", tick: true } : { content: "–", tick: true, empty: true },
+        ),
+      }))}
+    />
   );
 }
 
 type VisualsViewProps = {
   visuals: Visuals;
-  answer?: { paragraphs: string[]; sources: Source[] };
+  answer?: { paragraphs: string[]; sources: Source[]; themes?: string[] };
   lens?: LensResult;
   matrix?: boolean;
   activeMarker: number | null;
@@ -250,7 +232,7 @@ type VisualsViewProps = {
 
 export function VisualsView({ visuals, answer, lens, matrix, activeMarker, onMarker, onOpenPage }: VisualsViewProps) {
   const figures = visuals.keyFigures;
-  const claims = !lens && answer ? claimsMatrix(answer.paragraphs, answer.sources) : null;
+  const claims = !lens && answer ? claimsMatrix(answer.paragraphs, answer.sources, answer.themes) : null;
   return (
     <div className="aw-visuals">
       {!isEmpty(figures) && figures.cards.length > 0 && (
@@ -273,7 +255,7 @@ export function VisualsView({ visuals, answer, lens, matrix, activeMarker, onMar
           <LensTable lens={lens} activeMarker={activeMarker} onMarker={onMarker} matrix={matrix} />
         </section>
       ) : claims ? (
-        <Section title="Evidence matrix" caption="Which report backs which point of the answer (hover a column for the full point). For a matrix by topic, use a Lens or a Topic dossier.">
+        <Section title="Evidence matrix" caption="Which publication backs which point of the answer. Hover a heading for the full point; for a matrix by aspect, use a Lens or a Topic dossier.">
           <ClaimsMatrixTable matrix={claims} />
         </Section>
       ) : answer ? (

@@ -428,14 +428,6 @@ a.aw-btn{text-decoration:none}
 .aw-lens{margin-top:var(--space-400)}
 .aw-lens h5{margin:0 0 var(--space-200);font-size:13px;line-height:20px}
 .aw-lens h5 span{font-weight:400;color:var(--ink-muted);margin-left:var(--space-100)}
-.aw-lens-scroll{overflow-x:auto;border:var(--border-thin) solid var(--line);border-radius:var(--radius-500)}
-.aw-lens table{border-collapse:collapse;width:100%;font-size:13px;line-height:20px}
-.aw-lens th,.aw-lens td{padding:var(--space-200) var(--space-300);border-bottom:var(--border-thin) solid var(--line);text-align:left;vertical-align:top;min-width:180px}
-.aw-lens thead th{background:var(--surface-sunken);font-size:12px;line-height:16px;text-transform:capitalize}
-.aw-lens tbody th{font-weight:600;min-width:200px}
-.aw-lens tbody th .aw-meta{display:block;font-weight:400}
-.aw-lens tr:last-child > *{border-bottom:0}
-.aw-lens td.empty{color:var(--ink-muted);font-style:italic}
 .aw-doc-lens{margin:0 var(--space-400) var(--space-300);padding:var(--space-300);border-radius:var(--radius-300);background:var(--secondary-100);border:var(--border-thin) solid var(--secondary-200)}
 .aw-doc-lens .cap{font-size:12px;line-height:16px;font-weight:700;color:var(--secondary-700);margin-bottom:var(--space-200)}
 .aw-doc-lens dl{margin:0;display:flex;flex-direction:column;gap:var(--space-200);font-size:13px;line-height:20px}
@@ -470,9 +462,6 @@ a.aw-btn{text-decoration:none}
 
 /* Report type next to Deep research; ticks in the claims matrix */
 .aw-report-type select{font:inherit;font-size:12px;font-weight:600;padding:4px 8px;border:var(--border-thin) solid var(--line);border-radius:var(--radius-300);background:var(--surface);color:var(--ink)}
-.aw-lens td.aw-tick{color:var(--success-900);font-weight:700;text-align:center;font-style:normal}
-.aw-lens td.empty{text-align:center}
-.aw-claims thead th{text-transform:none;font-weight:600;min-width:150px}
 .aw-composer-end{display:flex;align-items:center;gap:var(--space-200);margin-left:auto;flex-wrap:nowrap}
 
 /* Citation map: years down the side, report cards, arrows coloured by relation */
@@ -572,3 +561,19 @@ a.aw-btn{text-decoration:none}
 .aw-doc-abstract{margin:var(--space-200) 0;font-size:14px;line-height:20px}
 .aw-doc-abstract summary{cursor:pointer;color:var(--link);font-weight:600;font-size:13px}
 .aw-doc-abstract p{margin:var(--space-200) 0 0;color:var(--ink-muted)}
+
+/* ---- One matrix layout (evidence matrix, lens, dossier): fits one view, short headings ---- */
+.aw-matrix{border:var(--border-thin) solid var(--line);border-radius:var(--radius-500);overflow-x:auto;background:var(--surface)}
+.aw-matrix table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:13px;line-height:18px}
+.aw-matrix th,.aw-matrix td{padding:var(--space-200);border-bottom:var(--border-thin) solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.aw-matrix thead th{background:var(--surface-sunken);font-size:12px;line-height:16px;font-weight:600;color:var(--ink-muted);overflow-wrap:normal;hyphens:auto}
+.aw-matrix thead th::first-letter{text-transform:uppercase}
+.aw-matrix thead th:first-child,.aw-matrix tbody th{width:32%}
+.aw-matrix tbody th{font-weight:600}
+.aw-matrix-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.aw-matrix tbody th .aw-meta{display:block;font-weight:400}
+.aw-matrix tr:last-child > *{border-bottom:0}
+.aw-matrix td.empty{color:var(--ink-muted);font-style:italic}
+.aw-matrix td.tick{color:var(--success-900);font-weight:700;text-align:center;font-style:normal}
+.aw-matrix td.tick.empty{color:var(--ink-muted);font-weight:400}
+@media (max-width:600px){.aw-matrix table{table-layout:auto}.aw-matrix th,.aw-matrix td{min-width:110px}}
