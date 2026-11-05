@@ -43,7 +43,11 @@ email. If that doesn't work, ask an administrator to reset your account.
   Food, Forests, Freshwater and Ocean. The number next to each is how many publications it
   holds. Inside a space, every question searches that topic's publications only. **All of WRI**
   searches everything.
-- **Your chats** for the space you're in, newest first. Click one to reopen it.
+- **Your chats** for the space you're in, newest first. Click one to reopen it: the box at the
+  bottom goes back to how that chat was asked (Ask, Fact-check or Explore, Deep research and its
+  report type).
+- **Make the sidebar wider** by dragging its right edge, so long chat titles are easier to read.
+  Double-click the edge to put it back.
 
 **The box at the bottom** is where you ask. Below it:
 
@@ -200,13 +204,22 @@ related WRI work. You can:
 **The admin page** (https://d17gz0gh5g00t3.cloudfront.net/admin/, or the **Admin** button at the
 top right) is only available to accounts in the admins group. It shows:
 
-- **What WRI asked us to show**: the latest evaluation against WRI's targets (every claim cited,
-  the right source among the top five, unanswerable questions declined, time to a useful
-  source), each marked On target or Below target.
-- **What questions cost**: estimated cost per answer, spend per day, by kind of question and by
-  step, and the most expensive questions. Click one to review it: the question, the answer, the
-  claims that were removed and the sources.
-- **Does quality hold**: claims removed per answer and how often AskWRI declines.
+- **Quality scorecard**: the latest evaluation, measured against WRI's success criteria, each
+  marked On target or Below target:
+  - **Citation coverage**: answers with every figure cited (target 100%).
+  - **Retrieval recall@5**: how often the right WRI source is among the top five found (target
+    75% or more). **Retrieval precision@5**: how many of the top five are relevant.
+  - **Abstention accuracy**: questions WRI's research can't answer that AskWRI correctly declined
+    (target: all of them).
+  - **Median latency**: how long a Quick answer and a Deep research report take (target: under a
+    minute).
+- **Model-graded quality · AgentCore Evaluations**: independent model graders score every test
+  answer for faithfulness to its sources, correctness, relevance and helpfulness.
+- **Cost and usage**: estimated cost per answer, projected cost per 1,000 answers, tokens, 30-day
+  spend against the budget, daily spend, cost by request type and by pipeline step, and the
+  highest-cost requests. Click one to review it: the question, the answer, the claims that
+  verification removed and the sources.
+- **Live quality signals**: unsupported claims removed per answer, and how often AskWRI declines.
 
 Use **Traffic** to switch between real users and evaluation runs, and **Window** for the last
 24 hours, 7 days or 30 days.
@@ -215,8 +228,11 @@ Use **Traffic** to switch between real users and evaluation runs, and **Window**
 whether they should be an admin.
 
 **Preparing a demo:** sign in, then open https://d17gz0gh5g00t3.cloudfront.net/?demo=load in the
-same browser window. It replaces that browser's chats with nine ready-made example chats, one per
-feature. A step-by-step demo script is in `docs/demo-script.md`.
+same browser window. It replaces that browser's chats with eleven ready-made example chats:
+**"★ Story · AI data centers and the grid"** (one topic followed from a quick answer to a policy
+brief, its citation map and a fact-check), then one chat per feature. Use a private (Incognito)
+window and keep it open: closing it forgets the chats. A step-by-step demo script is in
+`docs/demo-script.md`.
 
 ## For the technical team
 
