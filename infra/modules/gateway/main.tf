@@ -16,7 +16,7 @@ locals {
         { name = "include_undated", type = "boolean", description = "Keep documents with no reliable date (default true)." },
         { name = "pub_type", type = "string", description = "Publication type, e.g. Report or Issue brief." },
         { name = "topic", type = "string", description = "One of WRI's topics (e.g. Cities, Climate, Forests) or a tag." },
-        { name = "country", type = "string", description = "Country the document covers." },
+        { name = "country", type = "string", description = "Country or region the document covers (e.g. Kenya, Southeast Asia)." },
         { name = "language", type = "string", description = "ISO 639-1 language of the document, e.g. en, es, pt." },
         { name = "doc_id", type = "string", description = "Search inside this one document only (a doc_id from earlier results)." },
       ]

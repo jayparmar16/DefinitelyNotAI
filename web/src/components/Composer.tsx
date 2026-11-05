@@ -20,6 +20,14 @@ const PUB_TYPES = [
   "Expert note",
 ];
 
+// The ingestion pipeline's fixed lists (askwri/ingest/model_labels.py, askwri/ingest/vocabulary.py).
+const TOPICS = ["Business", "Cities", "Climate", "Economics", "Energy", "Equity", "Finance", "Food", "Forests", "Freshwater", "Ocean"];
+const REGIONS = [
+  "Global", "Africa", "Sub-Saharan Africa", "Middle East and North Africa", "Asia", "East Asia",
+  "South Asia", "Southeast Asia", "Central Asia", "Europe", "Latin America and the Caribbean",
+  "North America", "Oceania", "Small island developing states",
+];
+
 export type Tool = "ask" | "factcheck" | "explore";
 
 const TOOLS: { value: Tool; name: string; placeholder: string }[] = [
@@ -55,7 +63,8 @@ type ComposerProps = {
 
 function filtersLabel(filters: Filters): string {
   const year = filters.yearFrom ? `${filters.yearFrom} on` : "any year";
-  return `Filters: ${year} · ${filters.pubType ?? "any type"}`;
+  const narrower = [filters.topic, filters.region].filter(Boolean).map((part) => ` · ${part}`).join("");
+  return `Filters: ${year} · ${filters.pubType ?? "any type"}${narrower}`;
 }
 
 export function Composer(props: ComposerProps) {
@@ -195,6 +204,34 @@ export function Composer(props: ComposerProps) {
                     <option value="">Any type</option>
                     {PUB_TYPES.map((type) => (
                       <option key={type}>{type}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="row">
+                  Topic
+                  <select
+                    value={props.filters.topic ?? ""}
+                    onChange={(event) =>
+                      props.onFilters({ ...props.filters, topic: event.target.value || undefined })
+                    }
+                  >
+                    <option value="">Any topic</option>
+                    {TOPICS.map((topic) => (
+                      <option key={topic}>{topic}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="row">
+                  Region
+                  <select
+                    value={props.filters.region ?? ""}
+                    onChange={(event) =>
+                      props.onFilters({ ...props.filters, region: event.target.value || undefined })
+                    }
+                  >
+                    <option value="">Anywhere</option>
+                    {REGIONS.map((region) => (
+                      <option key={region}>{region}</option>
                     ))}
                   </select>
                 </label>

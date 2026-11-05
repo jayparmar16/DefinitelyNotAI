@@ -215,7 +215,16 @@ function SourceView({ source, pdfUrl, lens }: { source: Source; pdfUrl: SidePane
     <div className="aw-doc">
       <div className="aw-doc-head">
         <h3>{source.title}</h3>
+        {source.topics?.length ? (
+          <div className="aw-topics">{source.topics.map((topic) => <span key={topic} className="aw-tag">{topic}</span>)}</div>
+        ) : null}
       </div>
+      {source.abstract && (
+        <details className="aw-doc-abstract">
+          <summary>WRI&apos;s summary of this publication</summary>
+          <p>{source.abstract}</p>
+        </details>
+      )}
       {lensRow && lens && (
         <div className="aw-doc-lens">
           <div className="cap">Through your lens · {lens.goal}</div>

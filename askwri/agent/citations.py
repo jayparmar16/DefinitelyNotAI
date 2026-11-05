@@ -97,6 +97,8 @@ def source_entry(marker: int, result: dict, authors: list[str]) -> dict:
         "pdfKey": result.get("pdf_key"),
         "authors": authors,
         "why": result.get("why"),
+        "topics": result.get("topics") or [],
+        "abstract": result.get("abstract"),
     }
 
 

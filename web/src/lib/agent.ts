@@ -15,6 +15,8 @@ export type ReportFormat = "summary" | "issue-brief" | "talking-points" | "dossi
 export type Filters = {
   yearFrom?: number;
   pubType?: string;
+  topic?: string; // one of WRI's 11 topics (askwri/ingest/model_labels.py TOPICS)
+  region?: string; // a region or country the document is about
 };
 
 export type AskRequest = {
@@ -63,6 +65,8 @@ export type Source = {
   doi: string | null;
   authors: string[];
   pdfKey?: string | null; // stored copy in the corpus bucket, for the download link
+  topics?: string[]; // WRI's topic first, then at most one more
+  abstract?: string | null; // WRI's own summary from wri.org, when the document has a page
   citedBy?: number; // how many documents in AskWRI's collection cite this one
   why?: {
     by_meaning: boolean;

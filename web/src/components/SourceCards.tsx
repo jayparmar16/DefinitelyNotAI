@@ -46,7 +46,8 @@ export function Passage({ source }: { source: Source }) {
 export function sourceMeta(source: Source): string {
   const progress = source.pubType === "Working paper" ? " (in progress)" : "";
   const cited = source.citedBy ? ` · cited by ${source.citedBy} in AskWRI` : "";
-  return `${source.pubType}${progress} · ${citationYear(source)} · ${source.office} · p. ${source.printedPage ?? source.page}${cited}`;
+  const topic = source.topics?.length ? ` · ${source.topics[0]}` : "";
+  return `${source.pubType}${progress} · ${citationYear(source)}${topic} · ${source.office} · p. ${source.printedPage ?? source.page}${cited}`;
 }
 
 export function SourceCards(props: SourceCardsProps) {

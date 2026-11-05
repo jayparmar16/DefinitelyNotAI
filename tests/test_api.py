@@ -10,7 +10,7 @@ def test_chat_payload_keeps_valid_fields_and_defaults_the_rest():
             "mode": "deep",
             "language": "es",
             "format": "issue-brief",
-            "filters": {"yearFrom": 2010, "evil": "x"},
+            "filters": {"yearFrom": 2010, "evil": "x", "topic": "Ocean", "region": "Africa"},
             "sessionId": "a" * 36,
         }
     )
@@ -20,7 +20,7 @@ def test_chat_payload_keeps_valid_fields_and_defaults_the_rest():
         "issue-brief",
         "es",
     )
-    assert payload["filters"] == {"yearFrom": 2010}
+    assert payload["filters"] == {"yearFrom": 2010, "topic": "Ocean", "region": "Africa"}
     assert payload["sessionId"] == "a" * 36
 
 

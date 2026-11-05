@@ -75,7 +75,10 @@ def chat_payload(body: dict) -> dict:
         "language": str(body.get("language") or "en")[:5],
         "audience": str(body.get("audience") or "auto")[:40],
         "format": body.get("format") if body.get("format") in FORMATS else "summary",
-        "filters": {k: filters[k] for k in ("yearFrom", "pubType") if filters.get(k)},
+        "filters": {
+            **({"yearFrom": filters["yearFrom"]} if filters.get("yearFrom") else {}),
+            **{k: str(filters[k])[:80] for k in ("pubType", "topic", "region") if filters.get(k)},
+        },
         "sessionId": session,
         "deep": body.get("deep") is True,  # fact-check: search harder
         # Evaluation runs mark their traffic, so live metrics can tell them from user questions.

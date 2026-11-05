@@ -1034,3 +1034,8 @@ def test_usage_estimates_cost_per_model_and_step():
         "verify": {"in": 1_000_000, "out": 0},
     }
     assert used["estimatedCostUsd"] == 3.0 + 1.5 + 1.0
+
+
+def test_topic_and_region_filters_reach_the_search_tool():
+    arguments = loop.search_arguments("heat", "quick", {"topic": "Ocean", "region": "Africa"})
+    assert (arguments["topic"], arguments["country"]) == ("Ocean", "Africa")

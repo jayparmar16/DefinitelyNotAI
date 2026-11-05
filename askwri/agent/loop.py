@@ -159,6 +159,10 @@ def search_arguments(query: str, mode: str, filters: dict) -> dict:
         arguments["year_from"] = int(filters["yearFrom"])
     if filters.get("pubType"):
         arguments["pub_type"] = filters["pubType"]
+    if filters.get("topic"):
+        arguments["topic"] = filters["topic"]
+    if filters.get("region"):
+        arguments["country"] = filters["region"]  # the tool matches countries and regions
     return arguments
 
 
