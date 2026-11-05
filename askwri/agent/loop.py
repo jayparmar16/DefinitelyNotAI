@@ -220,6 +220,12 @@ def search_arguments(query: str, mode: str, filters: dict) -> dict:
     return arguments
 
 
+def is_translation(source: str, translation: str) -> bool:
+    """False for a reply that isn't a translation: given a two-word heading, the model sometimes
+    answers "I need more text to translate..." instead, which runs far longer than the source."""
+    return bool(translation.strip()) and len(translation) <= 3 * len(source) + 40
+
+
 def group_themes(drafted: list[list], themes: list[str], kept: list[list]) -> list[str]:
     """The drafted theme of each paragraph or key point that survived verification, in order.
     A kept group is matched to the drafted one it came from by any sentence they share; a
@@ -1332,12 +1338,17 @@ class Agent:
                     texts,
                 )
             )
-        out = [
-            r["translation"] if r["numbers_preserved"] else t
+        usable = [
+            r["numbers_preserved"] and is_translation(t, r["translation"])
             for r, t in zip(results, texts, strict=True)
         ]
-        kept = sum(not r["numbers_preserved"] for r in results)
-        detail = f"{kept} kept in English because a number changed" if kept else None
+        out = [
+            r["translation"] if ok else t for r, t, ok in zip(results, texts, usable, strict=True)
+        ]
+        kept = usable.count(False)
+        detail = (
+            f"{kept} kept in English (a number changed, or no real translation)" if kept else None
+        )
         yield step("translate", f"Translated to {name}", "done", detail)
         return out, kept < len(texts)
 

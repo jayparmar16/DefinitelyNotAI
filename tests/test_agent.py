@@ -1408,3 +1408,35 @@ def test_each_kept_paragraph_keeps_its_theme_for_the_matrix_columns():
     kept = [[a[1]], c]
     assert loop.group_themes([a, b, c], ["Roofs", "Buses", "Trees"], kept) == ["Roofs", "Trees"]
     assert loop.group_themes([a], [], [[a[0]]]) == [""]
+
+
+def test_a_dossier_too_large_for_one_memory_message_is_stored_smaller():
+    import json
+
+    from askwri.agent.memory import ANSWER_KEY, MAX_STORED, stored_text
+
+    source = {"marker": 1, "passage": "x" * 5000}
+    small = {"paragraphs": ["a [1]."], "sources": [source]}
+    assert json.loads(stored_text(small))[ANSWER_KEY] == small
+    big = {
+        **small,
+        "sources": [source] * 30,
+        "lens": {"rows": ["y" * 80_000]},
+        "dossier": {"agree": []},
+    }
+    kept = json.loads(stored_text(big))[ANSWER_KEY]
+    assert len(stored_text(big)) <= MAX_STORED
+    assert "lens" not in kept and kept["paragraphs"] == ["a [1]."]
+    assert len(kept["sources"][0]["passage"]) == 1200
+    huge = {**small, "sources": [{"marker": i, "passage": "z" * 1200} for i in range(200)]}
+    assert (
+        json.loads(stored_text(huge))[ANSWER_KEY]["sources"][0]["marker"] == 0
+    )  # still valid JSON
+    assert len(stored_text(huge)) <= MAX_STORED
+
+
+def test_a_model_reply_instead_of_a_translation_is_not_used():
+    assert loop.is_translation("Planning and data", "Planificación y datos")
+    reply = 'I need more text to translate. You\'ve only provided "Planning and data" in your instructions.'
+    assert not loop.is_translation("Planning and data", reply)
+    assert not loop.is_translation("Cool roofs", "  ")

@@ -12,6 +12,31 @@ import boto3
 
 ACTOR = "askwri-user"  # shortcut: one actor until the UI signs users in
 ANSWER_KEY = "askwri_answer"
+# AgentCore Memory takes at most 100,000 characters per message; a topic dossier's answer (8
+# papers through a lens, with every source passage) can be larger.
+MAX_STORED = 95_000
+PASSAGE_CHARS = 1_200
+
+
+def stored_text(answer: dict) -> str:
+    """The answer as stored for follow-ups, made to fit one memory message: first the source
+    passages are shortened, then the lens and dossier tables are left out (a follow-up then
+    redrafts or translates the answer without them), then the later sources."""
+    text = json.dumps({ANSWER_KEY: answer}, ensure_ascii=False)
+    if len(text) <= MAX_STORED:
+        return text
+    sources = [{**s, "passage": s["passage"][:PASSAGE_CHARS]} for s in answer.get("sources", [])]
+    answer = {**answer, "sources": sources}
+    text = json.dumps({ANSWER_KEY: answer}, ensure_ascii=False)
+    if len(text) <= MAX_STORED:
+        return text
+    answer = {k: v for k, v in answer.items() if k not in ("lens", "dossier")}
+    text = json.dumps({ANSWER_KEY: answer}, ensure_ascii=False)
+    # Still too large: keep the first sources (the answer cites them in order) until it fits.
+    while len(text) > MAX_STORED and len(answer["sources"]) > 1:
+        answer = {**answer, "sources": answer["sources"][: len(answer["sources"]) // 2]}
+        text = json.dumps({ANSWER_KEY: answer}, ensure_ascii=False)
+    return text
 
 
 class Memory:
@@ -33,7 +58,7 @@ class Memory:
                 {
                     "conversational": {
                         "role": "ASSISTANT",
-                        "content": {"text": json.dumps({ANSWER_KEY: answer}, ensure_ascii=False)},
+                        "content": {"text": stored_text(answer)},
                     }
                 },
             ],
