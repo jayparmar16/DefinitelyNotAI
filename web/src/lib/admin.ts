@@ -20,6 +20,7 @@ export type Scorecard = {
   median_seconds_quick: number | null;
   median_seconds_deep: number | null;
   judged: boolean;
+  judges: Record<string, number> | null; // AgentCore Evaluations' average score per judge
 };
 
 export type Live = {

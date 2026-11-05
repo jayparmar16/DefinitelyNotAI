@@ -27,7 +27,7 @@ import {
 import { SignOut } from "../SignOut";
 import { ReviewPanel } from "./ReviewPanel";
 
-type TileProps = { label: string; value: string; target?: string; status?: Status; source: "Last run" | "Live" | "Estimated"; note?: string };
+type TileProps = { label: string; value: string; target?: string; status?: Status; source: "Evaluation" | "Live" | "Estimated"; note?: string };
 
 function Tile({ label, value, target, status: state, source, note }: TileProps) {
   return (
@@ -45,6 +45,14 @@ function Tile({ label, value, target, status: state, source, note }: TileProps) 
     </div>
   );
 }
+
+// The AgentCore Evaluations judges shown, with our targets (null: monitored, no target).
+const JUDGES = [
+  { id: "Faithfulness", label: "Faithfulness", target: 0.8, note: "Claims grounded in the retrieved passages" },
+  { id: "Correctness", label: "Correctness", target: 0.85, note: "Agrees with the test set's expected facts" },
+  { id: "ResponseRelevance", label: "Response relevance", target: 0.9, note: "Answers the question asked" },
+  { id: "Helpfulness", label: "Helpfulness", target: null, note: "Usefulness to the reader (monitored)" },
+];
 
 function Bars({ rows, label }: { rows: { name: string; value: number; shown: string }[]; label: string }) {
   const [table, setTable] = useState(false);
@@ -153,38 +161,56 @@ export function AdminApp() {
         </div>
 
         <section className="ad-section">
-          <h2>What WRI asked us to show</h2>
+          <h2>Quality scorecard</h2>
+          <p className="aw-meta">Measured against WRI&apos;s success criteria on the evaluation test set; latency from live traffic.</p>
           {card ? (
             <p className="ad-run">
-              Last evaluation run <b>{card.run_id}</b> · {new Date(card.run_date).toLocaleString()} · {card.configuration ?? "default configuration"} · {card.questions} questions
-              {card.judged ? " · judged by AgentCore Evaluations" : ""}
+              Evaluation run <b>{card.run_id}</b> · {new Date(card.run_date).toLocaleString()} · {card.configuration ?? "default configuration"} · {card.questions}-question test set
+              {card.judged ? " · graded by AgentCore Evaluations" : ""}
             </p>
           ) : (
             overview && <p className="ad-empty">No evaluation run yet. Run <code>uv run python -m eval.run_eval run</code>.</p>
           )}
           <div className="ad-grid">
-            <Tile label="Every claim cited" value={percent(card?.figures_cited_rate)} target="100%" status={status(card?.figures_cited_rate, 1, "higher")} source="Last run" note="Answers whose figures all carry a citation" />
-            <Tile label="Right source in the top 5 (recall@5)" value={percent(card?.recall_at_5)} target="75%" status={status(card?.recall_at_5, 0.75, "higher")} source="Last run" />
-            <Tile label="Top 5 that are relevant (precision@5)" value={percent(card?.precision_at_5)} source="Last run" note="Reported, no target" />
-            <Tile label="Unanswerable questions declined" value={card?.unanswerable_declined ?? "–"} target="all" status={allDeclined(card?.unanswerable_declined)} source="Last run" />
-            <Tile label="Time to a useful source, Quick" value={seconds(live?.median_seconds.quick)} target="under 1 min" status={status(live?.median_seconds.quick, 60, "lower")} source="Live" note="Median" />
-            <Tile label="Time to a useful source, Deep" value={seconds(live?.median_seconds.deep)} target="under 1 min" status={status(live?.median_seconds.deep, 60, "lower")} source="Live" note="Median" />
+            <Tile label="Citation coverage" value={percent(card?.figures_cited_rate)} target="100%" status={status(card?.figures_cited_rate, 1, "higher")} source="Evaluation" note="Answers with every figure cited" />
+            <Tile label="Retrieval recall@5" value={percent(card?.recall_at_5)} target="≥ 75%" status={status(card?.recall_at_5, 0.75, "higher")} source="Evaluation" note="Expected source in the top 5 results" />
+            <Tile label="Retrieval precision@5" value={percent(card?.precision_at_5)} source="Evaluation" note="Relevant results among the top 5 (monitored)" />
+            <Tile label="Abstention accuracy" value={card?.unanswerable_declined ?? "–"} target="100%" status={allDeclined(card?.unanswerable_declined)} source="Evaluation" note="Out-of-scope questions correctly declined" />
+            <Tile label="Median latency · Quick answer" value={seconds(live?.median_seconds.quick)} target="< 60 s" status={status(live?.median_seconds.quick, 60, "lower")} source="Live" note="Time to a cited answer" />
+            <Tile label="Median latency · Deep research" value={seconds(live?.median_seconds.deep)} target="< 60 s" status={status(live?.median_seconds.deep, 60, "lower")} source="Live" note="Time to a cited report" />
+          </div>
+          <h3 className="ad-subhead">Model-graded quality · AgentCore Evaluations</h3>
+          <div className="ad-grid">
+            {JUDGES.map((judge) => {
+              const score = card?.judges?.[judge.id] ?? null;
+              return (
+                <Tile
+                  key={judge.id}
+                  label={judge.label}
+                  value={score === null ? "–" : score.toFixed(2)}
+                  target={judge.target === null ? undefined : `≥ ${judge.target.toFixed(2)}`}
+                  status={judge.target === null ? undefined : status(score, judge.target, "higher")}
+                  source="Evaluation"
+                  note={judge.note}
+                />
+              );
+            })}
           </div>
         </section>
 
         <section className="ad-section">
-          <h2>What questions cost</h2>
-          <p className="aw-meta">Estimated from token counts and Bedrock list prices.</p>
+          <h2>Cost and usage</h2>
+          <p className="aw-meta">Estimated from token usage at Amazon Bedrock list prices.</p>
           <div className="ad-grid">
             <Tile label="Cost per answer" value={usd(live?.cost_per_answer_usd)} source="Estimated" note={live ? `${live.questions} questions in this window` : undefined} />
-            <Tile label="Projected per 1,000 questions" value={usd(live?.projected_per_1000_usd, 2)} source="Estimated" />
-            <Tile label="Tokens per answer" value={live?.tokens_per_answer_median?.toLocaleString() ?? "–"} source="Live" note="Median" />
-            <Tile label="Spend, last 30 days" value={usd(live?.spend_30d_usd, 2)} source="Estimated" note={live ? `Sandbox cap $${live.sandbox_cap_usd}` : undefined} />
+            <Tile label="Projected cost per 1,000 answers" value={usd(live?.projected_per_1000_usd, 2)} source="Estimated" />
+            <Tile label="Median tokens per answer" value={live?.tokens_per_answer_median?.toLocaleString() ?? "–"} source="Live" />
+            <Tile label="Spend · last 30 days" value={usd(live?.spend_30d_usd, 2)} source="Estimated" note={live ? `Budget $${live.sandbox_cap_usd}` : undefined} />
           </div>
           <div className="ad-cols">
             <div className="ad-box">
               <div className="ad-box-head">
-                <h3>Spend per day</h3>
+                <h3>Daily spend</h3>
                 <span className="ad-switch">
                   <button type="button" className={money === "cost" ? "on" : ""} onClick={() => setMoney("cost")}>Cost</button>
                   <button type="button" className={money === "tokens" ? "on" : ""} onClick={() => setMoney("tokens")}>Tokens</button>
@@ -193,15 +219,15 @@ export function AdminApp() {
               <Bars label="Day" rows={(live?.spend_per_day ?? []).map((d) => ({ name: d.day.slice(5), value: money === "cost" ? d.cost_usd : d.tokens, shown: money === "cost" ? usd(d.cost_usd, 2) : d.tokens.toLocaleString() }))} />
             </div>
             <div className="ad-box">
-              <h3>Cost by kind of question</h3>
+              <h3>Cost by request type</h3>
               <Bars label="Kind" rows={(live?.by_kind ?? []).map((k) => ({ name: `${k.kind} (${k.questions})`, value: k.share ?? 0, shown: `${percent(k.share)} · ${usd(k.avg_cost_usd)} each` }))} />
             </div>
             <div className="ad-box">
-              <h3>Tokens by step, last 7 days</h3>
+              <h3>Token usage by pipeline step · 7 days</h3>
               <Bars label="Step" rows={(live?.tokens_by_step ?? []).map((s) => ({ name: s.step, value: s.in + s.out, shown: `${s.in.toLocaleString()} in · ${s.out.toLocaleString()} out` }))} />
             </div>
             <div className="ad-box">
-              <h3>Most expensive questions</h3>
+              <h3>Highest-cost requests</h3>
               {live?.most_expensive.length ? (
                 <ol className="ad-list">
                   {live.most_expensive.map((q) => (
@@ -219,11 +245,11 @@ export function AdminApp() {
         </section>
 
         <section className="ad-section">
-          <h2>Does quality hold</h2>
+          <h2>Live quality signals</h2>
           <div className="ad-grid">
-            <Tile label="Claims removed per answer" value={live?.claims_removed_per_answer?.toString() ?? "–"} source="Live" note="Sentences the sources didn't support" />
-            <Tile label="Questions declined" value={percent(live?.declined_share)} source="Live" />
-            <Tile label="Thumbs down" value={live?.thumbs_down?.toString() ?? "No data yet"} source="Live" note="Feedback buttons aren't wired yet" />
+            <Tile label="Unsupported claims removed per answer" value={live?.claims_removed_per_answer?.toString() ?? "–"} source="Live" note="Caught by verification before display" />
+            <Tile label="Decline rate" value={percent(live?.declined_share)} source="Live" note="Questions answered with 'no WRI evidence'" />
+            <Tile label="Negative feedback" value={live?.thumbs_down?.toString() ?? "No data yet"} source="Live" note="User feedback capture not yet enabled" />
           </div>
         </section>
       </main>

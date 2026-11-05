@@ -87,3 +87,22 @@ def test_items_are_partitioned_by_day_and_found_again_from_the_id():
     item = ops.item(record(answer_events(), rid=rid))
     assert item["day"] == "2026-11-05" and rid == f"{item['day']}.{item['sk']}"
     assert ops.days(ops.window_start("7d", NOW), NOW)[0] == "2026-10-29"
+
+
+def test_the_scorecard_carries_each_judges_average_score():
+    run = {
+        "run_id": "r",
+        "finished": "2026-11-05T05:00:00+00:00",
+        "summary": {"questions": 30},
+        "judged": {
+            "results": {
+                "evaluatorSummaries": [
+                    {"evaluatorId": "Builtin.Faithfulness", "statistics": {"averageScore": 0.82}},
+                    {"evaluatorId": "Builtin.Correctness", "statistics": {"averageScore": 0.88}},
+                ]
+            }
+        },
+    }
+    card = ops.scorecard(run)
+    assert card["judges"] == {"Faithfulness": 0.82, "Correctness": 0.88} and card["judged"]
+    assert ops.scorecard({**run, "judged": None})["judges"] is None

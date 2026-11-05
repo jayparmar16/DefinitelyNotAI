@@ -208,7 +208,20 @@ def scorecard(run: dict | None) -> dict | None:
         "median_seconds_quick": summary.get("median_seconds_quick"),
         "median_seconds_deep": summary.get("median_seconds_deep"),
         "judged": bool(run.get("judged") and run["judged"].get("results")),
+        "judges": judge_scores(run),
     }
+
+
+def judge_scores(run: dict) -> dict[str, float] | None:
+    """AgentCore Evaluations' average score per judge ("Faithfulness": 0.82), or None if unjudged."""
+    results = (run.get("judged") or {}).get("results") or {}
+    summaries = results.get("evaluatorSummaries") or []
+    scores = {
+        e["evaluatorId"].removeprefix("Builtin."): e["statistics"]["averageScore"]
+        for e in summaries
+        if e.get("statistics", {}).get("averageScore") is not None
+    }
+    return scores or None
 
 
 def window_start(window: str, now: datetime) -> datetime:

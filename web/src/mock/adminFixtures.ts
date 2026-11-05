@@ -7,7 +7,8 @@ export const OVERVIEW: Overview = {
   scorecard: {
     run_id: "preview", run_date: "2026-11-05T00:00:00Z", configuration: "C: agent loop + verify", questions: 30,
     figures_cited_rate: 1, recall_at_5: 0.9, precision_at_5: 0.7, unanswerable_declined: "3 of 3", decline_accuracy: 1,
-    must_include_rate: 0.7, verified_rate: 0.9, audience_accuracy: 0.9, median_seconds_quick: 15, median_seconds_deep: 30, judged: false,
+    must_include_rate: 0.7, verified_rate: 0.9, audience_accuracy: 0.9, median_seconds_quick: 15, median_seconds_deep: 30, judged: true,
+    judges: { Faithfulness: 0.82, Correctness: 0.88, ResponseRelevance: 0.97, Helpfulness: 0.72 },
   },
   live: {
     questions: 12, cost_per_answer_usd: 0.03, projected_per_1000_usd: 30, tokens_per_answer_median: 20000, spend_30d_usd: 4.2, sandbox_cap_usd: 500,

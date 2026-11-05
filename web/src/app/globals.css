@@ -625,3 +625,4 @@ a.aw-btn{text-decoration:none}
 .aw-sidebar-resize{position:absolute;top:0;bottom:0;right:-4px;width:8px;cursor:col-resize;z-index:3}
 .aw-sidebar-resize:hover,.aw-sidebar-resize.dragging{background:var(--secondary-200)}
 @media (max-width:1000px){.aw-sidebar-resize{display:none}}
+.ad-subhead{margin:var(--space-200) 0 0;font-size:15px;line-height:22px}
