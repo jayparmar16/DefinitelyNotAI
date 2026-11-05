@@ -226,6 +226,8 @@ def fake_models(monkeypatch, draft, supported, redraft=None, follow=None):
             return {"verdicts": [{"index": i, "supported": i in supported} for i in range(10)]}
         if step == "rewrite":
             return {"query": "urban heat"}
+        if step == "plan":
+            return {"sub_questions": [{"question": "Cool roofs?", "search_query": "cool roofs"}]}
         raise AssertionError(step)
 
     monkeypatch.setattr(llm, "ask_json", ask_json)
@@ -282,6 +284,28 @@ def test_weak_evidence_retries_then_declines_with_what_was_searched(monkeypatch)
     assert not memory.saved
     rewrite = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "rewrite")
     assert "Heat-resilient cities" in rewrite  # searches in the words of what it already found
+
+
+class SpecificGateway(FakeGateway):
+    """Strong evidence only for the specific query a sub-question searches."""
+
+    def call(self, tool, arguments):
+        if tool == "search":
+            strong = arguments["query"] == "cool roofs"
+            return {"results": [{**RESULT, "relevance": 0.3 if strong else 0.01}]}
+        return super().call(tool, arguments)
+
+
+def test_quick_splits_a_broad_question_into_parts_before_declining(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0})
+    agent = Agent(
+        Deps(llm=None, gateway=SpecificGateway(0.01), memory=FakeMemory(), bedrock=None),
+        SETTINGS,
+    )
+    events = list(agent.run({"question": "How do cities cool down?", "sessionId": "s" * 40}))
+    assert events[-1]["type"] == "answer"
+    assert events[-1]["answer"]["mode"] == "quick" and not events[-1]["answer"]["report"]
+    assert any(e["type"] == "step" and e["id"] == "plan" for e in events)
 
 
 def test_answer_with_no_verified_claims_is_declined_not_shown(monkeypatch):

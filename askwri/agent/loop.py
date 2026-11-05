@@ -351,6 +351,16 @@ class Agent:
             )
             rounds_used += found["rounds"]
             covered += found["covered"]
+        if not covered and mode == "quick":
+            # A broad question searched as one query can score low against every specific
+            # document. Before declining, search the parts it splits into, as Deep research does.
+            parts = yield from self._plan(question, "deep")
+            for index, sub in enumerate(parts, start=len(sub_questions)):
+                found = yield from self._retrieve(
+                    index, sub, mode, request.get("filters") or {}, evidence, searched
+                )
+                rounds_used += found["rounds"]
+                covered += found["covered"]
         scope = f"{rounds_used} search round{'s' if rounds_used != 1 else ''}"
         if not covered:
             yield decline(
