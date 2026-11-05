@@ -1,0 +1,225 @@
+ASKWRI - LIVE DEMO: "AI DATA CENTERS AND THE GRID"  (3 minutes)
+=================================================================
+
+THE IDEA
+You build ONE chat live, step by step, like a researcher would. Everyone has heard that AI is
+using a lot of electricity - so the audience can follow every step without technical knowledge.
+
+   Tour    What's on the screen ................ 20 seconds, once
+   Step 1  Ask a quick question ................ a cited, verified answer in ~20 s
+   Step 2  Turn it into a policy brief ......... Deep research, ~20 s
+   Step 3  See how the research connects ....... key figures + citation map, ~5 s
+   Step 4  Fact-check a draft .................. catches a wrong number, ~12 s
+
+A finished copy of the same story is in the sidebar ("★ Story · AI data centers and the grid").
+If any step is slow, open that chat and continue from the same step. Nobody will notice.
+
+LINKS
+   The chatbot ................ https://d17gz0gh5g00t3.cloudfront.net
+   Load the demo chats ........ https://d17gz0gh5g00t3.cloudfront.net/?demo=load
+   Admin page ................. https://d17gz0gh5g00t3.cloudfront.net/admin/?source=eval&window=30d
+
+How to read this:  DO = what you click.  SAY = what you say.  (~Ns) = how long AskWRI takes.
+
+
+---------------------------------------------------------------------
+BEFORE YOU PRESENT (15 minutes ahead)
+---------------------------------------------------------------------
+1. Open an Incognito window, go to https://d17gz0gh5g00t3.cloudfront.net and sign in
+   (a.kowta@gwu.edu).
+2. In the same window open https://d17gz0gh5g00t3.cloudfront.net/?demo=load
+   -> "Loaded ... demo chats". The first chat in the sidebar is "★ Story · AI data centers and
+   the grid" - your backup copy of this whole demo.
+3. Warm the agent up: click "New chat", ask anything ("What is WRI?"), wait for the answer.
+4. Click "New chat" again. Leave it empty. Make sure the tool is "Ask" and Deep research is OFF.
+5. Keep the fact-check draft (Step 4) ready to paste - it's at the bottom of this file.
+6. Rule: don't click another chat while an answer is still appearing - it stops that answer.
+
+
+---------------------------------------------------------------------
+QUICK TOUR OF THE SCREEN  (0:00 - 0:20)   - once, before you ask anything
+---------------------------------------------------------------------
+DO: point at each part of the screen as you name it (left, bottom, top).
+
+SAY:
+"This is AskWRI. It answers only from WRI's own publications.
+ On the left are Spaces - one for each WRI topic, like Climate, Energy or Ocean - so a researcher
+ can stay inside their topic. 'All of WRI' searches everything. Below them are my chats.
+ At the bottom is where I ask. 'Ask' gives a cited answer, 'Fact-check' checks a draft, and
+ 'Explore' shows how a topic's research connects. 'Deep research' turns an answer into a full
+ report - like a policy brief.
+ And at the top: who the answer is written for - it works that out by itself - the language,
+ and Download, to take the answer away."
+
+(Keep it to about 20 seconds - the live steps show the rest.)
+
+
+---------------------------------------------------------------------
+OPENING  (0:20 - 0:30)
+---------------------------------------------------------------------
+SAY:
+"Everyone's talking about AI using huge amounts of electricity. Imagine you're a researcher,
+or advising a state energy office, and you need to know: what does the evidence actually say?
+WRI has hundreds of reports. Let me ask AskWRI - live."
+
+
+---------------------------------------------------------------------
+STEP 1 - ASK A QUICK QUESTION  (0:30 - 1:05)
+---------------------------------------------------------------------
+DO: type, and press Enter:
+
+      How are AI data centers affecting electricity demand and clean energy in the US?
+
+SAY (while it works, ~20 s - point at the steps appearing):
+"You can watch it work like a research assistant: it decides what to search, searches WRI's
+library, finds the reports, writes an answer - and then checks every single sentence against
+the page it came from before showing me anything."
+
+DO: when the answer appears, point at:
+    - the short SUMMARY at the top
+    - the line "8 of 8 claims verified"
+SAY:
+"Here's the short version first: data centers and AI are driving the first real growth in US
+electricity demand in decades - and that's straining the grid and the clean energy transition.
+Eight of eight claims verified: every sentence was checked against its source. If something
+couldn't be backed up, it would have been removed, not shown."
+
+DO: click one of the little numbers, e.g. [1].
+    The right panel opens the actual WRI report at that page, with the sentence highlighted.
+SAY:
+"And it isn't 'trust me' - one click and I'm on the exact page of the WRI report, highlighted.
+I can quote this in a paper tomorrow."
+
+WHY IT MATTERS: hours of searching become 20 seconds, and every claim can be checked.
+
+
+---------------------------------------------------------------------
+STEP 2 - TURN IT INTO A POLICY BRIEF  (1:05 - 1:45)
+---------------------------------------------------------------------
+SAY:
+"Now say I'm briefing a state policymaker. I need more than a paragraph."
+
+DO: switch "Deep research" ON. Next to it, choose Report type "Issue brief".
+    Type, and press Enter:
+
+      AI data centers and the clean energy transition
+
+SAY (while it works, ~20 s):
+"Deep research breaks the topic into sub-questions and searches them all at once - like
+sending three research assistants to the library at the same time."
+
+DO: when the brief appears, point at "Deep research · Issue brief" and "Written for:
+    Policymaker", then read two or three key points.
+SAY:
+"It's written as a policy brief: the problem, what the evidence shows, the options. Look at
+these findings: grid planners have nearly DOUBLED their demand forecasts. In one market, data
+center demand added 9.4 BILLION dollars to capacity costs - costs passed on to people's bills.
+And only about half of the new data-center demand may be met by renewables - the rest by gas
+and coal."
+DO: point at the summary at the top.
+SAY:
+"And notice: it tells me where WRI's reports DISAGREE - on whether AI ends up helping or hurting
+the transition. A good analyst would tell you that. So does this."
+
+WHY IT MATTERS: a brief that takes an analyst days, in seconds - every line sourced.
+
+
+---------------------------------------------------------------------
+STEP 3 - SEE HOW THE RESEARCH CONNECTS  (1:45 - 2:15)
+---------------------------------------------------------------------
+DO: under the brief, click "Visuals" (~5 s). The right panel shows:
+    - Key figures - for example $9.4 billion in added capacity costs, and AI's potential to cut
+      3.2-5.4 gigatons of CO2 a year (the exact cards can vary a little from run to run)
+SAY:
+"The key numbers, pulled out word for word from the reports - nothing rounded or invented."
+
+DO: on the Citation map, click "Expand". (It opens full screen.)
+SAY:
+"And this is how WRI's research connects: around 30 WRI publications from 2024 to 2026. Each arrow means
+one report builds on another, or uses its data."
+DO: click a report card in the map.
+SAY:
+"Click a report and you see exactly where another report cites it - the sentence, and one click
+to that page. A new researcher understands the history of this topic in seconds - and if a
+newer report has updated older figures, it's flagged."
+DO: click Close.
+
+
+---------------------------------------------------------------------
+STEP 4 - FACT-CHECK A DRAFT  (2:15 - 2:50)
+---------------------------------------------------------------------
+SAY:
+"Last step. Say a colleague wrote this for a blog post. Before it goes out, let's check it."
+
+DO: 1. Stay in the SAME chat as Steps 1-3.
+    2. In the box at the bottom, click "Fact-check" (next to "Ask"). The box's grey hint text
+       changes to "Paste a draft, email or proposal..." - that's how you know it's switched.
+    3. Paste this exact text into the box and press Enter (~12 s):
+
+    ----- copy from here -----
+    AI data centers already use most of America's electricity growth, and a PJM study found that data center load added $94 billion to capacity costs in 2024. WRI expects renewables to supply all new data center demand, and grid planners have nearly doubled their five-year demand forecasts.
+    ----- to here -----
+
+    (The same text is also at the very bottom of this file.)
+
+SAY (while it checks):
+"I've hidden four claims in this paragraph. Some are right, some aren't. Let's see what WRI's
+research says about each."
+
+DO: when the result appears, point at each claim and its verdict, in this order:
+
+    CLAIM IN THE DRAFT                           VERDICT        SAY
+    "$94 billion" added to capacity costs ...... CONTRADICTED   "WRI's figure is $9.4 billion -
+                                                                 a misplaced decimal."
+    "use most of America's electricity growth" . NOT FOUND      "WRI lists data centers as one of
+                                                                 several drivers - not most of it."
+    "renewables to supply ALL new demand" ...... NOT FOUND      "WRI never says that - its sources
+                                                                 say only about half."
+    "grid planners nearly doubled forecasts" ... SUPPORTED      "This one is right - and here's
+                                                                 the source."
+
+SAY (to wrap up the step):
+"It caught the misplaced decimal and two claims WRI never made - and confirmed the one that's
+right, with the source. This is the check you'd want before anything reaches a minister, a
+journalist or a funder."
+
+WHY IT MATTERS: protects WRI's credibility - nothing goes out in WRI's name that WRI didn't say.
+
+
+---------------------------------------------------------------------
+CLOSE  (2:50 - 3:00)
+---------------------------------------------------------------------
+SAY:
+"So in three minutes: a verified answer, a policy brief, how the research connects, and a fact-
+check - each claim traceable to a page of WRI's own work. That's AskWRI, built on AWS: Bedrock
+AgentCore, Bedrock Guardrails and Aurora. Thank you."
+
+
+---------------------------------------------------------------------
+IF SOMETHING GOES WRONG
+---------------------------------------------------------------------
+- A step takes more than ~30 s: say "it's checking every claim before it shows anything".
+  If it still hasn't come back, open "★ Story · AI data centers and the grid" in the sidebar -
+  it has exactly these four steps, finished - and carry on from the same step.
+- An error appears: open the ★ Story chat and continue.
+- Don't click another chat while an answer is still appearing (it stops it).
+
+
+---------------------------------------------------------------------
+IF YOU HAVE EXTRA TIME, OR FOR QUESTIONS
+---------------------------------------------------------------------
+- "Can it work in other languages?" -> under the brief, click "Translate" -> Español. Or open
+  chat "6 · Ask in Spanish, cite in the original".
+- "Does it ever say no?" -> open chat "4 · Won't make things up".
+- "Can it compare reports?" -> open chat "8 · Compare 8 papers at once" or
+  "9 · Read every paper through your lens".
+- "How do you know it's accurate?" -> open the Admin page (link at the top): quality scorecard
+  against WRI's criteria (citation coverage 100%, the right source in the top five 92%, every
+  out-of-scope question declined) and AgentCore model grades (relevance 0.97, correctness 0.88,
+  faithfulness 0.82), plus cost per answer (about 5 cents).
+
+
+---------------------------------------------------------------------
+STEP 4 DRAFT - copy and paste this exactly
+---------------------------------------------------------------------
+AI data centers already use most of America's electricity growth, and a PJM study found that data center load added $94 billion to capacity costs in 2024. WRI expects renewables to supply all new data center demand, and grid planners have nearly doubled their five-year demand forecasts.
