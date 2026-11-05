@@ -27,6 +27,7 @@ export function answerMarkdown(question: string, answer: Answer): string {
   const lines = [`# ${answer.report?.title ?? question}`, ""];
   if (answer.machineTranslated) lines.push("_Machine-translated._", "");
   if (answer.scope) lines.push(`_${answer.scope}._`, "");
+  if (answer.summary?.length) lines.push("## Summary", "", ...answer.summary.flatMap((text) => [text, ""]));
   if (answer.report) {
     lines.push(answer.report.builtFrom, "", "## Key points", "");
     lines.push(...answer.report.keyPoints.map((point) => `- ${point}`), "");

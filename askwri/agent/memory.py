@@ -22,7 +22,7 @@ class Memory:
         self._memory_id = os.environ["ASKWRI_MEMORY_ID"]
 
     def save_turn(self, session_id: str, question: str, answer: dict) -> None:
-        """Store the question and the answer the user was shown."""
+        """Store the question and the answer in English, before any translation the user saw."""
         self._client.create_event(
             memoryId=self._memory_id,
             actorId=ACTOR,

@@ -2,33 +2,83 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { CitationFlow, Timeline } from "./agent.ts";
-import { citationMap, mapEdges, titleLines } from "./citationMap.ts";
+import { CARD_H, CARD_W, citationMap, mapEdges, roundedPath, titleLines } from "./citationMap.ts";
 
 const point = (docId: string, year: number | null, citedInAnswer = true) => ({ docId, title: docId, year, pubType: null, citedInAnswer, citedBy: 0 });
 const link = (docId: string) => ({ docId, title: docId, year: null, relation: "extends" as const, aspect: "", sentence: "s", page: 3, pdfKey: null, confidence: 0.5 });
+const cites = (docId: string, year: number | null, cited: string[]) => ({
+  focus: { docId, title: docId, year, markers: [] }, cites: cited.map(link), moreCites: 0, citedBy: [], moreCitedBy: 0, mainPoint: null,
+});
+const flowOf = (flows: Record<string, ReturnType<typeof cites>>): CitationFlow => ({ focusOptions: [], defaultFocus: "", caption: "", flows });
 
-const flow: CitationFlow = {
-  focusOptions: [], defaultFocus: "new", caption: "",
-  flows: {
-    new: { focus: { docId: "new", title: "new", year: 2016, markers: [1] }, cites: [link("old")], moreCites: 0, citedBy: [], moreCitedBy: 0, mainPoint: null },
-    old: { focus: { docId: "old", title: "old", year: 2014, markers: [2] }, cites: [], moreCites: 0, citedBy: [link("new")], moreCitedBy: 0, mainPoint: null },
-  },
-};
+/** The corners an SVG path passes through (its M and L points). */
+const corners = (d: string) => [...d.matchAll(/[ML]([\d.-]+),([\d.-]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
 
 test("each citation becomes one edge from the cited report to the citing one", () => {
+  const flow = flowOf({ new: cites("new", 2016, ["old"]) });
   assert.deepEqual(mapEdges(flow).map((e) => `${e.from}>${e.to}`), ["old>new"]);
 });
 
-test("rows run from the oldest year down, with undated reports last", () => {
+test("generations run from the oldest year down; undated reports are listed, not drawn", () => {
   const timeline: Timeline = { points: [point("new", 2016), point("old", 2014)], undated: [point("x", null, false)], newest: "new", caption: "" };
-  const map = citationMap(timeline, flow);
-  assert.deepEqual(map.rows.map((r) => r.label), ["2014", "2016", "Undated"]);
-  const y = (id: string) => map.nodes.find((n) => n.docId === id)!.y;
-  assert.ok(y("old") < y("new") && y("new") < y("x"));
-  assert.equal(map.edges.length, 1);
+  const map = citationMap(timeline, flowOf({ new: cites("new", 2016, ["old"]), x: cites("x", null, ["old"]) }));
+  assert.deepEqual(map.rows.map((r) => r.label), ["2014", "2016"]);
+  assert.deepEqual(map.nodes.map((n) => n.docId).sort(), ["new", "old"]);
+  assert.deepEqual(map.undated.map((n) => n.docId), ["x"]);
+  assert.deepEqual(map.edges.map((e) => `${e.from}>${e.to}`), ["old>new"]);
+  assert.equal(map.links.length, 2); // the undated report's link still shows in the details
+});
+
+test("a report sits under the report it builds on", () => {
+  const timeline: Timeline = { points: [point("a", 2014), point("b", 2014), point("c", 2014), point("x", 2016)], undated: [], newest: "x", caption: "" };
+  const map = citationMap(timeline, flowOf({ x: cites("x", 2016, ["c"]) }));
+  const node = (id: string) => map.nodes.find((n) => n.docId === id)!;
+  assert.equal(node("x").x, node("c").x);
+  assert.ok(node("a").y >= 16); // room above the first row for the cited-by badge
+});
+
+test("cards in a generation never overlap", () => {
+  const timeline: Timeline = { points: [point("p", 2014), point("x", 2016), point("y", 2016), point("z", 2016)], undated: [], newest: "x", caption: "" };
+  const map = citationMap(timeline, flowOf({ x: cites("x", 2016, ["p"]), y: cites("y", 2016, ["p"]), z: cites("z", 2016, ["p"]) }));
+  const xs = map.nodes.filter((n) => n.year === 2016).map((n) => n.x).sort((a, b) => a - b);
+  for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= CARD_W);
+});
+
+test("connectors are elbows that leave the bottom of a card and enter the top of the next", () => {
+  const timeline: Timeline = { points: [point("old", 2014), point("new", 2016)], undated: [], newest: "new", caption: "" };
+  const map = citationMap(timeline, flowOf({ new: cites("new", 2016, ["old"]) }));
+  const old = map.nodes.find((n) => n.docId === "old")!, nu = map.nodes.find((n) => n.docId === "new")!;
+  const points = corners(map.paths["old>new"]);
+  assert.equal(points[0][1], old.y + CARD_H);
+  assert.ok(Math.abs(points.at(-1)![1] - nu.y) <= 2);
+});
+
+test("a link that skips a generation runs through a lane clear of the cards between", () => {
+  const timeline: Timeline = { points: [point("old", 2014), point("mid", 2015), point("new", 2026)], undated: [], newest: "new", caption: "" };
+  const map = citationMap(timeline, flowOf({ new: cites("new", 2026, ["old"]), mid: cites("mid", 2015, ["old"]) }));
+  const mid = map.nodes.find((n) => n.docId === "mid")!;
+  const inMidRow = corners(map.paths["old>new"]).filter(([, y]) => y > mid.y && y < mid.y + CARD_H);
+  assert.equal(inMidRow.length, 0); // no corner inside the middle row: it passes straight down
+  const lane = corners(map.paths["old>new"]).find(([, y]) => y > mid.y + CARD_H)![0];
+  assert.ok(lane < mid.x || lane > mid.x + CARD_W);
+});
+
+test("connectors sharing a card leave it at different points", () => {
+  const timeline: Timeline = { points: [point("old", 2014), point("n1", 2016), point("n2", 2016)], undated: [], newest: "n1", caption: "" };
+  const map = citationMap(timeline, flowOf({ n1: cites("n1", 2016, ["old"]), n2: cites("n2", 2016, ["old"]) }));
+  assert.notDeepEqual(corners(map.paths["old>n1"])[0], corners(map.paths["old>n2"])[0]);
+});
+
+test("rounded paths keep their end points", () => {
+  const d = roundedPath([[0, 0], [0, 20], [40, 20], [40, 50]]);
+  assert.ok(d.startsWith("M0,0") && d.endsWith("L40,50"));
+  assert.equal((d.match(/Q/g) ?? []).length, 2);
 });
 
 test("long titles fold into two short lines", () => {
-  assert.deepEqual(titleLines("The Economic Case for Landscape Restoration in Latin America"), ["The Economic Case for", "Landscape Restoration i…"]);
+  assert.deepEqual(
+    titleLines("The Economic Case for Landscape Restoration in Latin America"),
+    ["The Economic Case for", "Landscape Restoration in…"],
+  );
   assert.deepEqual(titleLines("Short title"), ["Short title"]);
 });

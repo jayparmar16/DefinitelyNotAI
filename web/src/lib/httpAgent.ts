@@ -39,12 +39,13 @@ export function httpAgent(baseUrl: string): AgentClient {
       return (await response.json()).url as string;
     },
 
-    // The agent translates its previous answer in the session ("now in Spanish"), reusing the
-    // evidence and checking every number, so translation is a follow-up turn on the same session.
-    async translate(_paragraphs, language, sessionId) {
+    // The answer goes back with the request, so the agent translates this answer and not the
+    // session's latest one; it checks every number survives.
+    async translate(shown, language, sessionId) {
       const request: AskRequest = {
         question: `Now in ${LANGUAGE_NAMES[language] ?? language}`,
-        mode: "quick", language, audience: "auto", format: "summary", filters: {}, sessionId,
+        mode: "translate", language, audience: "auto", format: "summary", filters: {}, sessionId,
+        answer: shown,
       };
       let answer: Answer | null = null;
       for await (const event of ask(request, new AbortController().signal)) {
@@ -52,8 +53,8 @@ export function httpAgent(baseUrl: string): AgentClient {
         if (event.type === "decline") throw new Error(event.decline.message);
       }
       if (!answer) throw new Error("No translation came back");
-      const { report, implications, limits, questions } = answer;
-      return { paragraphs: report?.keyPoints ?? answer.paragraphs, report, implications, limits, questions };
+      const { summary, report, implications, limits, questions } = answer;
+      return { summary, paragraphs: report?.keyPoints ?? answer.paragraphs, report, implications, limits, questions };
     },
 
     async warmup(sessionId) {

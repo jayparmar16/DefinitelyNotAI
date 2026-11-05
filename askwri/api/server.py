@@ -27,7 +27,7 @@ from askwri.api.auth import LOCAL, SERVICE, Caller, Verifier
 DOWNLOAD_SECONDS = 300  # the design's 5-minute presigned link
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{33,100}$")  # AgentCore runtime session IDs: 33+ chars
 PDF_KEY = re.compile(r"^raw/[^/]+\.pdf$")
-MODES = {"quick", "deep", "factcheck", "visuals", "explore"}
+MODES = {"quick", "deep", "factcheck", "visuals", "explore", "translate"}
 FORMATS = {"summary", "issue-brief", "talking-points", "dossier"}
 log = logging.getLogger("askwri.api")
 STARTING_RETRIES, STARTING_WAIT_SECONDS = 4, 2
@@ -81,9 +81,21 @@ def chat_payload(body: dict) -> dict:
         # Evaluation runs mark their traffic, so live metrics can tell them from user questions.
         "source": "eval" if body.get("source") == "eval" else "user",
         "lens": research_lens(body.get("lens")),
-        # Visuals for an answer already shown: the UI sends back its sources and paragraphs.
-        "answer": shown_answer(body.get("answer")) if body.get("mode") == "visuals" else None,
+        # A new format or reader for an answer already shown, drafted from its sources again.
+        "reuse": body.get("reuse") is True,
+        "answer": request_answer(body),
     }
+
+
+def request_answer(body: dict) -> dict | None:
+    """The answer a request carries back, for work on an answer already shown: its paragraphs
+    and sources for visuals or a new format, the whole answer to translate it."""
+    answer, mode = body.get("answer"), body.get("mode")
+    if mode == "translate":
+        return answer if isinstance(answer, dict) else None
+    if mode == "visuals" or body.get("reuse") is True:
+        return shown_answer(answer)
+    return None
 
 
 def shown_answer(answer) -> dict | None:

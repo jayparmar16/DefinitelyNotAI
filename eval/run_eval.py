@@ -26,6 +26,8 @@ from pathlib import Path
 
 import boto3
 
+from askwri.agent.citations import sentences_in
+
 RESULTS = Path("eval/results")
 NAMESPACE = "AskWRI/Eval"
 JUDGES = [
@@ -98,8 +100,9 @@ def must_include_rate(text: str, wanted: list[str]) -> float | None:
 
 def figures_cited(paragraphs: list[str]) -> float | None:
     """Share of answer sentences stating a figure that carry an [n] citation: every factual
-    claim must be cited, and a sentence with a number is always factual."""
-    sentences = [s for p in paragraphs for s in re.split(r"(?<=[.!?])\s+", p)]
+    claim must be cited, and a sentence with a number is always factual. Sentences are split
+    as the agent splits them, so "(Smith et al. 2011)" is not read as a sentence of its own."""
+    sentences = [s for p in paragraphs for s in sentences_in(p)]
     with_figures = [s for s in sentences if re.search(r"\d", re.sub(r"\[\d+\]", "", s))]
     if not with_figures:
         return None
@@ -285,7 +288,7 @@ def run(args) -> int:
         "run_id": run_id,
         "started": started.isoformat(),
         "finished": datetime.now(UTC).isoformat(),
-        "configuration": "C: agent loop + verify",
+        "configuration": args.configuration,
         "testset": args.testset,
         "summary": summary,
         "questions": rows,
@@ -375,6 +378,11 @@ def main() -> int:
     run_parser = commands.add_parser("run", help="ask every question and score the answers")
     run_parser.add_argument("--testset", default="eval/testset.jsonl")
     run_parser.add_argument("--only", help="comma-separated question ids")
+    run_parser.add_argument(
+        "--configuration",
+        default="C: agent loop + verify",
+        help="what was evaluated, shown with the run on the admin page",
+    )
     judge_parser = commands.add_parser("judge", help="AgentCore batch evaluation of a run")
     judge_parser.add_argument("run_id")
     args = parser.parse_args()

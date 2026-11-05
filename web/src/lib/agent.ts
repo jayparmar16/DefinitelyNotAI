@@ -5,7 +5,8 @@
  * array, and Deep research streams its progress as events so steps and sources show early.
  */
 
-export type Mode = "quick" | "deep" | "factcheck" | "explore" | "visuals";
+// "translate" is only sent by AgentClient.translate; no turn is ever in that mode.
+export type Mode = "quick" | "deep" | "factcheck" | "explore" | "visuals" | "translate";
 /** Who an answer is written for. */
 export type Reader = "researcher" | "policymaker" | "partnerships";
 /** "auto": nobody picks a persona when typing, so the agent infers the reader from the question. */
@@ -27,7 +28,10 @@ export type AskRequest = {
   sessionId: string; // AgentCore Memory session, so follow-ups reuse gathered evidence
   deep?: boolean; // fact-check only: more passages per claim, and a second search for unsettled ones
   lens?: Lens | null; // the research lens, applied to every paper the answer uses
-  answer?: Pick<Answer, "paragraphs" | "sources">; // mode "visuals": the answer to draw
+  // An answer already shown: to draw (mode "visuals"), to redraft from its sources ("reuse"),
+  // or to translate (mode "translate", the whole answer).
+  answer?: Pick<Answer, "paragraphs" | "sources"> | Answer;
+  reuse?: boolean; // a new format or reader for `answer`: no new search
 };
 
 /** A researcher's goal and the 1-4 aspects every paper is summarised for. */
@@ -94,6 +98,8 @@ export type Answer = {
   // Optional so older agents and the mock still fit; the AskWRI agent always sends them.
   audience?: Reader; // the reader the answer was written for (inferred when "auto")
   scope?: string; // e.g. "Based on 2 of the 5 WRI publications indexed in AskWRI"
+  widened?: boolean; // Quick answer found too little, so it searched as widely as Deep research
+  summary?: string[]; // shown first: a cited, verified synthesis across the sources (may be empty)
   implications?: string[]; // AskWRI's interpretation, uncited, never new facts or numbers
   limits?: string[]; // what the question asks that the evidence doesn't cover (Quick answer)
   questions?: string[]; // follow-ups the user could ask next
@@ -129,6 +135,7 @@ export type FactCheck = {
   counts: Record<Verdict, number>;
   sources: Source[];
   elapsedSeconds: number;
+  summary?: string[]; // what the cited publications say about the draft's claims, cited
 };
 
 /** Infographics for an answer or an Explore topic. A visual with too little data is empty. */
@@ -170,19 +177,19 @@ export type AgentEvent =
   | { type: "outdated-figure"; text: string; markers: number[] }
   | { type: "answer"; answer: Answer }
   | { type: "factcheck"; factcheck: FactCheck }
-  | { type: "visuals"; visuals: Visuals; sources?: Source[]; topic?: string }
+  | { type: "visuals"; visuals: Visuals; sources?: Source[]; topic?: string; summary?: string[] }
   | { type: "decline"; decline: Decline };
 
 /** A translated answer: every text the reader sees, in the target language. */
-export type Translation = Pick<Answer, "paragraphs" | "report" | "implications" | "limits" | "questions">;
+export type Translation = Pick<Answer, "summary" | "paragraphs" | "report" | "implications" | "limits" | "questions">;
 
 export type AgentClient = {
   /** Streams events for one question; stops early when `signal` aborts (the Stop button). */
   ask(request: AskRequest, signal: AbortSignal): AsyncIterable<AgentEvent>;
   /** A short-lived (5 minute) download link for the stored PDF, or null if there is none. */
   sourceDownloadUrl(source: Source): Promise<string | null>;
-  /** The session's last answer machine-translated, with numbers checked by the agent. */
-  translate(paragraphs: string[], language: string, sessionId: string): Promise<Translation>;
+  /** This answer machine-translated, with numbers checked by the agent. */
+  translate(answer: Answer, language: string, sessionId: string): Promise<Translation>;
   /** Start the session's agent while the user is still typing, so the first answer is faster. */
   warmup(sessionId: string): Promise<void>;
 };
