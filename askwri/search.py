@@ -26,9 +26,10 @@ POOL = 100  # per ranking (meaning, keyword): wide enough that the cap still lea
 # places for most evaluation questions (1.5 documents per answer on average).
 PER_DOCUMENT = 6
 RESULTS = 10
-# Rerank relevance below this is not an answer: on live queries relevant hits scored 0.08-0.99
-# and off-topic ones about 0.000. A starting point for #26 to tune on the evaluation set.
-MIN_RELEVANCE = 0.05
+# Rerank relevance below this is not an answer. On the evaluation set (python -m
+# evals.rerankers), passages judged off topic scored at most 0.003 and the unanswerable
+# questions' best candidates at most 0.006, while 0.05 dropped 9 of 80 passages that help.
+MIN_RELEVANCE = 0.02
 RRF_K = 60  # reciprocal rank fusion constant
 # The first query after an Aurora auto-pause can take 30 s or more.
 SLOW_START = Config(connect_timeout=90, read_timeout=90, retries={"max_attempts": 3})
