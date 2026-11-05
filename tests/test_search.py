@@ -100,10 +100,10 @@ def test_filters_reach_the_sql_with_none_as_null(run):
         assert params[unset] == {"isNull": True}
 
 
-def test_rerank_order_is_applied_and_cut_to_six(run):
+def test_rerank_order_is_applied_and_cut_to_ten(run):
     candidates = [row(f"c{i}") for i in range(25)]
     results, _, _ = run(candidates)
-    assert [r["chunk_id"] for r in results] == [f"c{i}" for i in range(24, 18, -1)]
+    assert [r["chunk_id"] for r in results] == [f"c{i}" for i in range(24, 14, -1)]
     assert results[0]["score"] > results[-1]["score"]
 
 
@@ -118,16 +118,16 @@ def test_rerank_uses_description_when_there_is_one(run):
     assert reranker.texts == ["a summary", "b" * 500]
 
 
-def test_neighbours_only_for_short_hits_in_one_statement(run):
-    short = row("short", content="tiny")
-    near = [{"hit_id": "short"} | row("before"), {"hit_id": "short"} | row("after")]
-    results, data_api, _ = run([short, row("long")], near)
+def test_every_hit_gets_its_neighbours_in_one_statement(run):
+    near = [{"hit_id": "a"} | row("before"), {"hit_id": "a"} | row("after")]
+    results, data_api, _ = run([row("a"), row("b")], near)
     by_id = {r["chunk_id"]: r for r in results}
-    assert [n["chunk_id"] for n in by_id["short"]["neighbours"]] == ["before", "after"]
-    assert "neighbours" not in by_id["long"]
+    assert [n["chunk_id"] for n in by_id["a"]["neighbours"]] == ["before", "after"]
+    assert by_id["b"]["neighbours"] == []
     neighbour_statements = [s for s in data_api.statements if "hit_id" in s["sql"]]
     assert len(neighbour_statements) == 1
-    assert [p["value"] for p in neighbour_statements[0]["parameters"]] == [{"stringValue": "short"}]
+    hit_ids = {p["value"]["stringValue"] for p in neighbour_statements[0]["parameters"]}
+    assert hit_ids == {"a", "b"}
 
 
 def test_hits_below_min_relevance_are_dropped(run, monkeypatch):

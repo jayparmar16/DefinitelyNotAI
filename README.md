@@ -195,10 +195,11 @@ scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: r
 what the answering agent calls. It embeds the question with Cohere Embed v4, runs one SQL
 statement over `chunks` through the RDS Data API (pgvector cosine search and full-text search
 fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
-on), reranks the top 25 with Amazon Rerank 1.0 and returns at most 6 passages with their
-citation fields and rerank `score`. Fewer matches return fewer results, and none returns an
-empty list. Chunks with a `role` (references, notes, contents...) are never returned. A hit under 400 characters also carries its previous and next chunk of the same
-section as `neighbours`.
+on, at most 6 chunks per document), reranks the top 25 with Amazon Rerank 1.0 and returns at
+most 10 passages with their citation fields and rerank `score`. Fewer matches return fewer
+results, and none returns an empty list. Chunks with a `role` (references, notes,
+contents...) are never returned. Every hit carries its previous and next chunk of the same
+section as `neighbours`, for the answering model to read the passage in context.
 
 ```sh
 uv run python -m askwri.search "Which countries had the highest deforestation?" --topic Forests --year-from 2024
