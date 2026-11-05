@@ -38,6 +38,8 @@ CHATS = [
      "How should developing countries finance climate adaptation?",
      {"lens": {"goal": "Advise a finance ministry on adaptation funding",
                "aspects": ["funding sources", "returns on investment", "barriers"]}}),
+    ("10 · Search WRI's maps and charts", None, "quick",
+     "Which WRI maps show water stress near ethanol refineries in the US Midwest?", {}),
     ("Ocean · what WRI published in 2025", "Ocean", "quick",
      "What did WRI publish in 2025 on ocean?", {}),
 ]  # fmt: skip
