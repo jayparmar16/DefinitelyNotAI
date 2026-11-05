@@ -162,21 +162,31 @@ function ReportView(props: SidePanelProps) {
           )}
         </>
       )}
-      <h4>Where the evidence is thin</h4>
-      <ul>
-        {shownReport.thinEvidence.map((point) => (
-          <li key={point}>{point}</li>
-        ))}
-      </ul>
+      {shownReport.thinEvidence.length > 0 && (
+        <>
+          <h4>Where the evidence is thin</h4>
+          <ul>
+            {shownReport.thinEvidence.map((point) => (
+              <li key={point}>{point}</li>
+            ))}
+          </ul>
+        </>
+      )}
       <AnswerSections answer={answer} onFollowUp={props.onFollowUp} showLimits={false} />
-      <h4>People behind this work</h4>
-      <div className="aw-searched">
-        {authors.map((author) => (
-          <span key={author}>
-            <Icon name="person" small /> {author}
-          </span>
-        ))}
-      </div>
+      {/* Authors come from wri.org, which lists them for about a third of the collection: the
+          heading only appears when there is someone to show. */}
+      {authors.length > 0 && (
+        <>
+          <h4>People behind this work</h4>
+          <div className="aw-searched">
+            {authors.map((author) => (
+              <span key={author}>
+                <Icon name="person" small /> {author}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
