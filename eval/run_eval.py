@@ -37,6 +37,16 @@ JUDGES = [
 ]
 AGENT_SERVICE = "askwri_agent.DEFAULT"  # service.name on the agent's spans
 SPANS_LOG_GROUP = "aws/spans"  # where Transaction Search indexes spans
+AGENT_RUNTIME = "askwri_agent"
+
+
+def runtime_log_group() -> str:
+    """The agent runtime's log group: the ADOT exporter writes its spans there (stream "spans")."""
+    runtimes = boto3.client("bedrock-agentcore-control").list_agent_runtimes()["agentRuntimes"]
+    runtime = next(r for r in runtimes if r["agentRuntimeName"] == AGENT_RUNTIME)
+    return f"/aws/bedrock-agentcore/runtimes/{runtime['agentRuntimeId']}-DEFAULT"
+
+
 WORKERS = 3  # questions at once; the API allows 5 concurrent requests
 
 
@@ -332,13 +342,14 @@ def judge(args) -> int:
         )
     agentcore = boto3.client("bedrock-agentcore")
     started_job = agentcore.start_batch_evaluation(
-        batchEvaluationName=f"askwri_eval_{args.run_id.replace('-', '_')}",
+        # Names are unique per account, so a run can be judged again.
+        batchEvaluationName=f"askwri_eval_{args.run_id.replace('-', '_')}_{int(time.time())}",
         description=f"AskWRI evaluation run {args.run_id}",
         evaluators=[{"evaluatorId": e} for e in JUDGES],
         dataSourceConfig={
             "cloudWatchLogs": {
                 "serviceNames": [AGENT_SERVICE],
-                "logGroupNames": [SPANS_LOG_GROUP],
+                "logGroupNames": [SPANS_LOG_GROUP, runtime_log_group()],
                 "filterConfig": {
                     "sessionIds": [r["session"] for r in rows],
                     "timeRange": {"startTime": started, "endTime": finished},
