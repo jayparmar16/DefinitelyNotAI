@@ -41,6 +41,18 @@ CHATS = [
     ("Ocean · what WRI published in 2025", "Ocean", "quick",
      "What did WRI publish in 2025 on ocean?", {}),
 ]  # fmt: skip
+# A story: one chat, its questions asked in order (question, mode, extra fields, draw visuals).
+STORIES = [
+    ("★ Story · AI data centers and the grid", None, [
+        ("How are AI data centers affecting electricity demand and clean energy in the US?",
+         "quick", {}, False),
+        ("AI data centers and the clean energy transition", "deep", {"format": "issue-brief"}, True),
+        (("AI data centers already use most of America's electricity growth, and a PJM study found "
+         "that data center load added $94 billion to capacity costs in 2024. WRI expects renewables "
+         "to supply all new data center demand, and grid planners have nearly doubled their "
+         "five-year demand forecasts."), "factcheck", {}, False),
+    ]),
+]  # fmt: skip
 FINAL = {"answer", "decline", "factcheck", "visuals"}
 
 
@@ -90,12 +102,44 @@ def record(api: str, key: str, chat: tuple) -> dict:
             "events": events}  # fmt: skip
 
 
+def record_story(api: str, key: str, story: tuple) -> dict:
+    """A story chat: each question asked in turn in one session, the answers' visuals drawn."""
+    title, space, steps = story
+    session = f"askwri-demo-{uuid.uuid4()}"
+    base = {"language": "en", "audience": "auto", "format": "summary", "sessionId": session,
+            "source": "eval", "filters": {"topic": space} if space else {}}  # fmt: skip
+    turns = []
+    for question, mode, extra, visuals in steps:
+        events = stream(api, key, {**base, "question": question, "mode": mode, **extra})
+        final = next((e for e in reversed(events) if e.get("type") in FINAL), None)
+        if final is None:
+            raise RuntimeError(f"{title}: no answer for {question!r}: {events[-1:]}")
+        if visuals and final["type"] == "answer":
+            shown = {k: final["answer"][k] for k in ("paragraphs", "sources")}
+            drawn = stream(
+                api, key, {**base, "question": question, "mode": "visuals", "answer": shown}
+            )
+            events += [e for e in drawn if e.get("type") == "visuals"]
+        turns.append({"question": question, "mode": mode, "format": extra.get("format"),
+                      "events": events})  # fmt: skip
+        print(f"{title}: {mode} -> {final['type']}", file=sys.stderr, flush=True)
+    return {"title": title, "space": space, "sessionId": session, "question": turns[0]["question"],
+            "mode": turns[0]["mode"], "turns": turns, "events": []}  # fmt: skip
+
+
 def main() -> int:
     key = boto3.client("secretsmanager").get_secret_value(SecretId="askwri/api-key")["SecretString"]
     api = api_url()
-    wanted = [c for c in CHATS if not sys.argv[1:] or c[0].startswith(tuple(sys.argv[1:]))]
+
+    def chosen(title: str) -> bool:
+        return not sys.argv[1:] or title.startswith(tuple(sys.argv[1:]))
+
+    stories = [record_story(api, key, story) for story in STORIES if chosen(story[0])]
     with ThreadPoolExecutor(3) as pool:
-        chats = list(pool.map(lambda chat: record(api, key, chat), wanted))
+        chats = list(
+            pool.map(lambda chat: record(api, key, chat), [c for c in CHATS if chosen(c[0])])
+        )
+    chats = stories + chats  # the stories first in the sidebar
     json.dump({"chats": chats}, sys.stdout, ensure_ascii=False)
     return 0
 

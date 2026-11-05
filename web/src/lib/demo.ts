@@ -8,10 +8,13 @@ import { applyEvent, newTurn, type Turn } from "../components/turn.ts";
 import type { AgentEvent, Lens, Mode, ReportFormat } from "./agent.ts";
 import type { SavedChat } from "./chats.ts";
 
+export type RecordedTurn = { question: string; mode: Mode; format?: ReportFormat; events: AgentEvent[] };
+
 export type RecordedChat = {
   title: string;
   space: string | null;
   sessionId: string;
+  turns?: RecordedTurn[]; // a story: several questions asked in order in one chat
   question: string;
   mode: Mode;
   format?: ReportFormat; // Deep research: the report type it was asked as
@@ -19,16 +22,17 @@ export type RecordedChat = {
   events: AgentEvent[];
 };
 
-/** One recorded chat as the sidebar keeps it: the question's turn, built from its events. */
+function demoTurn(id: string, recorded: RecordedTurn, space: string | null): Turn {
+  const start = { ...newTurn(id, recorded.question, recorded.mode), space, ...(recorded.format && { format: recorded.format }) };
+  return { ...recorded.events.reduce(applyEvent, start), status: "done" };
+}
+
+/** One recorded chat as the sidebar keeps it: its turns, built from their events. */
 export function demoChat(recorded: RecordedChat, updatedAt: number): SavedChat {
-  const start = {
-    ...newTurn(`demo-${recorded.sessionId}`, recorded.question, recorded.mode),
-    space: recorded.space,
-    ...(recorded.format && { format: recorded.format }),
-  };
-  const turn: Turn = { ...recorded.events.reduce(applyEvent, start), status: "done" };
+  const asked = recorded.turns ?? [recorded];
+  const turns = asked.map((turn, i) => demoTurn(`demo-${recorded.sessionId}-${i}`, turn, recorded.space));
   return {
-    sessionId: recorded.sessionId, title: recorded.title, named: true, updatedAt, turns: [turn], space: recorded.space,
+    sessionId: recorded.sessionId, title: recorded.title, named: true, updatedAt, turns, space: recorded.space,
     lens: recorded.lens ?? null,
   };
 }

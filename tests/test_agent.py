@@ -1440,3 +1440,11 @@ def test_a_model_reply_instead_of_a_translation_is_not_used():
     reply = 'I need more text to translate. You\'ve only provided "Planning and data" in your instructions.'
     assert not loop.is_translation("Planning and data", reply)
     assert not loop.is_translation("Cool roofs", "  ")
+
+
+def test_no_passage_reads_as_no_cited_publication():
+    from askwri.agent.citations import readers_words
+
+    assert readers_words("but no passage says it") == "but no cited WRI publication says it"
+    assert readers_words("No passage supports this") == "No cited WRI publication supports this"
+    assert readers_words("The passages agree") == "The cited WRI publications agree"

@@ -25,3 +25,20 @@ test("recorded chats become named, finished chats in the recorded order", () => 
   assert.equal(chats[2].turns[0].format, "dossier"); // reopening it restores Topic dossier
   assert.equal(chats[0].turns[0].format, undefined);
 });
+
+
+test("a story chat keeps its questions in order, each with its own report type", () => {
+  const [story] = demoChats(
+    [{
+      title: "Story", space: null, sessionId: "s", question: "", mode: "quick", events: [],
+      turns: [
+        { question: "How are data centers affecting demand?", mode: "quick", events: [answer] },
+        { question: "Data centers and the grid", mode: "deep", format: "issue-brief", events: [answer] },
+        { question: "A draft to check", mode: "factcheck", events: [{ type: "factcheck", factcheck: { claims: [] } } as unknown as AgentEvent] },
+      ],
+    }],
+    1,
+  );
+  assert.deepEqual(story.turns.map((t) => [t.mode, t.format ?? null, t.status]), [["quick", null, "done"], ["deep", "issue-brief", "done"], ["factcheck", null, "done"]]);
+  assert.equal(new Set(story.turns.map((t) => t.id)).size, 3);
+});

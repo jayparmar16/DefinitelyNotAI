@@ -157,8 +157,15 @@ def numbers_not_in(text: str, source: str) -> list[str]:
 
 
 PASSAGES_WORD = re.compile(
-    r"\b(?:(the|these|those|its|their|a|an|one)\s+)?(passages?)\b", re.IGNORECASE
+    r"\b(?:(the|these|those|its|their|a|an|one|no|any|each|every)\s+)?(passages?)\b",
+    re.IGNORECASE,
 )
+KEPT_DETERMINERS = {
+    "no",
+    "any",
+    "each",
+    "every",
+}  # "no passage says" -> "no cited WRI publication says"
 
 
 def readers_words(text: str) -> str:
@@ -167,6 +174,9 @@ def readers_words(text: str) -> str:
 
     def replace(match: re.Match) -> str:
         plural = match.group(2).lower().endswith("s")
+        kept = match.group(1)
+        if kept and kept.lower() in KEPT_DETERMINERS:
+            return f"{kept} cited WRI publication{'s' if plural else ''}"
         words = "the cited WRI publications" if plural else "a cited WRI publication"
         return words[0].upper() + words[1:] if match.group(0)[0].isupper() else words
 
