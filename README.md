@@ -4,6 +4,9 @@ AskWRI: a research assistant that answers questions from World Resources Institu
 publications, with a citation for every claim. Built on Amazon Bedrock and AgentCore for an
 AWS hackathon.
 
+**Using AskWRI (no technical knowledge needed):** see [USER-GUIDE.md](USER-GUIDE.md): the link,
+signing in, and how to use every feature. Live at https://d17gz0gh5g00t3.cloudfront.net.
+
 ## Get started
 
 1. Install [Claude Code](https://docs.claude.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex).
