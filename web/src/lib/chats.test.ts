@@ -28,6 +28,20 @@ test("a chat with nothing finished isn't saved, and the list keeps the 10 newest
   assert.equal(chats[0].sessionId, "s11");
 });
 
+test("opening or updating a chat keeps the list's order; a new question moves it to the top", () => {
+  let chats = upsertChat([], "s1", [turn("Heat?")], 1);
+  chats = upsertChat(chats, "s2", [turn("Air?")], 2);
+  chats = upsertChat(chats, "s3", [turn("Water?")], 3);
+  // Opening s1 saves its same turns again (and a translation changes one in place).
+  chats = upsertChat(chats, "s1", [{ ...turn("Heat?"), error: "edited" }], 4);
+  assert.deepEqual(chats.map((c) => c.sessionId), ["s3", "s2", "s1"]);
+  assert.equal(chats[2].updatedAt, 1);
+  assert.equal(chats[2].turns[0].error, "edited");
+  chats = upsertChat(chats, "s1", [turn("Heat?"), turn("And Kigali?")], 5);
+  assert.deepEqual(chats.map((c) => c.sessionId), ["s1", "s3", "s2"]);
+  assert.equal(chats[0].updatedAt, 5);
+});
+
 test("times read naturally", () => {
   const now = 10 * 24 * 3600 * 1000;
   assert.equal(whenLabel(now - 20_000, now), "just now");

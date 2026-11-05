@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import { LensTable } from "./LensTable";
 import { MarkedText } from "./MarkedText";
 import { Menu } from "./Menu";
+import { Summary } from "./Summary";
 import { type Turn, shownAnswer } from "./turn";
 
 type AnswerCardProps = {
@@ -47,9 +48,16 @@ export function AnswerCard(props: AnswerCardProps) {
           · {answer.sources.length} sources · {answer.elapsedSeconds} s
         </span>
         {(answer.machineTranslated || showTranslation) && <span className="aw-mt">Machine-translated</span>}
+        {answer.widened && (
+          <span className="aw-mt" title="The quick search found too little, so AskWRI searched as widely as Deep research. Every claim was still checked against its sources.">
+            Searched more widely
+          </span>
+        )}
       </div>
 
       {answer.scope && <div className="aw-scope">{answer.scope}</div>}
+      <Summary texts={answer.summary} activeMarker={props.activeMarker} onMarker={props.onMarker} />
+      {answer.summary?.length ? <div className="aw-detail-h">{deep ? "The report" : "In detail"}</div> : null}
       {answer.report && (
         <>
           <h3 style={{ margin: "0 0 4px", fontSize: 20, lineHeight: "28px" }}>{answer.report.title}</h3>

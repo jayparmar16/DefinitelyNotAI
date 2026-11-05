@@ -30,6 +30,19 @@ def test_unknown_mode_and_short_session_are_replaced_not_trusted():
     assert payload["sessionId"].startswith("askwri-") and len(payload["sessionId"]) >= 33
 
 
+def test_an_answer_comes_back_only_for_work_on_an_answer_already_shown():
+    answer = {"paragraphs": ["A [1]."], "sources": [{"marker": 1}], "report": None, "scope": "s"}
+    base = {"question": "q", "answer": answer}
+    assert chat_payload({**base, "mode": "quick"})["answer"] is None
+    reuse = chat_payload({**base, "mode": "deep", "reuse": True})
+    assert reuse["reuse"] and reuse["answer"] == {
+        "paragraphs": ["A [1]."],
+        "sources": [{"marker": 1}],
+    }
+    assert chat_payload({**base, "mode": "translate"})["answer"] == answer  # the whole answer
+    assert chat_payload({**base, "mode": "translate", "answer": "x"})["answer"] is None
+
+
 def test_empty_or_huge_questions_are_rejected():
     with pytest.raises(BadRequest):
         chat_payload({"question": "   "})

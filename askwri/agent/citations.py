@@ -46,14 +46,36 @@ def trim_connectives(sentences: list[Sentence]) -> list[Sentence]:
     return sentences
 
 
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"“(])")
+# A full stop after these ends an abbreviation, not a sentence ("U.S. 2030 targets").
+ABBREVIATION = re.compile(r"(?:\b[A-Za-z]\.|\b(?:e\.g|i\.e|etc|vs|al|No|Fig|approx|Dr|Mr|Ms))\.?$")
+
+
+def sentences_in(text: str) -> list[str]:
+    """Split a claim into its sentences, without breaking at abbreviations."""
+    parts, start = [], 0
+    for match in SENTENCE_END.finditer(text):
+        if not ABBREVIATION.search(text[start : match.start()]):
+            parts.append(text[start : match.start()])
+            start = match.end()
+    return [*parts, text[start:]]
+
+
 def with_markers(text: str, markers: list[int]) -> str:
-    """Put [n] markers at the end of a sentence, before its final punctuation."""
+    """Put [n] markers at the end of a claim, before its final punctuation. A claim can run to
+    two sentences (a report's key point): an earlier sentence that states a figure gets the
+    markers too, so no figure is ever shown without its citation."""
     if not markers:
         return text
     tags = "".join(f"[{m}]" for m in markers)
-    if text and text[-1] in ".!?":
-        return f"{text[:-1]} {tags}{text[-1]}"
-    return f"{text} {tags}"
+
+    def mark(sentence: str) -> str:
+        if sentence and sentence[-1] in ".!?":
+            return f"{sentence[:-1]} {tags}{sentence[-1]}"
+        return f"{sentence} {tags}"
+
+    *earlier, last = sentences_in(text)
+    return " ".join([mark(s) if NUMBER.search(s) else s for s in earlier] + [mark(last)])
 
 
 def number_markers(groups: list[list[Sentence]]) -> tuple[list[str], list[str]]:

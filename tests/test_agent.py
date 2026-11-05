@@ -24,6 +24,18 @@ def test_markers_go_before_final_punctuation():
     assert with_markers("No full stop", [3]) == "No full stop [3]"
 
 
+def test_every_sentence_of_a_claim_that_states_a_figure_carries_the_markers():
+    point = "Cities drive 70 percent of GDP. Yet water is scarce. Costs reach $66 billion."
+    assert with_markers(point, [1, 2]) == (
+        "Cities drive 70 percent of GDP [1][2]. Yet water is scarce. Costs reach $66 billion [1][2]."
+    )
+    # Abbreviations are not sentence ends.
+    assert with_markers("U.S. cities cut 20 percent. Others did too.", [3]) == (
+        "U.S. cities cut 20 percent [3]. Others did too [3]."
+    )
+    assert with_markers("See e.g. 2019 data.", [1]) == "See e.g. 2019 data [1]."
+
+
 def test_markers_are_numbered_by_first_use_across_paragraphs():
     groups = [
         [Sentence("A.", ("P3",)), Sentence("B.", ("P1", "P3"))],
@@ -207,6 +219,7 @@ class FakeMemory:
         self.saved.append((session, question, answer))
 
 
+SUMMARY = {"summary": [{"text": "In short, roofs cool cities.", "passages": ["P1"]}]}
 DRAFT_EXTRAS = {"implications": [], "limits": [], "questions": [], "question_language": "en"}
 PROMPTS = []
 
@@ -218,6 +231,8 @@ def fake_models(monkeypatch, draft, supported, redraft=None, follow=None):
         PROMPTS.append((step, kwargs))
         if step == "follow-up":
             return follow
+        if step == "query":  # searches for the question as asked
+            return {"query": kwargs["prompt"].removeprefix("Question: ")}
         if step == "draft":
             return {**DRAFT_EXTRAS, **draft}
         if step == "redraft":
@@ -226,8 +241,10 @@ def fake_models(monkeypatch, draft, supported, redraft=None, follow=None):
             return {"verdicts": [{"index": i, "supported": i in supported} for i in range(10)]}
         if step == "rewrite":
             return {"query": "urban heat"}
-        if step == "plan":
-            return {"sub_questions": [{"question": "Cool roofs?", "search_query": "cool roofs"}]}
+        if step == "plan":  # Quick answer widening its search, or Deep research
+            return {"sub_questions": [{"question": "sub", "search_query": "wider search"}]}
+        if step == "summary":
+            return SUMMARY
         raise AssertionError(step)
 
     monkeypatch.setattr(llm, "ask_json", ask_json)
@@ -284,28 +301,6 @@ def test_weak_evidence_retries_then_declines_with_what_was_searched(monkeypatch)
     assert not memory.saved
     rewrite = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "rewrite")
     assert "Heat-resilient cities" in rewrite  # searches in the words of what it already found
-
-
-class SpecificGateway(FakeGateway):
-    """Strong evidence only for the specific query a sub-question searches."""
-
-    def call(self, tool, arguments):
-        if tool == "search":
-            strong = arguments["query"] == "cool roofs"
-            return {"results": [{**RESULT, "relevance": 0.3 if strong else 0.01}]}
-        return super().call(tool, arguments)
-
-
-def test_quick_splits_a_broad_question_into_parts_before_declining(monkeypatch):
-    fake_models(monkeypatch, DRAFT, {0})
-    agent = Agent(
-        Deps(llm=None, gateway=SpecificGateway(0.01), memory=FakeMemory(), bedrock=None),
-        SETTINGS,
-    )
-    events = list(agent.run({"question": "How do cities cool down?", "sessionId": "s" * 40}))
-    assert events[-1]["type"] == "answer"
-    assert events[-1]["answer"]["mode"] == "quick" and not events[-1]["answer"]["report"]
-    assert any(e["type"] == "step" and e["id"] == "plan" for e in events)
 
 
 def test_answer_with_no_verified_claims_is_declined_not_shown(monkeypatch):
@@ -639,6 +634,10 @@ def test_fact_check_mode_returns_claims_with_markers_into_one_sources_list(monke
                     },
                 ]
             }
+        if step == "verify":  # the summary's claims
+            return {"verdicts": [{"index": 0, "supported": True}]}
+        if step == "summary":
+            return SUMMARY
         raise AssertionError(step)
 
     monkeypatch.setattr(llm, "ask_json", ask_json)
@@ -717,6 +716,10 @@ def test_deep_fact_check_searches_again_for_claims_not_found(monkeypatch):
                     }
                 ]
             }
+        if step == "verify":  # the summary's claims
+            return {"verdicts": [{"index": 0, "supported": True}]}
+        if step == "summary":
+            return SUMMARY
         raise AssertionError(step)
 
     monkeypatch.setattr(llm, "ask_json", ask_json)
@@ -750,6 +753,8 @@ def test_lens_is_cleaned_and_papers_put_the_cited_ones_first():
 def test_lens_cells_are_cited_summaries_or_not_discussed_and_are_verified(monkeypatch):
     def ask_json(client, size, *, step, **kwargs):
         PROMPTS.append((step, kwargs))
+        if step == "query":
+            return {"query": "q"}
         if step == "draft":
             return {**DRAFT_EXTRAS, **DRAFT}
         if step == "lens":
@@ -768,6 +773,8 @@ def test_lens_cells_are_cited_summaries_or_not_discussed_and_are_verified(monkey
             }
         if step == "verify":  # first claim in each check holds: answer's roofs, lens's cost cell
             return {"verdicts": [{"index": i, "supported": i == 0} for i in range(10)]}
+        if step == "summary":
+            return SUMMARY
         raise AssertionError(step)
 
     PROMPTS.clear()
@@ -839,6 +846,8 @@ def run_dossier(monkeypatch, compare, language="en"):
             return compare
         if step == "verify":
             return {"verdicts": [{"index": i, "supported": True} for i in range(20)]}
+        if step == "summary":
+            return SUMMARY
         raise AssertionError(step)
 
     monkeypatch.setattr(llm, "ask_json", ask_json)
@@ -1039,3 +1048,372 @@ def test_usage_estimates_cost_per_model_and_step():
 def test_topic_and_region_filters_reach_the_search_tool():
     arguments = loop.search_arguments("heat", "quick", {"topic": "Ocean", "region": "Africa"})
     assert (arguments["topic"], arguments["country"]) == ("Ocean", "Africa")
+
+
+# --- quick answer's search query, parallel deep searches, report formats, languages ---
+
+
+def test_quick_answer_searches_a_short_query_not_the_whole_question(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0})
+
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "query":
+            return {"query": "EU environmental laws"}
+        return fake(client, size, step=step, **kwargs)
+
+    fake = llm.ask_json
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    gateway = RecordingGateway(0.3)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=None, bedrock=None), SETTINGS)
+    question = "I want to build a policy initiative in Europe. What key laws should we target?"
+    events = list(agent.run({"question": question}))
+    assert gateway.queries == ["EU environmental laws"]
+    assert events[-1]["type"] == "answer"
+    query_step = next(e for e in events if e.get("id") == "query" and e["status"] == "done")
+    assert query_step["detail"] == "EU environmental laws"
+
+
+def test_deep_research_searches_every_sub_question_and_merges_their_evidence(monkeypatch):
+    subs = [{"question": f"sub {i}", "search_query": f"query {i}"} for i in range(3)]
+    monkeypatch.setattr(loop.Agent, "_plan", lambda self, q, m: iter_return(subs))
+    draft = {
+        "answerable": True,
+        "title": "Cooling",
+        "key_points": [{"text": "Cool roofs lowered surface heat.", "passages": ["P1"]}],
+    }
+    fake_models(monkeypatch, draft, {0})
+    gateway = RecordingGateway(0.3)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=None, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "q", "mode": "deep"}))
+    assert sorted(gateway.queries) == ["query 0", "query 1", "query 2"]
+    # The three searches found the same document: it is announced once.
+    assert sum(e["type"] == "source-found" for e in events) == 1
+    final = events[-1]
+    assert final["type"] == "answer"
+    assert final["answer"]["sources"][0]["chunkId"] == "heat#p4-1"
+
+
+def test_a_failing_sub_question_search_fails_the_run(monkeypatch):
+    subs = [{"question": f"sub {i}", "search_query": f"query {i}"} for i in range(2)]
+    monkeypatch.setattr(loop.Agent, "_plan", lambda self, q, m: iter_return(subs))
+    fake_models(monkeypatch, DRAFT, {0})
+
+    class BrokenGateway(FakeGateway):
+        def call(self, tool, arguments):
+            if tool == "search" and arguments["query"] == "query 1":
+                raise RuntimeError("search is down")
+            return super().call(tool, arguments)
+
+    agent = Agent(Deps(llm=None, gateway=BrokenGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    with pytest.raises(RuntimeError, match="search is down"):
+        list(agent.run({"question": "q", "mode": "deep"}))
+
+
+def draft_prompt_for(monkeypatch, report_format):
+    monkeypatch.setattr(
+        loop.Agent, "_plan", lambda self, q, m: iter_return([{"question": q, "search_query": q}])
+    )
+    draft = {
+        "answerable": True,
+        "title": "Cooling",
+        "key_points": [{"text": "Cool roofs lowered surface heat.", "passages": ["P1"]}],
+    }
+    fake_models(monkeypatch, draft, {0})
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    list(agent.run({"question": "q", "mode": "deep", "format": report_format}))
+    return next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
+
+
+def test_issue_briefs_and_talking_points_ask_for_different_structures(monkeypatch):
+    brief = draft_prompt_for(monkeypatch, "issue-brief")
+    points = draft_prompt_for(monkeypatch, "talking-points")
+    assert "the problem and why it matters" in brief and "options" in brief
+    assert "say aloud in a meeting" in points and "under 25 words" in points
+    assert "say aloud" not in brief and "the problem and why it matters" not in points
+
+
+def test_memory_keeps_the_english_answer_when_the_user_sees_a_translation(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0})
+    memory = FakeMemory()
+    agent = Agent(
+        Deps(llm=None, gateway=TranslatingGateway(0.3), memory=memory, bedrock=None), SETTINGS
+    )
+    request = {"question": "How do cities cool down?", "sessionId": "s" * 40, "language": "es"}
+    shown = list(agent.run(request))[-1]["answer"]
+    stored = memory.saved[0][2]
+    assert shown["language"] == "es" and shown["paragraphs"][0].startswith("ES: ")
+    assert stored["language"] == "en" and not stored["machineTranslated"]
+    assert stored["paragraphs"] == ["Cool roofs lowered surface heat [1]."]
+
+
+def test_now_in_english_after_a_spanish_answer_shows_the_english_answer(monkeypatch):
+    english = {**PREVIOUS["answer"], "language": "en", "machineTranslated": False}
+    follow = follow_up("translate", language="en")
+    fake_models(monkeypatch, DRAFT, {0}, follow=follow)
+    memory = FakeMemory({"question": PREVIOUS["question"], "answer": english})
+    agent = Agent(
+        Deps(llm=None, gateway=TranslatingGateway(0.3), memory=memory, bedrock=None), SETTINGS
+    )
+    request = {"question": "Now in English", "sessionId": "s" * 40, "language": "en"}
+    answer = list(agent.run(request))[-1]["answer"]
+    assert answer["language"] == "en" and not answer["machineTranslated"]
+    assert answer["paragraphs"] == ["Nairobi planted trees [1]."]
+    assert memory.saved[0][2] == english  # still English for the next turn
+
+
+def test_translate_translates_the_answer_sent_not_the_sessions_latest(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0})
+    memory = FakeMemory(PREVIOUS)  # the session's latest turn is a different answer
+    gateway = TranslatingGateway(0.3)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=memory, bedrock=None), SETTINGS)
+    clicked = {"paragraphs": ["Older answer [1]."], "report": None, "sources": [], "language": "en"}
+    request = {
+        "question": "Now in Spanish",
+        "mode": "translate",
+        "language": "es",
+        "sessionId": "s" * 40,
+        "answer": clicked,
+    }
+    answer = list(agent.run(request))[-1]["answer"]
+    assert answer["paragraphs"] == ["ES: Older answer [1]."]
+    assert answer["language"] == "es" and answer["machineTranslated"]
+    assert not memory.saved  # translating adds no turn
+
+
+def test_a_spanish_answer_can_be_translated_into_english():
+    agent = Agent(
+        Deps(llm=None, gateway=TranslatingGateway(0.3), memory=None, bedrock=None), SETTINGS
+    )
+    spanish = {"paragraphs": ["Hola [1]."], "report": None, "sources": [], "language": "es"}
+    events = list(
+        agent.run({"question": "q", "mode": "translate", "language": "en", "answer": spanish})
+    )
+    assert events[-1]["answer"]["paragraphs"] == ["ES: Hola [1]."]  # the fake marks what it sent
+    assert events[-1]["answer"]["language"] == "en"
+
+
+def test_a_new_format_redrafts_from_the_answers_own_sources_without_searching(monkeypatch):
+    draft = {
+        "answerable": True,
+        "title": "Cooling",
+        "key_points": [{"text": "Nairobi planted street trees.", "passages": ["P1"]}],
+    }
+    fake_models(monkeypatch, draft, {0})
+    gateway, memory = RecordingGateway(0.3), FakeMemory()
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=memory, bedrock=None), SETTINGS)
+    request = {
+        "question": "How do cities in Kenya keep cool?",
+        "mode": "deep",
+        "format": "talking-points",
+        "reuse": True,
+        "answer": PREVIOUS["answer"],
+        "sessionId": "s" * 40,
+    }
+    answer = list(agent.run(request))[-1]["answer"]
+    assert gateway.queries == []
+    assert answer["sources"][0]["chunkId"] == "heat#p6-1"
+    draft_prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
+    assert "talking points for a partner meeting" in draft_prompt
+    assert "Nairobi planted street trees." in draft_prompt
+
+
+def test_answers_never_say_passages_to_the_reader(monkeypatch):
+    draft = {
+        "answerable": True,
+        "paragraphs": [
+            {"sentences": [{"text": "The passages point to cool roofs.", "passages": ["P1"]}]}
+        ],
+    }
+    events, _ = run(monkeypatch, relevance=0.3, draft=draft, supported=(0,))
+    assert events[-1]["answer"]["paragraphs"] == [
+        "The cited WRI publications point to cool roofs [1]."
+    ]
+
+
+# --- Quick answer widens its search before it declines ---
+
+
+class WiderGateway(RecordingGateway):
+    """Weak evidence for the quick search, strong for the wider one."""
+
+    def call(self, tool, arguments):
+        if tool == "search":
+            self.queries.append(arguments["query"])
+            strong = arguments["query"] == "wider search"
+            return {"results": [{**RESULT, "relevance": 0.5 if strong else 0.01}]}
+        return FakeGateway.call(self, tool, arguments)
+
+
+ONE_CLAIM = {
+    "answerable": True,
+    "paragraphs": [
+        {"sentences": [{"text": "Cool roofs lowered surface heat.", "passages": ["P1"]}]}
+    ],
+}
+
+
+def test_weak_quick_evidence_widens_the_search_and_answers(monkeypatch):
+    fake_models(monkeypatch, ONE_CLAIM, {0})
+    gateway = WiderGateway(0.01)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=None, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "How do cities cool down?"}))
+    assert gateway.queries == ["How do cities cool down?", "urban heat", "wider search"]
+    assert any(e.get("id") == "widen" for e in events)
+    answer = events[-1]["answer"]
+    assert answer["widened"] and answer["mode"] == "quick"
+    assert answer["paragraphs"] == ["Cool roofs lowered surface heat [1]."]  # still verified
+    ids = [e["id"] for e in events if e["type"] == "step" and e["status"] == "done"]
+    assert len(ids) == len(set(ids))  # the wider search's steps don't overwrite the first's
+
+
+def test_quick_draft_that_cannot_answer_widens_once_then_answers(monkeypatch):
+    drafts = iter([{"answerable": False, "paragraphs": []}, ONE_CLAIM])
+    fake_models(monkeypatch, ONE_CLAIM, {0})
+    fake = llm.ask_json
+
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "draft":
+            return {**DRAFT_EXTRAS, **next(drafts)}
+        return fake(client, size, step=step, **kwargs)
+
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    gateway = RecordingGateway(0.3)
+    agent = Agent(Deps(llm=None, gateway=gateway, memory=None, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "How do cities cool down?"}))
+    assert events[-1]["type"] == "answer" and events[-1]["answer"]["widened"]
+    assert "wider search" in gateway.queries
+
+
+def test_widening_never_shows_claims_that_fail_verification(monkeypatch):
+    events, _ = run(monkeypatch, relevance=0.3, supported=())
+    assert any(e.get("id") == "widen" for e in events)
+    assert events[-1]["type"] == "decline"  # nothing verified on either attempt
+
+
+def test_deep_research_never_widens(monkeypatch):
+    monkeypatch.setattr(
+        loop.Agent, "_plan", lambda self, q, m: iter_return([{"question": q, "search_query": q}])
+    )
+    fake_models(monkeypatch, DRAFT, {0})
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.01), memory=None, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "q", "mode": "deep"}))
+    assert events[-1]["type"] == "decline"
+    assert not any(e.get("id") == "widen" for e in events)
+
+
+def test_a_widened_answer_needs_most_of_its_claims_verified(monkeypatch):
+    # Two claims, one verified: shown for an ordinary quick answer, declined once widened.
+    fake_models(monkeypatch, DRAFT, {0})
+    agent = Agent(Deps(llm=None, gateway=WiderGateway(0.01), memory=None, bedrock=None), SETTINGS)
+    events = list(agent.run({"question": "How do cities cool down?"}))
+    assert events[-1]["type"] == "decline"
+    events, _ = run(monkeypatch, relevance=0.3)
+    assert events[-1]["type"] == "answer"
+
+
+def test_the_drafter_is_told_to_decline_false_premises(monkeypatch):
+    run(monkeypatch, relevance=0.3)
+    system = next(kwargs["system"] for step, kwargs in PROMPTS if step == "draft")
+    assert "takes for granted something the passages do not state" in system
+
+
+# --- the summary shown first in every mode ---
+
+
+def test_an_answer_opens_with_a_verified_summary_citing_its_sources(monkeypatch):
+    events, memory = run(monkeypatch, relevance=0.3)
+    answer = events[-1]["answer"]
+    assert answer["summary"] == ["In short, roofs cool cities [1]."]
+    assert answer["sources"][0]["marker"] == 1  # the summary's marker is in the sources list
+    assert memory.saved[0][2]["summary"] == answer["summary"]
+    prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "summary")
+    assert "synthesises what these WRI publications" in prompt
+
+
+def test_summary_sentences_that_fail_verification_or_cite_nothing_real_are_dropped(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0})
+    fake = llm.ask_json
+    checks = []
+
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "summary":
+            return {
+                "summary": [
+                    {"text": "Invented source.", "passages": ["P9"]},
+                    {"text": "Fails its check.", "passages": ["P1"]},
+                ]
+            }
+        if step == "verify":
+            checks.append(kwargs["prompt"])
+            if len(checks) == 2:  # the summary's check: nothing holds
+                return {"verdicts": [{"index": 0, "supported": False}]}
+        return fake(client, size, step=step, **kwargs)
+
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    answer = list(agent.run({"question": "How do cities cool down?"}))[-1]["answer"]
+    assert answer["summary"] == []
+    assert "Invented source" not in checks[1]  # dropped before it was even checked
+    assert answer["paragraphs"]  # the answer itself still shows
+
+
+def test_explore_opens_with_a_summary_too(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0})
+    monkeypatch.setattr(
+        loop, "build_visuals", lambda gateway, client, topic, sources, links: {"timeline": {}}
+    )
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    explored = list(agent.run({"question": "cool roofs", "mode": "explore"}))[-1]
+    assert explored["type"] == "visuals"
+    assert explored["summary"] == ["In short, roofs cool cities [1]."]
+
+
+def test_a_translated_answer_translates_its_summary(monkeypatch):
+    fake_models(monkeypatch, DRAFT, {0})
+    agent = Agent(
+        Deps(llm=None, gateway=TranslatingGateway(0.3), memory=None, bedrock=None), SETTINGS
+    )
+    answer = list(agent.run({"question": "q", "language": "es"}))[-1]["answer"]
+    assert answer["summary"] == ["ES: In short, roofs cool cities [1]."]
+
+
+def test_each_summary_sentence_is_grounded_against_its_own_passages(monkeypatch):
+    fake_models(monkeypatch, ONE_CLAIM, {0})
+    fake = llm.ask_json
+
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "summary":
+            return {
+                "summary": [
+                    {"text": "Roofs cool cities.", "passages": ["P1"]},
+                    {"text": "They also cured all diseases.", "passages": ["P1"]},
+                ]
+            }
+        if step == "verify":
+            return {"verdicts": [{"index": i, "supported": True} for i in range(10)]}
+        return fake(client, size, step=step, **kwargs)
+
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    settings = Settings(0.1, 2, 3, guardrail_id="g", guardrail_version="1")
+    agent = Agent(
+        Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=FakeGuardrail()), settings
+    )
+    answer = list(agent.run({"question": "How do cities cool down?"}))[-1]["answer"]
+    # The guardrail fails only the sentence about diseases; the other one stays.
+    assert answer["summary"] == ["Roofs cool cities [1]."]
+
+
+def test_passage_labels_written_into_a_summary_never_reach_the_reader(monkeypatch):
+    fake_models(monkeypatch, ONE_CLAIM, {0})
+    fake = llm.ask_json
+
+    def ask_json(client, size, *, step, **kwargs):
+        if step == "summary":
+            text = "Roofs cool cities [P1] and parks help (P1, P1)."
+            return {"summary": [{"text": text, "passages": ["P1"]}]}
+        return fake(client, size, step=step, **kwargs)
+
+    monkeypatch.setattr(llm, "ask_json", ask_json)
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    answer = list(agent.run({"question": "How do cities cool down?"}))[-1]["answer"]
+    assert answer["summary"] == ["Roofs cool cities and parks help [1]."]

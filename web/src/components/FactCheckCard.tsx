@@ -11,6 +11,7 @@ import type { FactCheck } from "@/lib/agent";
 import { VERDICT_NAMES, annotate, countsLine } from "@/lib/factcheck";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
+import { Summary } from "./Summary";
 
 type FactCheckCardProps = {
   turnId: string;
@@ -37,6 +38,8 @@ export function FactCheckCard({ turnId, check, activeMarker, onMarker, onCopy }:
         <span className="aw-mode-chip"><Icon name="check" small /> Fact-check</span>
         <span>{countsLine(check)} · {check.elapsedSeconds} s</span>
       </div>
+      <Summary texts={check.summary} activeMarker={activeMarker} onMarker={onMarker} />
+      {check.summary?.length ? <div className="aw-detail-h">Claim by claim</div> : null}
 
       {check.claims.length === 0 ? (
         <p>No checkable claims were found in this text: no figures, findings or statements about WRI&apos;s work.</p>

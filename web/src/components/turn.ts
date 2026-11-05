@@ -17,7 +17,8 @@ export type Turn = {
   factcheck?: FactCheck | null; // a fact-checked draft instead of an answer
   visuals?: Visuals | null; // infographics: asked for on an answer, or an Explore result
   visualsLoading?: boolean;
-  exploreSources?: Source[]; // Explore: the topic's best publications (no answer)
+  exploreSources?: Source[]; // Explore: the topic's best publications
+  exploreSummary?: string[]; // Explore: a cited synthesis of those publications
   decline: Decline | null;
   error: string | null;
   translation: (Translation & { language: string; showOriginal: boolean }) | null;
@@ -66,7 +67,13 @@ export function applyEvent(turn: Turn, event: AgentEvent): Turn {
     case "factcheck":
       return { ...turn, factcheck: event.factcheck, status: "done" };
     case "visuals":
-      return { ...turn, visuals: event.visuals, exploreSources: event.sources ?? turn.exploreSources, status: "done" };
+      return {
+        ...turn,
+        visuals: event.visuals,
+        exploreSources: event.sources ?? turn.exploreSources,
+        exploreSummary: event.summary ?? turn.exploreSummary,
+        status: "done",
+      };
     case "decline":
       return { ...turn, decline: event.decline, status: "done" };
   }

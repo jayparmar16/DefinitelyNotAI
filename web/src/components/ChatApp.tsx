@@ -7,7 +7,7 @@
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
-import { type Audience, type Filters, type FlowLink, type Lens, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
+import { type Answer, type Audience, type Filters, type FlowLink, type Lens, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
 import { type SavedChat, readChats, upsertChat, writeChats } from "@/lib/chats";
 import { unmatchedMarkers } from "@/lib/citations";
 import { answerMarkdown, formatCitation, saveFile, sourcesBibtex, sourcesCsv } from "@/lib/exports";
@@ -23,6 +23,7 @@ import { DeclineCard, OutdatedFlag } from "./Feedback";
 import { ProgressTrace } from "./ProgressTrace";
 import { type PanelTab, SidePanel } from "./SidePanel";
 import { SourceCards, cardId } from "./SourceCards";
+import { Summary } from "./Summary";
 import { type Turn, applyEvent, newTurn, shownAnswer } from "./turn";
 import { Welcome } from "./Welcome";
 
@@ -128,7 +129,9 @@ export function ChatApp() {
   const updateTurn = (id: string, change: (turn: Turn) => Turn) =>
     setTurns((all) => all.map((turn) => (turn.id === id ? change(turn) : turn)));
 
-  async function ask(question: string, mode: Mode, reportFormat = format, reader: Audience = audience) {
+  /** Ask the agent. With `reuse` (an answer already shown), it redrafts from that answer's
+   * sources in the new format or for the new reader, without searching again. */
+  async function ask(question: string, mode: Mode, reportFormat = format, reader: Audience = audience, reuse?: Answer) {
     const turn = newTurn(crypto.randomUUID(), question, mode);
     setTurns((all) => [...all, turn]);
     if (mode === "deep") setPanel({ turnId: turn.id, tab: "report", openDocs: [] });
@@ -143,10 +146,11 @@ export function ChatApp() {
         question, mode, language, audience: reader, format: reportFormat, filters, sessionId,
         deep: mode === "factcheck" && deep,
         lens: mode === "quick" || mode === "deep" ? lens : null,
+        ...(reuse && { reuse: true, answer: { paragraphs: reuse.paragraphs, sources: reuse.sources } }),
       };
       for await (const event of agent.ask(request, controller.signal)) {
         if (event.type === "answer") {
-          const texts = event.answer.report?.keyPoints ?? event.answer.paragraphs;
+          const texts = [...(event.answer.summary ?? []), ...(event.answer.report?.keyPoints ?? event.answer.paragraphs)];
           const missing = unmatchedMarkers(texts, event.answer.sources);
           if (missing.length) {
             // An answer with a marker but no source has an uncited claim: never show it.
@@ -279,7 +283,7 @@ async function downloadPdf(source: Source) {
     const answer = turn.answer!;
     const texts = answer.report?.keyPoints ?? answer.paragraphs;
     const agent = await getAgent();
-    const translated = await agent.translate(texts, target, sessionId);
+    const translated = await agent.translate(answer, target, sessionId);
     if (translated.paragraphs.every((text, i) => text === texts[i])) {
       setToast(usingMock ? "The mock agent only has Spanish translations" : "No translation returned");
       return;
@@ -299,7 +303,7 @@ async function downloadPdf(source: Source) {
   function changeFormat(next: ReportFormat) {
     setFormat(next);
     const turn = panelTurn;
-    if (turn?.answer?.report && !running) ask(turn.question, "deep", next);
+    if (turn?.answer?.report && !running) ask(turn.question, "deep", next, audience, turn.answer);
   }
 
   const bodyStyle = { "--panel-width": `${panelWidth}px` } as CSSProperties;
@@ -383,7 +387,7 @@ async function downloadPdf(source: Source) {
                               ask(`Turn this into a briefing: ${turn.question}`, "deep");
                             }}
                             onOpenReport={() => setPanel({ turnId: turn.id, tab: "report", openDocs: [] })}
-                            onReader={(reader) => ask(turn.question, turn.mode, format, reader)}
+                            onReader={(reader) => ask(turn.question, turn.mode, format, reader, turn.answer ?? undefined)}
                             onVisuals={() => loadVisuals(turn)}
                             onFollowUp={followUp}
                           />
@@ -402,8 +406,10 @@ async function downloadPdf(source: Source) {
                         <div className="aw-answer">
                           <div className="aw-answer-meta">
                             <span className="aw-mode-chip"><Icon name="layers" small /> Explore</span>
-                            <span>{turn.exploreSources?.length ?? 0} publications · no answer written</span>
+                            <span>{turn.exploreSources?.length ?? 0} publications</span>
                           </div>
+                          <Summary texts={turn.exploreSummary} activeMarker={activeMarker} onMarker={onMarker} />
+                          {turn.exploreSummary?.length ? <div className="aw-detail-h">Visuals</div> : null}
                           <VisualsView
                             visuals={turn.visuals}
                             activeMarker={activeMarker}

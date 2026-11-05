@@ -13,13 +13,23 @@ const CHATS_KEY = "askwri.chats.v1";
 const CURRENT_KEY = "askwri.current";
 const MAX_CHATS = 10;
 
-/** Put this chat first (replacing its older copy), keep only finished turns, and cap the list. */
+/**
+ * Save a chat's finished turns and cap the list. A chat moves to the top only when it has a new
+ * finished question; opening it, or translating or drawing visuals for an answer in it, updates
+ * it where it is, so switching between chats doesn't reorder the list.
+ */
 export function upsertChat(
   chats: SavedChat[], sessionId: string, turns: Turn[], now: number, lens: Lens | null = null,
 ): SavedChat[] {
   const finished = turns.filter((turn) => turn.status !== "running");
   if (!finished.length) return chats;
-  const chat = { sessionId, title: finished[0].question.slice(0, 80), updatedAt: now, turns: finished, lens };
+  const title = finished[0].question.slice(0, 80);
+  const index = chats.findIndex((c) => c.sessionId === sessionId);
+  if (index >= 0 && chats[index].turns.length >= finished.length) {
+    const updated = { ...chats[index], title, turns: finished, lens };
+    return chats.map((c, i) => (i === index ? updated : c));
+  }
+  const chat = { sessionId, title, updatedAt: now, turns: finished, lens };
   return [chat, ...chats.filter((c) => c.sessionId !== sessionId)].slice(0, MAX_CHATS);
 }
 

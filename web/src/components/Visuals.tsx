@@ -9,7 +9,7 @@
 import { useState } from "react";
 
 import type { CitationFlow, Empty, FlowLink, KeyFigure, LensResult, Relation, Source, Timeline, Visuals } from "@/lib/agent";
-import { CARD_H, CARD_W, WIDTH, citationMap } from "@/lib/citationMap";
+import { CARD_H, CARD_W, citationMap } from "@/lib/citationMap";
 import { type ClaimsMatrix, claimsMatrix } from "@/lib/matrix";
 import { LensTable } from "./LensTable";
 
@@ -70,82 +70,115 @@ type MapProps = {
   onOpenPage: (link: FlowLink) => void;
 };
 
-/** One citation map: rows of years, report cards, arrows from a report to those that cite it. */
+/** The citation map as a family tree: a generation per year, elbow connectors from each report
+ * down to the later reports that build on it, and undated reports listed under the tree. */
 function CitationMapView({ timeline, flow, onOpenPage }: MapProps) {
   const map = citationMap(timeline, flow);
-  const linked = new Set(map.edges.flatMap((e) => [e.from, e.to]));
-  const [picked, setPicked] = useState<string | null>(map.edges[0]?.to ?? timeline.newest);
+  const linked = new Set(map.links.flatMap((e) => [e.from, e.to]));
+  const [picked, setPicked] = useState<string | null>(map.edges[0]?.to ?? map.links[0]?.to ?? timeline.newest);
+  const titles = new Map([...map.nodes, ...map.undated].map((n) => [n.docId, n.title]));
+  const title = (id: string) => titles.get(id) ?? id;
   const node = map.nodes.find((n) => n.docId === picked);
-  const at = (id: string) => map.nodes.find((n) => n.docId === id)!;
-  const cites = map.edges.filter((e) => e.to === picked);
-  const citedBy = map.edges.filter((e) => e.from === picked);
-  const title = (id: string) => at(id).title;
+  const loose = map.undated.find((n) => n.docId === picked);
+  const cites = map.links.filter((e) => e.to === picked);
+  const citedBy = map.links.filter((e) => e.from === picked);
+  const relations = [...new Set(map.edges.map((e) => e.relation))];
 
   return (
     <div className="aw-map">
-      <div className="aw-map-scroll">
-        <svg viewBox={`0 0 ${WIDTH} ${map.height}`} role="img" aria-label="Citation map of the reports">
-          <defs>
-            {(Object.keys(RELATION_COLORS) as Relation[]).map((relation) => (
-              <marker key={relation} id={`arrow-${relation}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" fill={RELATION_COLORS[relation]} />
-              </marker>
-            ))}
-          </defs>
-          {map.rows.map((row) => (
-            <text key={row.label} x="0" y={row.y + CARD_H / 2 + 4} className="aw-map-year">{row.label}</text>
-          ))}
-          {map.edges.map((edge) => {
-            const a = at(edge.from), b = at(edge.to);
-            const x1 = a.x + CARD_W / 2, y1 = a.y + CARD_H, x2 = b.x + CARD_W / 2, y2 = b.y;
-            const bend = Math.max(24, (y2 - y1) / 2);
-            const on = picked === edge.from || picked === edge.to;
-            return (
-              <path
-                key={`${edge.from}>${edge.to}`}
-                d={`M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2 - 2}`}
-                fill="none"
-                stroke={RELATION_COLORS[edge.relation]}
-                strokeWidth={on ? 2.5 : 1.5}
-                strokeDasharray={edge.relation === "contrasts" ? "5 4" : undefined}
-                opacity={picked && !on ? 0.25 : 1}
-                markerEnd={`url(#arrow-${edge.relation})`}
-              />
-            );
-          })}
-          {map.nodes.map((n) => (
-            <g
-              key={n.docId}
-              className={`aw-map-node${n.citedInAnswer ? " cited" : ""}${n.docId === picked ? " on" : ""}${linked.has(n.docId) ? "" : " alone"}`}
-              transform={`translate(${n.x},${n.y})`}
-              onClick={() => setPicked(n.docId)}
-              onKeyDown={(event) => event.key === "Enter" && setPicked(n.docId)}
-              tabIndex={0}
-              role="button"
-              aria-label={`${n.title}${n.year ? `, ${n.year}` : ""}`}
-            >
-              <title>{n.title}</title>
-              <rect width={CARD_W} height={CARD_H} rx="8" />
-              {n.lines.map((line, i) => (
-                <text key={i} x="10" y={20 + i * 16}>{line}</text>
+      {map.nodes.length > 0 && (
+        <div className="aw-map-scroll">
+          <svg viewBox={`0 0 ${map.width} ${map.height}`} style={{ maxWidth: map.width * 1.25 }} role="img" aria-label="Citation tree of the reports">
+            <defs>
+              {(Object.keys(RELATION_COLORS) as Relation[]).map((relation) => (
+                <marker key={relation} id={`arrow-${relation}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,1 L9,5 L0,9 z" fill={RELATION_COLORS[relation]} />
+                </marker>
               ))}
-              {n.citedBy > 0 && (
-                <g transform={`translate(${CARD_W - 12},-6)`}>
-                  <circle r="9" className="aw-map-badge" />
-                  <text textAnchor="middle" y="4" className="aw-map-badge-n">{n.citedBy}</text>
-                </g>
-              )}
-            </g>
+            </defs>
+            {map.rows.map((row, i) => (
+              <g key={row.label}>
+                {i % 2 === 0 && <rect className="aw-map-band" x="0" y={row.y - 12} width={map.width} height={CARD_H + 24} rx="6" />}
+                <rect className="aw-map-year-chip" x="4" y={row.y + CARD_H / 2 - 11} width="52" height="22" rx="11" />
+                <text x="30" y={row.y + CARD_H / 2 + 4} textAnchor="middle" className="aw-map-year">{row.label}</text>
+              </g>
+            ))}
+            {map.edges.map((edge) => {
+              const key = `${edge.from}>${edge.to}`;
+              const on = picked === edge.from || picked === edge.to;
+              return (
+                <path
+                  key={key}
+                  className="aw-map-edge"
+                  d={map.paths[key]}
+                  stroke={RELATION_COLORS[edge.relation]}
+                  strokeWidth={on ? 2.5 : 1.6}
+                  strokeDasharray={edge.relation === "contrasts" ? "5 4" : undefined}
+                  opacity={picked && !on ? 0.3 : 1}
+                  markerEnd={`url(#arrow-${edge.relation})`}
+                />
+              );
+            })}
+            {map.nodes.map((n) => (
+              <g
+                key={n.docId}
+                className={`aw-map-node${n.citedInAnswer ? " cited" : ""}${n.docId === picked ? " on" : ""}${linked.has(n.docId) ? "" : " alone"}`}
+                transform={`translate(${n.x},${n.y})`}
+                onClick={() => setPicked(n.docId)}
+                onKeyDown={(event) => event.key === "Enter" && setPicked(n.docId)}
+                tabIndex={0}
+                role="button"
+                aria-label={`${n.title}${n.year ? `, ${n.year}` : ""}`}
+              >
+                <title>{n.title}</title>
+                <rect className="aw-map-card" width={CARD_W} height={CARD_H} rx="10" />
+                <rect className="aw-map-strip" width="5" height={CARD_H} rx="2.5" />
+                {n.lines.map((line, i) => (
+                  <text key={i} x="16" y={22 + i * 16} className="aw-map-title">{line}</text>
+                ))}
+                <text x="16" y={CARD_H - 10} className="aw-map-sub">
+                  {n.year}{n.citedInAnswer ? " · cited in the answer" : ""}
+                </text>
+                {n.citedBy > 0 && (
+                  <g transform={`translate(${CARD_W - 10},0)`}>
+                    <title>{`Cited by ${n.citedBy} report${n.citedBy === 1 ? "" : "s"} in AskWRI`}</title>
+                    <circle r="10" className="aw-map-badge" />
+                    <text textAnchor="middle" y="4" className="aw-map-badge-n">{n.citedBy}</text>
+                  </g>
+                )}
+              </g>
+            ))}
+          </svg>
+        </div>
+      )}
+      {map.undated.length > 0 && (
+        <div className="aw-map-undated">
+          <span className="aw-meta">No publication year, so not in the tree:</span>
+          {map.undated.map((n) => (
+            <button
+              key={n.docId}
+              className={`aw-map-chip${n.citedInAnswer ? " cited" : ""}${n.docId === picked ? " on" : ""}`}
+              onClick={() => setPicked(n.docId)}
+              title={n.title}
+            >
+              {n.title}
+            </button>
           ))}
-        </svg>
-      </div>
+        </div>
+      )}
       <p className="aw-meta aw-legend">
-        <span className="aw-key cited" /> cited in the answer <span className="aw-key" /> linked by citation · numbers: cited by N reports
+        <span className="aw-key cited" /> cited in the answer <span className="aw-key" /> linked by citation
+        {relations.map((relation) => (
+          <span key={relation} className="aw-legend-rel">
+            <span className="aw-legend-line" style={{ background: RELATION_COLORS[relation] }} /> {RELATION_LABELS[relation]}
+          </span>
+        ))}
+        {" "}· numbers: cited by N reports
       </p>
-      {node && (
+      {(node || loose) && (
         <div className="aw-flow-detail">
-          <b>{node.title}</b>
-          <span className="aw-meta">{node.year ?? "Undated"}{node.citedInAnswer ? " · cited in the answer" : ""}</span>
+          <b>{(node ?? loose)!.title}</b>
+          <span className="aw-meta">{node?.year ?? "No publication year"}{(node ?? loose)!.citedInAnswer ? " · cited in the answer" : ""}</span>
           {cites.length + citedBy.length === 0 && (
             <span className="aw-meta">No citation links to other reports in AskWRI&apos;s collection.</span>
           )}

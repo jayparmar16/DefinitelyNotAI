@@ -310,7 +310,8 @@ export const mockAgent: AgentClient = {
     // nothing to start: the mock answers at once
   },
 
-  async translate(paragraphs, language) {
+  async translate(answer, language) {
+    const paragraphs = answer.report?.keyPoints ?? answer.paragraphs;
     if (language !== "es") return { paragraphs, report: null };
     const canned = new Map(
       [...QUICK_PARAGRAPHS.en.map((text, i) => [text, QUICK_PARAGRAPHS.es[i]] as const),
