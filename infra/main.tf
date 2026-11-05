@@ -11,11 +11,21 @@ module "network" {
   vpc_cidr = var.vpc_cidr
 }
 
+# The hosted UI's origin joins the configured ones (localhost for development).
+locals {
+  allowed_origins = concat(var.allowed_origins, [module.web.origin])
+}
+
+module "web" {
+  source     = "./modules/web"
+  account_id = var.team_account_id
+}
+
 module "storage" {
   source          = "./modules/storage"
   account_id      = var.team_account_id
   deployer_arn    = data.aws_iam_session_context.deployer.issuer_arn
-  allowed_origins = var.allowed_origins
+  allowed_origins = local.allowed_origins
 }
 
 module "database" {
@@ -82,7 +92,7 @@ module "api" {
   package_path          = "${path.root}/../build/api.zip"
   runtime_arn           = module.agent.runtime_arn
   corpus_bucket         = module.storage.corpus_bucket
-  allowed_origins       = var.allowed_origins
+  allowed_origins       = local.allowed_origins
   max_concurrency       = var.api_max_concurrency
   web_adapter_layer_arn = var.web_adapter_layer_arn
 }

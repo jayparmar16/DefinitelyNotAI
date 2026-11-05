@@ -356,8 +356,27 @@ NEXT_PUBLIC_ASKWRI_API_KEY=<value of the askwri/api-key secret>
 
 Get them with `terraform -chdir=infra output -raw api_url` and
 `aws secretsmanager get-secret-value --secret-id askwri/api-key --query SecretString --output text`.
-The API allows browser calls from `http://localhost:3000` only (Terraform `allowed_origins`).
+The API allows browser calls from `http://localhost:3000` (Terraform `allowed_origins`) and from
+the hosted UI's CloudFront origin.
 Without the URL the UI uses the mock; delete `web/src/mock/` when it is no longer wanted.
+
+**Hosted UI.** Terraform's `web` module serves the static build from the private bucket
+`askwri-web-<account-id>` through CloudFront (Origin Access Control, HTTPS only, managed
+security headers). After `terraform apply`, publish a build with:
+
+```sh
+AWS_PROFILE=<team profile> scripts/deploy-web.sh   # prints the URL (terraform output web_url)
+```
+
+The API key is baked into the static bundle, so it is a speed bump, not access control.
+
+**Admin page (`/admin/`).** The latest evaluation run next to live numbers: what WRI asked us
+to show (claims cited, recall@5, precision@5, unanswerable questions declined, time to a
+useful source), what questions cost (estimated from tokens), and whether quality holds. The API
+logs every question to the DynamoDB table `askwri-query-log` (kept 90 days) and serves
+`GET /admin/overview?source=user|eval&window=24h|7d|30d` and `GET /admin/review?id=<id>`.
+Demo only: anyone with the URL can open it until access control is added. Set
+`NEXT_PUBLIC_TRACE_URL_TEMPLATE` (with `{session}`) to link each question to its trace.
 
 ## The rules
 

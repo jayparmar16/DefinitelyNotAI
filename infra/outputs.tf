@@ -37,3 +37,18 @@ output "quality_dashboard" {
   description = "CloudWatch dashboard with the evaluation scorecard and live operations."
   value       = module.evaluation.dashboard_name
 }
+
+output "web_url" {
+  description = "The hosted chat UI (admin page at /admin/)."
+  value       = module.web.origin
+}
+
+output "web_bucket" {
+  description = "Bucket scripts/deploy-web.sh uploads the UI build to."
+  value       = module.web.bucket
+}
+
+output "web_distribution_id" {
+  description = "CloudFront distribution scripts/deploy-web.sh invalidates."
+  value       = module.web.distribution_id
+}

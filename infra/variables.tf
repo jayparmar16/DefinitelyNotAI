@@ -103,7 +103,7 @@ variable "grounding_threshold" {
 }
 
 variable "allowed_origins" {
-  description = "Browser origins allowed to call askwri-api. Add the CloudFront domain when the UI is hosted."
+  description = "Extra browser origins allowed to call askwri-api; the hosted UI's CloudFront origin is added automatically."
   type        = list(string)
   default     = ["http://localhost:3000"]
 }
