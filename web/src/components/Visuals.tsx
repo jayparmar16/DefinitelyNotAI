@@ -118,12 +118,13 @@ type MapProps = {
   timeline: Timeline;
   flow?: CitationFlow;
   onOpenPage: (link: FlowLink) => void;
-  full?: boolean; // in the popup: drawn at its natural size and scrolled, never shrunk
+  full?: boolean; // in the popup: fits the window, with an actual-size toggle to zoom in
 };
 
 /** The citation map as a family tree: a generation per year, elbow connectors from each report
  * down to the later reports that build on it, and undated reports listed under the tree. */
 function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
+  const [actual, setActual] = useState(false);
   const map = citationMap(timeline, flow);
   const linked = new Set(map.links.flatMap((e) => [e.from, e.to]));
   const [picked, setPicked] = useState<string | null>(map.edges[0]?.to ?? map.links[0]?.to ?? timeline.newest);
@@ -139,9 +140,18 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
     <div className="aw-map">
       {map.nodes.length > 0 && (
         <div className="aw-map-scroll">
+          {full && (
+            <div className="aw-map-zoom">
+              <button type="button" className="aw-btn sm" onClick={() => setActual(!actual)} aria-pressed={actual}>
+                {actual ? "Fit to window" : "Actual size"}
+              </button>
+            </div>
+          )}
           <svg viewBox={`0 0 ${map.width} ${map.height}`} style={
               full
-                ? { width: map.width * 1.25, maxWidth: "none" }
+                ? actual
+                  ? { width: map.width, minWidth: map.width, maxWidth: "none" }
+                  : { width: "100%", maxWidth: map.width * 1.25 } // the whole tree in view
                 : // Never stretched past 1.25x (a one-report map filled the panel), and a wide
                   // map scrolls rather than shrinking its text below legibility.
                   { minWidth: Math.min(map.width, 560), maxWidth: map.width * 1.25 }

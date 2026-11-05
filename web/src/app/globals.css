@@ -579,14 +579,18 @@ a.aw-btn{text-decoration:none}
 @media (max-width:600px){.aw-matrix table{table-layout:auto}.aw-matrix th,.aw-matrix td{min-width:110px}}
 
 /* ---- Visuals: Expand opens a visual full-size in a popup ---- */
-.aw-visual-head{display:flex;align-items:center;justify-content:space-between;gap:var(--space-200)}
+.aw-visual-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-200)}
+.aw-visual-head .aw-btn{flex:none}
 .aw-visual-head h4{margin:0}
-.aw-visual-dialog{width:min(96vw,1600px);height:min(92vh,1100px);max-width:none;max-height:none;padding:0;border:0;border-radius:var(--radius-700);box-shadow:0 12px 48px rgba(0,0,0,.25);background:var(--surface);color:var(--ink)}
+.aw-visual-dialog{box-sizing:border-box;width:min(96vw,1600px);height:min(92dvh,1100px);overflow:hidden;max-width:none;max-height:none;padding:0;border:0;border-radius:var(--radius-700);box-shadow:0 12px 48px rgba(0,0,0,.25);background:var(--surface);color:var(--ink)}
 .aw-visual-dialog[open]{display:flex;flex-direction:column}
 .aw-visual-dialog::backdrop{background:rgba(26,25,25,.55)}
-.aw-visual-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-400);padding:var(--space-400) var(--space-600);border-bottom:var(--border-thin) solid var(--line)}
+.aw-visual-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:var(--space-400);flex:none;padding:var(--space-400) var(--space-600);border-bottom:var(--border-thin) solid var(--line)}
 .aw-visual-dialog-head h3{margin:0;font-size:18px;line-height:26px}
+.aw-visual-dialog-head > div{min-width:0}
+.aw-visual-dialog-head .aw-btn{flex:none}
 .aw-visual-dialog-head .aw-meta{margin:2px 0 0;max-width:110ch}
-.aw-visual-dialog-body{flex:1;overflow:auto;padding:var(--space-600);background:var(--surface-sunken)}
-.aw-visual-dialog-body .aw-map-scroll{overflow:visible}
+.aw-visual-dialog-body{flex:1;min-height:0;min-width:0;overflow:auto;padding:var(--space-600);background:var(--surface-sunken)}
+.aw-visual-dialog-body .aw-map-scroll{overflow:auto}
+.aw-map-zoom{display:flex;justify-content:flex-end;margin-bottom:var(--space-200);position:sticky;left:0}
 @media (max-width:600px){.aw-visual-dialog{width:100vw;height:100dvh;border-radius:0}.aw-visual-dialog-body{padding:var(--space-400)}}
