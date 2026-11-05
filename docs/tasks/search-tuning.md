@@ -29,8 +29,8 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
       fusion (`documents-first`), with cards matched on the question without its publication
       phrase (`documents-first-clean-card`), and then each one's best chunk is a guaranteed
       candidate (`documents-first-guaranteed`). Dropped: no score rose.
-- [ ] Bigger chunks (1,000 to 4,000 characters) in database `askwri_big`; scored as
-      `big-chunks` against the same search.
+- [x] Bigger chunks (1,000 to 4,000 characters) in database `askwri_big`; scored as
+      `big-chunks` against the same search. Not adopted: no clear gain.
 - [x] Each step's scores are recorded below, and only steps that raised them are kept.
 
 ## Scores (4 Nov, 14 answerable questions, 2 unanswerable)
@@ -50,6 +50,17 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
 | `documents-first` (+ best chunks of the 10 closest cards in the fusion) | 14 | 73 of 104 | 2.5 | 0.92 |
 | `documents-first-clean-card` (+ cards matched without "published in") | 14 | 73 of 104 | 2.5 | 0.92 |
 | `documents-first-guaranteed` (+ each card document's best chunk a candidate) | 14 | 73 of 104 | 2.5 | 0.92 |
+| `big-chunks` (`cutoff-0.02` search on 1,000-4,000-character chunks) | 14 | 74 of 100 | 2.6 | 0.95 |
+
+### Bigger chunks
+
+Database `askwri_big` holds the corpus cut at 1,000 to 4,000 characters (562 documents, 2
+skipped as in `askwri`). Chunks never cross a heading and most sections are short, so the
+average chunk grew only from 1,083 to 1,397 characters (21,719 chunks instead of 28,133).
+Against the same search it scored 74 passages that help against 77, with 2.6 documents per
+answer against 2.4: within the run-to-run noise, so no gain worth replacing the demo data a
+day before the demo. Every hit already brings its neighbours, which gives the answering
+model the surrounding text that bigger chunks would. `askwri_big` is kept for later tests.
 
 ### Documents first
 
