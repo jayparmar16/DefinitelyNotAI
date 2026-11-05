@@ -1,4 +1,10 @@
-/** Empty state: headline, how answers are cited, and suggested questions by user journey. */
+"use client";
+
+/** Empty state: "Ask" + a rotating WRI fact, and suggested questions by user journey. */
+
+import { useEffect, useState } from "react";
+
+import { FACT_SECONDS, askFacts } from "@/lib/welcome";
 
 const SUGGESTIONS = [
   { journey: "Find cited work", question: "What has WRI published on electric buses in Latin America?", deep: false },
@@ -27,16 +33,28 @@ type WelcomeProps = {
 /** Clicking a suggestion fills the composer (and sets the mode it needs); it never sends. */
 export function Welcome({ space, documents, onPick }: WelcomeProps) {
   const suggestions = space ? spaceSuggestions(space) : SUGGESTIONS;
-  const count = documents === null ? "" : ` · ${documents} publications`;
+  const facts = askFacts(space, documents);
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    setShown(0);
+    // Changes every few seconds; still for anyone who asked their system to reduce motion.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = setInterval(() => {
+      if (!document.hidden) setShown((i) => (i + 1) % facts.length);
+    }, FACT_SECONDS * 1000);
+    return () => clearInterval(timer);
+  }, [space, facts.length]);
   return (
     <div className="aw-welcome">
       <div>
-        <h1>{space ? `Ask WRI's research on ${space}` : "Ask WRI's research"}</h1>
-        {space && <p className="aw-meta">The {space} space{count}: every answer searches these publications only.</p>}
-        <p className="lead">
-          Every answer cites the WRI publication and page it came from. Turn on Deep research for a
-          fuller report with gaps, authors and newer figures.
-        </p>
+        <h1 className="aw-ask-line" aria-label={`Ask ${facts[0]}`}>
+          <span>Ask</span>
+          <span key={shown} className="aw-ask-fact in" aria-hidden="true">{facts[shown]}</span>
+        </h1>
+        <div className="aw-ask-dots" aria-hidden="true">
+          {facts.map((fact, i) => <span key={fact} className={i === shown ? "on" : ""} />)}
+        </div>
+        {space && <p className="aw-meta">Every answer in this space searches its publications only.</p>}
       </div>
       <div className="aw-suggest">
         {suggestions.map((item) => (

@@ -15,7 +15,7 @@ const MAX_ASPECTS = 4;
 export function LensBar({ lens, onEdit, onClear }: { lens: Lens; onEdit: () => void; onClear: () => void }) {
   return (
     <div className="aw-lensbar">
-      <span className="k">Lens</span>
+      <span className="k">Your lens</span>
       <span className="goal" title={lens.goal}>{lens.goal}</span>
       {lens.aspects.map((aspect) => (
         <span key={aspect} className="aw-chip">{aspect}</span>
@@ -55,10 +55,8 @@ export function LensEditor({ lens, onApply, onCancel }: LensEditorProps) {
     <div className="aw-lens-editor" role="group" aria-label="Research lens">
       <div className="aw-lens-h">
         <b>Research lens</b>
-        <span className="aw-meta">
-          Each answer then gets a table: every paper it uses, summarised for each aspect (or &ldquo;not
-          discussed&rdquo;). Separate aspects with commas.
-        </span>
+        <p>Tell AskWRI what you are working on. It reads every paper with your goal in mind.</p>
+        <p>Add up to {MAX_ASPECTS} topics to compare. Each paper gets a short summary for each topic.</p>
       </div>
       <label className="aw-lens-field">
         <span>Your goal</span>
@@ -66,12 +64,12 @@ export function LensEditor({ lens, onApply, onCancel }: LensEditorProps) {
           value={goal}
           maxLength={200}
           onChange={(event) => setGoal(event.target.value)}
-          placeholder="e.g. Designing a city heat action plan"
+          placeholder="For example: plan for extreme heat in a city"
           autoFocus
         />
       </label>
       <div className="aw-lens-field">
-        <span>Aspects (up to {MAX_ASPECTS})</span>
+        <span>Topics to compare</span>
         <div className="aw-lens-aspects">
           {aspects.map((aspect) => (
             <span key={aspect} className="aw-chip">
@@ -86,7 +84,7 @@ export function LensEditor({ lens, onApply, onCancel }: LensEditorProps) {
               onChange={(event) => setNext(event.target.value)}
               onKeyDown={onAspectKey}
               onBlur={add}
-              placeholder={aspects.length ? "Add another" : "e.g. cost, who pays, equity"}
+              placeholder={aspects.length ? "Add another topic" : "For example: cost, who pays, results"}
             />
           )}
         </div>

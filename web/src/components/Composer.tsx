@@ -60,15 +60,20 @@ type ComposerProps = {
   onSend: () => void;
 };
 
-function filtersLabel(filters: Filters): string {
-  const year = filters.yearFrom ? `${filters.yearFrom} on` : "any year";
-  const narrower = [filters.region].filter(Boolean).map((part) => ` · ${part}`).join("");
-  return `Filters: ${year} · ${filters.pubType ?? "any type"}${narrower}`;
+/** The filters that are on, as removable chips ("From 2020", "Report", "Africa"). */
+export function filterChips(filters: Filters, onFilters: (filters: Filters) => void): { label: string; clear: () => void }[] {
+  const chips: { label: string; clear: () => void }[] = [];
+  if (filters.yearFrom) chips.push({ label: `From ${filters.yearFrom}`, clear: () => onFilters({ ...filters, yearFrom: undefined }) });
+  if (filters.pubType) chips.push({ label: filters.pubType, clear: () => onFilters({ ...filters, pubType: undefined }) });
+  if (filters.region) chips.push({ label: filters.region, clear: () => onFilters({ ...filters, region: undefined }) });
+  return chips;
 }
 
 export function Composer(props: ComposerProps) {
   const { inputRef, draft } = props;
   const canSend = draft.trim().length > 0 && !props.running;
+  const chips = filterChips(props.filters, props.onFilters);
+  const narrowed = chips.length > 0 || Boolean(props.lens);
   const [editingLens, setEditingLens] = useState(false);
 
   // Grow the box with its text, up to the max height set in CSS.
@@ -102,6 +107,16 @@ export function Composer(props: ComposerProps) {
         )}
         {props.lens && !editingLens && props.tool === "ask" && (
           <LensBar lens={props.lens} onEdit={() => setEditingLens(true)} onClear={() => props.onLens(null)} />
+        )}
+        {chips.length > 0 && (
+          <div className="aw-filter-chips" aria-label="Search filters on">
+            {chips.map((chip) => (
+              <span key={chip.label} className="aw-chip">
+                {chip.label}
+                <button type="button" onClick={chip.clear} aria-label={`Remove ${chip.label}`}>×</button>
+              </span>
+            ))}
+          </div>
         )}
         <label className="visually-hidden" htmlFor="aw-question">Your question</label>
         <textarea
@@ -159,22 +174,32 @@ export function Composer(props: ComposerProps) {
           )}
           {/* Lens, filters and send stay together at the right end, so Send never wraps away. */}
           <div className="aw-composer-end">
-          {props.tool === "ask" && !props.lens && !editingLens && (
-            <button type="button" className="aw-btn ghost sm" onClick={() => setEditingLens(true)} title="Summarise every paper for your goal and aspects">
-              <Icon name="filter" small /> Lens
-            </button>
-          )}
-
+          {/* One Options menu holds the research lens and the search filters, to keep the box calm. */}
           <Menu
             placement="above"
             trigger={({ open, toggle }) => (
-              <button type="button" className="aw-btn ghost sm" onClick={toggle} aria-expanded={open}>
-                {filtersLabel(props.filters)} <Icon name="chevron" small />
+              <button
+                type="button"
+                className={narrowed ? "aw-btn ghost aw-options on" : "aw-btn ghost aw-options"}
+                onClick={toggle}
+                aria-expanded={open}
+                title="Research lens and filters"
+              >
+                <Icon name="sliders" small /> Options{narrowed && <span className="aw-options-dot" aria-label="(some on)" />}
               </button>
             )}
           >
             {() => (
               <>
+                {props.tool === "ask" && (
+                  <>
+                    <div className="cap">Research lens</div>
+                    <button type="button" className="row" role="menuitem" onClick={() => setEditingLens(true)}>
+                      <Icon name="filter" small /> {props.lens ? "Change your lens" : "Read every paper with your goal in mind"}
+                    </button>
+                    <div className="sep" />
+                  </>
+                )}
                 <div className="cap">Narrow the search</div>
                 <label className="row">
                   From year
@@ -232,7 +257,6 @@ export function Composer(props: ComposerProps) {
           </div>
         </div>
       </form>
-      <div className="aw-hint">Searches public WRI publications only. Answers are generated; check the cited page.</div>
     </div>
   );
 }

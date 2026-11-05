@@ -65,3 +65,8 @@ export function factCheckMarkdown(check: FactCheck): string {
   }
   return `${lines.join("\n")}\n`;
 }
+
+/** A note that opens with a source number reads "Source [1] gives…", not a bare "1 gives…". */
+export function noteText(note: string): string {
+  return /^\[\d+\]/.test(note.trim()) ? `Source ${note.trim()}` : note;
+}

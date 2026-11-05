@@ -19,6 +19,7 @@ const PATHS = {
   person: "M12 4a4 4 0 1 0 0 8a4 4 0 1 0 0-8M4 21a8 8 0 0 1 16 0",
   translate: "M4 5h8M8 3v2M6 5c0 4 3 7 6 8M10 5c0 4-3 8-6 9M13 21l4-9 4 9M14.5 18h5",
   filter: "M4 6h16M7 12h10M10 18h4",
+  sliders: "M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4",
   panel: "M4 5h16v14H4zM9 5v14",
   quote: "M7 7h4v4H7zM7 11c0 3-1 5-3 6M15 7h4v4h-4zM15 11c0 3-1 5-3 6",
 } as const;

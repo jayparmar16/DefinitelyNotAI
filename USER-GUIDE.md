@@ -54,9 +54,10 @@ email. If that doesn't work, ask an administrator to reset your account.
 - **Ask**, **Fact-check** or **Explore**: three ways to use AskWRI, explained below.
 - **Deep research**: turn it on for a fuller report instead of a short answer, and choose the
   **Report type**.
-- **Lens**: read every publication through your own questions (explained below).
-- **Filters**: limit the search to a starting year, a type of publication (report, working
-  paper, issue brief…) or a region or country.
+- **Options**: one menu for the **research lens** (read every publication with your goal in
+  mind, explained below) and the **filters** (a starting year, a type of publication, or a region
+  or country). Filters that are on show as small labels above the box; click × on one to remove
+  it. A yellow dot on Options means something is on.
 
 **The top bar**
 
@@ -160,11 +161,11 @@ way to understand a topic's history at WRI.
 
 ## Research lens
 
-A lens lets you read every publication through the questions you care about. Click **Lens**,
-write your goal (for example, *design a heat action plan*) and up to four aspects (for example,
-*cost, who pays, evidence of impact*). Your next answers include a table: one row per
-publication, one column per aspect, each cell summarised and cited. Click **Lens** again to
-change or remove it.
+A lens lets you read every publication with your goal in mind. Open **Options** and choose the
+research lens. Write your goal (for example, *plan for extreme heat in a city*) and up to four
+topics to compare (for example, *cost, who pays, results*). Your next answers include a table:
+one row per publication, one column per topic, each cell a short cited summary. Your lens shows
+above the box; change it from **Options**, or click × to turn it off.
 
 ## When AskWRI says "I couldn't find WRI evidence"
 

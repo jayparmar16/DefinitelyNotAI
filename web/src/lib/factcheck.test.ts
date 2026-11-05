@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import type { CheckedClaim, FactCheck } from "./agent.ts";
 import { annotate, countsLine, factCheckMarkdown } from "./factcheck.ts";
+import { noteText } from "./factcheck.ts";
 
 function claim(quote: string, verdict: CheckedClaim["verdict"] = "supported"): CheckedClaim {
   return { quote, claim: quote, verdict, markers: verdict === "not_found" ? [] : [1], correction: "", note: "" };
@@ -32,4 +33,10 @@ test("the report counts verdicts and keeps corrections", () => {
   const markdown = factCheckMarkdown(check);
   assert.match(markdown, /- \*\*Contradicted\*\*: 281 cities \[1\]\n {2}- Suggested wording: 181 of 394 cities/);
   assert.match(markdown, /- \*\*Not found\*\*: x\n/);
+});
+
+
+test("a note that opens with a source number reads as 'Source [n] …'", () => {
+  assert.equal(noteText("[1] gives $9.4 billion, not $94 billion."), "Source [1] gives $9.4 billion, not $94 billion.");
+  assert.equal(noteText("WRI says [2] instead."), "WRI says [2] instead.");
 });

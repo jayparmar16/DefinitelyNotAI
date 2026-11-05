@@ -8,7 +8,7 @@
 import { useState } from "react";
 
 import type { FactCheck } from "@/lib/agent";
-import { VERDICT_NAMES, annotate, countsLine } from "@/lib/factcheck";
+import { VERDICT_NAMES, annotate, countsLine, noteText } from "@/lib/factcheck";
 import { Icon } from "./Icon";
 import { MarkedText } from "./MarkedText";
 import { Summary } from "./Summary";
@@ -101,7 +101,7 @@ export function FactCheckCard({ turnId, check, activeMarker, onMarker, onCopy }:
                   )}
                   {claim.note && (
                     <div className="aw-meta">
-                      <MarkedText text={claim.note} activeMarker={activeMarker} onMarker={onMarker} />
+                      <MarkedText text={noteText(claim.note)} activeMarker={activeMarker} onMarker={onMarker} />
                     </div>
                   )}
                 </div>
