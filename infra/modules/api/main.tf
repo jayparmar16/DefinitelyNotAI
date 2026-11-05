@@ -16,7 +16,7 @@ ephemeral "random_password" "api_key" {
 resource "aws_secretsmanager_secret_version" "api_key" {
   secret_id                = aws_secretsmanager_secret.api_key.id
   secret_string_wo         = ephemeral.random_password.api_key.result
-  secret_string_wo_version = 1
+  secret_string_wo_version = 2 # bump to rotate: 2 retired the key that was in the UI bundle
 }
 
 data "aws_iam_policy_document" "assume" {
