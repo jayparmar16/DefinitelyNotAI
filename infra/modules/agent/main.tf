@@ -147,7 +147,7 @@ data "aws_iam_policy_document" "agent" {
     condition {
       test     = "StringEquals"
       variable = "cloudwatch:namespace"
-      values   = ["bedrock-agentcore"]
+      values   = ["bedrock-agentcore", "AskWRI/Live"] # AskWRI/Live: tokens, cost, latency per answer
     }
   }
   statement {

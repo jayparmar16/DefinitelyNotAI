@@ -982,3 +982,31 @@ def test_a_reader_the_user_picked_beats_the_one_the_follow_up_suggests(monkeypat
     )
     request = {"question": "same question again", "sessionId": "s" * 40, "audience": "partnerships"}
     assert list(agent.run(request))[-1]["answer"]["audience"] == "partnerships"
+
+
+def test_every_final_event_reports_what_the_question_used(monkeypatch):
+    sent = []
+    monkeypatch.setattr(loop.usage, "publish", sent.append)
+    fake_models(monkeypatch, DRAFT, {0})
+    loop.usage.record("draft", "global.anthropic.claude-sonnet-5-5", 1000, 200)  # cleared on start
+    agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
+    answer = list(agent.run({"question": "q", "source": "eval"}))[-1]
+    assert answer["usage"]["modelCalls"] == 0  # the fakes make no real calls
+    points = {p["MetricName"]: p for p in sent[0]}
+    assert points["Questions"]["Value"] == 1 and points["Declined"]["Value"] == 0
+    assert {"Name": "Source", "Value": "eval"} in points["Questions"]["Dimensions"]
+    assert points["ClaimsRemoved"]["Value"] == 1
+
+
+def test_usage_estimates_cost_per_model_and_step():
+    from askwri.agent import usage
+
+    usage.reset()
+    usage.record("draft", "global.anthropic.claude-sonnet-5-5", 1_000_000, 100_000)
+    usage.record("verify", "global.anthropic.claude-haiku-4-5-20251001-v1:0", 1_000_000, 0)
+    used = usage.summary()
+    assert used["byStep"] == {
+        "draft": {"in": 1_000_000, "out": 100_000},
+        "verify": {"in": 1_000_000, "out": 0},
+    }
+    assert used["estimatedCostUsd"] == 3.0 + 1.5 + 1.0

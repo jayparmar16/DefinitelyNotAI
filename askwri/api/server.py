@@ -73,6 +73,8 @@ def chat_payload(body: dict) -> dict:
         "filters": {k: filters[k] for k in ("yearFrom", "pubType") if filters.get(k)},
         "sessionId": session,
         "deep": body.get("deep") is True,  # fact-check: search harder
+        # Evaluation runs mark their traffic, so live metrics can tell them from user questions.
+        "source": "eval" if body.get("source") == "eval" else "user",
         "lens": research_lens(body.get("lens")),
         # Visuals for an answer already shown: the UI sends back its sources and paragraphs.
         "answer": shown_answer(body.get("answer")) if body.get("mode") == "visuals" else None,

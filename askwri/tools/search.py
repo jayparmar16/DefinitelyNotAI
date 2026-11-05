@@ -21,12 +21,15 @@ RRF_K = 60  # reciprocal rank fusion constant: score = sum of 1 / (RRF_K + rank)
 # work in progress. Small enough to break near-ties, never to beat a clearly better passage.
 TYPE_WEIGHTS = {"Report": 1.10, "Technical note": 1.05, "Working paper": 0.95}
 
+# RFPs, newsletters and dataset change logs are in the corpus but aren't research: they are
+# searched only when a type filter asks for one of them.
 # Both searches apply the same document filters. Keyword terms are OR-ed: AND-ing every word of
 # a question would rarely match anything. 'english' matches the pipeline's tsv (stemmed).
 FILTERS = """
   AND (%(year_from)s::int IS NULL OR d.year >= %(year_from)s OR (%(include_undated)s AND d.year IS NULL))
   AND (%(year_to)s::int IS NULL OR d.year <= %(year_to)s OR (%(include_undated)s AND d.year IS NULL))
   AND (%(pub_type)s::text IS NULL OR d.pub_type ILIKE %(pub_type)s)
+  AND (%(pub_type)s::text IS NOT NULL OR coalesce(d.pub_type, '') NOT IN ('RFP', 'Newsletter', 'Dataset documentation'))
   AND (%(topic)s::text IS NULL OR d.topic ILIKE %(topic)s OR %(topic)s ILIKE ANY (d.tags))
   AND (%(country)s::text IS NULL OR %(country)s ILIKE ANY (d.countries))
   AND (%(language)s::text IS NULL OR d.language = %(language)s)

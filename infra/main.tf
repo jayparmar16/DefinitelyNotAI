@@ -86,3 +86,11 @@ module "api" {
   max_concurrency       = var.api_max_concurrency
   web_adapter_layer_arn = var.web_adapter_layer_arn
 }
+
+module "evaluation" {
+  source                          = "./modules/evaluation"
+  region                          = var.region
+  account_id                      = var.team_account_id
+  agent_runtime_id                = module.agent.runtime_id
+  online_eval_sampling_percentage = var.online_eval_sampling_percentage
+}

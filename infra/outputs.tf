@@ -32,3 +32,8 @@ output "api_key_secret" {
   description = "Secret holding the key the UI sends as X-AskWRI-Key."
   value       = module.api.api_key_secret_name
 }
+
+output "quality_dashboard" {
+  description = "CloudWatch dashboard with the evaluation scorecard and live operations."
+  value       = module.evaluation.dashboard_name
+}

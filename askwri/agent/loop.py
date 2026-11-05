@@ -11,7 +11,7 @@ from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
-from askwri.agent import llm
+from askwri.agent import llm, usage
 from askwri.agent.citations import (
     Sentence,
     cited_sentences,
@@ -271,12 +271,31 @@ class Agent:
         audience, format, filters, sessionId."""
         question = request["question"].strip()
         session = request.get("sessionId") or ""
+        usage.reset()
+        started, outcome, removed = time.monotonic(), "error", 0
         with agent_span(question, session) as span:
             final = None
-            for event in self._run(question, request, session):
-                if event["type"] in ("answer", "decline", "factcheck", "visuals"):
-                    final = event
-                yield event
+            try:
+                for event in self._run(question, request, session):
+                    if event["type"] in ("answer", "decline", "factcheck", "visuals"):
+                        final = event
+                        # What the question used, for the eval runner and the operations views.
+                        event["usage"] = usage.summary()
+                        outcome = event["type"]
+                        removed = len(event.get("answer", {}).get("removedClaims") or [])
+                    yield event
+            finally:
+                source = "eval" if request.get("source") == "eval" else "user"
+                usage.publish(
+                    usage.metric_data(
+                        usage.summary(),
+                        request.get("mode", "quick"),
+                        source,
+                        time.monotonic() - started,
+                        outcome,
+                        removed,
+                    )
+                )
             if final:
                 if final["type"] == "answer":
                     shown = final["answer"]["paragraphs"]

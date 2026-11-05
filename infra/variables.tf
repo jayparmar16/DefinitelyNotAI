@@ -119,3 +119,9 @@ variable "web_adapter_layer_arn" {
   type        = string
   default     = "arn:aws:lambda:us-west-2:753240598075:layer:LambdaAdapterLayerArm64:25"
 }
+
+variable "online_eval_sampling_percentage" {
+  description = "Share of live AskWRI sessions AgentCore judges (0-100); each judged session costs judge-model tokens."
+  type        = number
+  default     = 100
+}

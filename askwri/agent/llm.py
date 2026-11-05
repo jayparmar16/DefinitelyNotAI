@@ -9,6 +9,7 @@ import os
 
 import anthropic
 
+from askwri.agent import usage
 from askwri.agent.tracing import chat_span, finish_chat_span
 
 SMALL = "ASKWRI_SMALL_MODEL"
@@ -55,6 +56,7 @@ def ask_json(
         )
         text = "".join(block.text for block in response.content if block.type == "text")
         finish_chat_span(span, text, response.usage.input_tokens, response.usage.output_tokens)
+    usage.record(step, model, response.usage.input_tokens, response.usage.output_tokens)
     if response.stop_reason != "end_turn":
         raise ModelError(f"{step}: model stopped with {response.stop_reason}")
     if not text:

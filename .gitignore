@@ -46,3 +46,4 @@ infra/backend.hcl
 # Web app build output
 web/out/
 *.tsbuildinfo
+eval/results/
