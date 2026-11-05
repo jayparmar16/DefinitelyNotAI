@@ -125,7 +125,7 @@ export function AdminApp() {
   return (
     <div className="ad-app">
       <header className="aw-header">
-        <a className="aw-logo" href="./" style={{ color: "inherit", textDecoration: "none" }}>
+        <a className="aw-logo" href="/" style={{ color: "inherit", textDecoration: "none" }}>
           <span className="aw-logo-mark">WRI</span>AskWRI <small>admin</small>
         </a>
         <span className="spacer" />
