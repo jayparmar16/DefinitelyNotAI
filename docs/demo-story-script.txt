@@ -280,8 +280,8 @@ IF SOMETHING GOES WRONG
   Still nothing? Open "★ Story · AI data centers and the grid" in the sidebar - the same four
   steps, finished - and carry on from the same step.
 - An error appears: open the ★ Story chat and continue.
-- Step 6: if the admin page looks blank, you're in a window with an ad blocker - use the
-  Incognito window (or skip to the conclusion).
+- Step 6: if the admin page is still loading or looks empty, reload it once (Cmd+R), or just
+  say the one line and go to the conclusion.
 - Don't click another chat while an answer is still appearing.
 
 
