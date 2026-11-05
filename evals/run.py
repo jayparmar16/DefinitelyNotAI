@@ -45,7 +45,10 @@ Passage from "{title}" (published {year}), section "{section}":
 
 def judge(client, question: str, hit: dict, year: int | None) -> int:
     """The judge's score for one passage: 2 helps, 1 related, 0 no. One `answerer` call."""
-    text = "\n\n".join(part for part in (hit["description"], hit["content"]) if part)
+    # The judge reads what the answering model would: the passage and any neighbours with it.
+    parts = [hit["description"], hit["content"]]
+    parts += [f"[Next to it in the document]\n{n['content']}" for n in hit.get("neighbours", [])]
+    text = "\n\n".join(part for part in parts if part)
     prompt = JUDGE_PROMPT.format(
         question=question,
         title=hit["title"],
