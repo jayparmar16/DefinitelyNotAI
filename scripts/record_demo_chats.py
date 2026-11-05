@@ -40,6 +40,8 @@ CHATS = [
                "aspects": ["funding sources", "returns on investment", "barriers"]}}),
     ("10 · Search WRI's maps and charts", None, "quick",
      "Which WRI maps show water stress near ethanol refineries in the US Midwest?", {}),
+    ("11 · Narrow by region: Sub-Saharan Africa", None, "quick",
+     "How are cities adapting to climate change?", {"filters": {"region": "Sub-Saharan Africa"}}),
     ("Ocean · what WRI published in 2025", "Ocean", "quick",
      "What did WRI publish in 2025 on ocean?", {}),
 ]  # fmt: skip
@@ -101,6 +103,7 @@ def record(api: str, key: str, chat: tuple) -> dict:
     print(f"{title}: {final['type']}", file=sys.stderr, flush=True)
     return {"title": title, "space": space, "sessionId": session, "question": question,
             "mode": mode, "format": extra.get("format"), "lens": extra.get("lens"),
+            "filters": extra.get("filters"),
             "events": events}  # fmt: skip
 
 

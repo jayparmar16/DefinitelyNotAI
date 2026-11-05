@@ -1,12 +1,13 @@
 /** One question and everything the agent streamed back for it, as the UI keeps it. */
 
-import type { AgentEvent, Answer, Decline, FactCheck, Mode, ReportFormat, Source, StepStatus, Translation, Visuals } from "@/lib/agent";
+import type { AgentEvent, Answer, Decline, FactCheck, Filters, Mode, ReportFormat, Source, StepStatus, Translation, Visuals } from "@/lib/agent";
 
 export type Step = { id: string; label: string; detail?: string; status: StepStatus };
 
 export type Turn = {
   space?: string | null; // the topic space it was asked in (null or absent: all of WRI)
   format?: ReportFormat; // Deep research: the report type it was written as
+  filters?: Filters; // the year, type and region filters it was asked with
   id: string;
   question: string;
   mode: Mode;

@@ -5,10 +5,10 @@
  */
 
 import { applyEvent, newTurn, type Turn } from "../components/turn.ts";
-import type { AgentEvent, Lens, Mode, ReportFormat } from "./agent.ts";
+import type { AgentEvent, Filters, Lens, Mode, ReportFormat } from "./agent.ts";
 import type { SavedChat } from "./chats.ts";
 
-export type RecordedTurn = { question: string; mode: Mode; format?: ReportFormat; events: AgentEvent[] };
+export type RecordedTurn = { question: string; mode: Mode; format?: ReportFormat; filters?: Filters; events: AgentEvent[] };
 
 export type RecordedChat = {
   title: string;
@@ -18,12 +18,18 @@ export type RecordedChat = {
   question: string;
   mode: Mode;
   format?: ReportFormat; // Deep research: the report type it was asked as
+  filters?: Filters; // the filters it was asked with
   lens?: Lens | null; // the research lens it was asked through
   events: AgentEvent[];
 };
 
 function demoTurn(id: string, recorded: RecordedTurn, space: string | null): Turn {
-  const start = { ...newTurn(id, recorded.question, recorded.mode), space, ...(recorded.format && { format: recorded.format }) };
+  const start = {
+    ...newTurn(id, recorded.question, recorded.mode),
+    space,
+    ...(recorded.format && { format: recorded.format }),
+    ...(recorded.filters && { filters: recorded.filters }),
+  };
   return { ...recorded.events.reduce(applyEvent, start), status: "done" };
 }
 

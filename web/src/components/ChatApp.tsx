@@ -162,7 +162,12 @@ export function ChatApp() {
   async function ask(
     question: string, mode: Mode, reportFormat = format, reader: Audience = audience, reuse?: Answer, scope = space,
   ) {
-    const turn = { ...newTurn(crypto.randomUUID(), question, mode), space: scope, ...(mode === "deep" && { format: reportFormat }) };
+    const turn = {
+      ...newTurn(crypto.randomUUID(), question, mode),
+      space: scope,
+      filters,
+      ...(mode === "deep" && { format: reportFormat }),
+    };
     setTurns((all) => [...all, turn]);
     if (mode === "deep") setPanel({ turnId: turn.id, tab: "report", openDocs: [] });
     const controller = new AbortController();
@@ -290,13 +295,15 @@ export function ChatApp() {
     ask(turn.question, turn.mode, format, audience, undefined, null);
   }
 
-  /** Put the composer back to how a chat's last question was asked: tool, Deep research, report type. */
+  /** Put the composer back to how a chat's last question was asked: tool, Deep research, report
+   * type and filters (shown as labels above the box). */
   function restoreSettings(chatTurns: Turn[]) {
     const last = chatTurns.at(-1);
     if (!last) return;
     setTool(last.mode === "factcheck" ? "factcheck" : last.mode === "explore" ? "explore" : "ask");
     setDeep(last.mode === "deep");
     if (last.format) setFormat(last.format);
+    setFilters(last.filters ?? {});
   }
 
   function clearChats() {

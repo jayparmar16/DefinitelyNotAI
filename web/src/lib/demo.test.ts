@@ -42,3 +42,12 @@ test("a story chat keeps its questions in order, each with its own report type",
   assert.deepEqual(story.turns.map((t) => [t.mode, t.format ?? null, t.status]), [["quick", null, "done"], ["deep", "issue-brief", "done"], ["factcheck", null, "done"]]);
   assert.equal(new Set(story.turns.map((t) => t.id)).size, 3);
 });
+
+
+test("a recorded chat keeps the filters it was asked with", () => {
+  const [chat] = demoChats(
+    [{ title: "Filters", space: null, sessionId: "f", question: "Cities?", mode: "quick", filters: { region: "Sub-Saharan Africa" }, events: [answer] }],
+    1,
+  );
+  assert.deepEqual(chat.turns[0].filters, { region: "Sub-Saharan Africa" });
+});
