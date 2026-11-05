@@ -231,6 +231,9 @@ resource "aws_bedrockagentcore_agent_runtime" "askwri" {
     ASKWRI_DEEP_ROUNDS         = tostring(var.deep_max_rounds)
     ASKWRI_GUARDRAIL_ID        = aws_bedrock_guardrail.askwri.guardrail_id
     ASKWRI_GUARDRAIL_VERSION   = aws_bedrock_guardrail_version.askwri.version
+    # Keep every trace: the default X-Ray sampler drops most, and Evaluations judges only
+    # sessions whose spans reached aws/spans.
+    OTEL_TRACES_SAMPLER = "always_on"
   }
 
   depends_on = [aws_iam_role_policy.agent]

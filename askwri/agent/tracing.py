@@ -26,6 +26,8 @@ def agent_span(question: str, session_id: str) -> Iterator[trace.Span]:
         span.set_attribute("gen_ai.operation.name", "invoke_agent")
         span.set_attribute("gen_ai.agent.name", "askwri")
         span.set_attribute("gen_ai.conversation.id", session_id)
+        # Evaluations finds a session's spans by session.id, not the GenAI conversation id.
+        span.set_attribute("session.id", session_id)
         span.set_attribute("gen_ai.task.input", question)
         span.set_attribute("agentcore.invocation.user_prompt", question)
         yield span
