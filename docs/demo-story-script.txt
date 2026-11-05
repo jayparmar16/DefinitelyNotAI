@@ -24,7 +24,7 @@ LINK 2 - load the demo chats (do this once, after signing in)
 https://d17gz0gh5g00t3.cloudfront.net/?demo=load
 >>>
 
-LINK 3 - admin page (for questions)
+LINK 3 - admin page (Step 6 - open it in a second tab before you start)
 >>>
 https://d17gz0gh5g00t3.cloudfront.net/admin/?source=eval&window=30d
 >>>
@@ -68,7 +68,7 @@ D7  Built on WRI's own knowledge ....... 580 WRI publications, organised in WRI'
                                           with WRI's own labels - even its charts and maps are
                                           searchable.                              (Tour, Step 5) 
 D8  Ready for real use ................. runs on AWS with sign-in, and is measured against
-                                          WRI's own targets on an admin scorecard.          (Close)
+                                          WRI's own targets on an admin scorecard.          (Step 6)
 
 
 ---------------------------------------------------------------------
@@ -87,9 +87,10 @@ BEFORE YOU PRESENT (15 minutes ahead)
    sidebar, "★ Story · AI data centers and the grid", is your backup copy of this whole demo.
 3. Warm the agent up: click "New chat", ask anything ("What is WRI?"), wait for the answer.
 4. Click "New chat" again and leave it empty. Check: tool "Ask", Deep research OFF.
-5. Keep this file open next to the browser. Everything to paste is in the PASTE BOX at the top,
+5. Open LINK 3 (the admin page) in a SECOND TAB of the same window, ready for Step 6.
+6. Keep this file open next to the browser. Everything to paste is in the PASTE BOX at the top,
    and again inside each step below.
-6. Rule: don't click another chat while an answer is still appearing - it stops that answer.
+7. Rule: don't click another chat while an answer is still appearing - it stops that answer.
 
 
 ---------------------------------------------------------------------
@@ -218,39 +219,58 @@ DO: point at each verdict:
 
 
 ---------------------------------------------------------------------
-STEP 5 - SEARCH WRI'S MAPS AND CHARTS  (2:30 - 2:52)   - the last step
+STEP 5 - SEARCH WRI'S MAPS AND CHARTS  (2:30 - 2:42)   - from the ready-made chat
 ---------------------------------------------------------------------
 SAY:
 "One more thing. WRI's reports are full of maps and charts. Normally a search engine can't see
-what's inside them. AskWRI can."
+what's inside them. AskWRI can - here's one I asked earlier."
 
-DO: in the same chat, click "Ask" (next to "Fact-check") and switch Deep research OFF.
-    Paste this (PASTE 4) and press Enter.  (~20-30 s)
+DO: in the sidebar, click "10 · Search WRI's maps and charts". (Opens instantly.)
+    The question was:
     >>>
     Which WRI maps show water stress near ethanol refineries in the US Midwest?
     >>>
-    Short on time? Open the ready-made chat "10 · Search WRI's maps and charts" instead.
+    (It's also PASTE 4, if you'd rather ask it live in a new chat - about 20-30 s.)
 
-DO: when the answer appears, point at the first sentence - it names the map itself: "Figure 7
-    in Rethinking Biofuels in the US Midwest". Then click its citation number [1].
-    The report opens on the right, at the page with the map.
+DO: point at the first sentence - it names the map itself: "Figure 7 in Rethinking Biofuels in
+    the US Midwest". Then click its citation number [1]. The report opens on the right, at the
+    page with the map.
 SAY:
 "It found the map itself - Figure 7 - and opened it. Every WRI chart and map was read and
-described when we loaded the reports, so you can search what a map SHOWS, not just its title.
-And here's the finding: 51 of 161 ethanol refineries in the Midwest sit in areas of high or
-extremely high water stress."
+described when we loaded the reports, so you can search what a map SHOWS, not just its title:
+51 of 161 ethanol refineries in the Midwest sit in areas of high or extremely high water stress."
 ★ D7  "Even WRI's maps and charts are searchable - about 2,300 of them."
 
 
 ---------------------------------------------------------------------
-CLOSE  (2:52 - 3:00)
+STEP 6 - THE ADMIN PAGE  (2:42 - 2:50)
+---------------------------------------------------------------------
+DO: switch to the second tab, already open on the admin page (LINK 3):
+    >>>
+    https://d17gz0gh5g00t3.cloudfront.net/admin/?source=eval&window=30d
+    >>>
+    Point at the Quality scorecard, then the Model-graded quality row.
+★ D8  SAY (one line):
+"And for WRI's team: every release is tested against WRI's own targets - 100% of figures cited,
+the right report in the top five 92% of the time, every out-of-scope question declined - and
+graded by AgentCore's independent judges, with the cost of every answer tracked here."
+
+
+---------------------------------------------------------------------
+CONCLUSION  (2:50 - 3:00)
 ---------------------------------------------------------------------
 SAY:
-"So: every claim verified and cited to the page. Written for whoever is asking. Honest about what
-the evidence can't say. It protects WRI's credibility before anything goes out - and it can even
-search inside WRI's maps and charts.
-★ D8  It runs on AWS - Bedrock AgentCore, Bedrock Guardrails and Aurora - with sign-in, and we
-      measure it against WRI's own targets on an admin scorecard. Thank you."
+"WRI asked us to solve one problem: its research is spread across hundreds of reports, and
+people need the right finding - fast, from the right page, and without anyone inventing what
+WRI said.
+
+We solved it with AskWRI: an AI research assistant that answers only from WRI's own
+publications, verifies every claim and cites the exact page, writes for whoever is asking,
+says when the evidence isn't there, fact-checks drafts, and even searches inside WRI's maps
+and charts - built on Amazon Bedrock AgentCore, Bedrock Guardrails and Aurora, and measured
+against WRI's own targets.
+
+Thank you."
 
 
 ---------------------------------------------------------------------
@@ -260,8 +280,8 @@ IF SOMETHING GOES WRONG
   Still nothing? Open "★ Story · AI data centers and the grid" in the sidebar - the same four
   steps, finished - and carry on from the same step.
 - An error appears: open the ★ Story chat and continue.
-- Step 5 (maps) is slow or errors: open "10 · Search WRI's maps and charts" - same question,
-  already answered.
+- Step 6: if the admin page looks blank, you're in a window with an ad blocker - use the
+  Incognito window (or skip to the conclusion).
 - Don't click another chat while an answer is still appearing.
 
 
