@@ -394,13 +394,14 @@ a.aw-btn{text-decoration:none}
 /* Chats sidebar, as in Claude: the header spans the top, the sidebar sits left of the chat */
 .aw-app.with-sidebar{grid-template-columns:var(--sidebar-width) minmax(0,1fr)}
 .aw-app.with-sidebar > .aw-header{grid-column:1 / -1}
-.aw-sidebar{--sidebar-width:260px;width:var(--sidebar-width);display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:var(--border-thin) solid var(--line)}
-:root{--sidebar-width:260px}
+.aw-sidebar{--sidebar-width:300px;width:var(--sidebar-width);display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:var(--border-thin) solid var(--line)}
+:root{--sidebar-width:300px}
 .aw-sidebar-top{display:flex;gap:var(--space-200);padding:var(--space-300)}
 .aw-sidebar-new{flex:1;justify-content:flex-start}
 .aw-sidebar-list{flex:1;overflow-y:auto;padding:0 var(--space-200) var(--space-300)}
 .aw-sidebar-h{margin:var(--space-300) var(--space-200) var(--space-100);font-size:12px;line-height:16px;font-weight:600;color:var(--ink-muted)}
-.aw-sidebar-chat{display:block;width:100%;text-align:left;border:0;background:none;font:inherit;font-size:14px;line-height:20px;color:var(--ink);padding:6px var(--space-200);border-radius:var(--radius-300);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+/* Titles wrap to two lines, so a whole question or use-case name is readable. */
+.aw-sidebar-chat{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;width:100%;text-align:left;border:0;background:none;font:inherit;font-size:14px;line-height:20px;color:var(--ink);padding:6px var(--space-200);border-radius:var(--radius-300);overflow:hidden;overflow-wrap:anywhere;cursor:pointer}
 .aw-sidebar-chat:hover{background:var(--surface-sunken)}
 .aw-sidebar-chat.on{background:var(--secondary-100);color:var(--secondary-700);font-weight:600}
 .aw-sidebar-empty{padding:var(--space-200)}
