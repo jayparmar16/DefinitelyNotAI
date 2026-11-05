@@ -136,7 +136,10 @@ scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
 - **Every run:** applies `db/schema.sql` (safe to rerun), then `python -m askwri.ingest.load`:
   sort the corpus, ingest each kept PDF, upload it to `s3://$CORPUS_BUCKET/raw/<doc_id>.pdf`,
   embed its chunks with Cohere Embed v4 and replace the document's rows in `documents` and
-  `chunks` in one transaction.
+  `chunks` in one transaction. Each informative chart, map or image is rendered to a PNG,
+  described by the `vision` model, and uploaded to `s3://$CORPUS_BUCKET/figures/<chunk id>.png`
+  (`#` becomes `-`); the line for each document counts its pictures small, scanned, decorative
+  and described.
 - **Reruns** skip documents already loaded with the same file hash. A document whose audit
   fails or whose model call is refused is reported as `SKIPPED` and not written.
 - Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
@@ -198,6 +201,48 @@ output, and asks `answerer` a plain question. In code, use `call_claude` (text) 
 `call_claude_json` (structured). Both take the client as their first argument, so tests pass
 `tests/fake_claude.FakeClaude` and never touch the network. A refusal, a truncated reply or
 an API error raises `ModelError` naming the document.
+
+## Ask a question
+
+Quick answer (`askwri/answer/`) plans 1 or 2 English search queries with `labeler`,
+searches up to two rounds, drafts 2 to 6 cited sentences with `answerer`, and checks every
+sentence before it is shown. A sentence is dropped when it has no source, quotes words its
+cited passage doesn't contain (or a passage marked not quotable), states a number its
+passages don't, or fails the Bedrock Guardrails grounding check. When nothing was found, the
+evidence is weak, the passages don't answer the question, or fewer than half the claims
+survive, the answer is a decline that lists what was searched and the closest WRI work.
+
+Filters set in the request always apply. Filters read from the question ("since 2025") are
+dropped if the first search finds nothing strong enough, and the retry's progress step names
+them ("4 passages, without Since 2025").
+
+```sh
+uv run python -m askwri.answer "How fast is solar power growing?"          # search the index (#19)
+uv run python -m askwri.answer "How fast is solar power growing?" --passages passages.json
+```
+
+Each event prints as one JSON line, ending with one `answer`, `decline` or `error`.
+`--passages` takes a JSON list of search results with the C1 attribute names from issue #38
+(`chunk_id`, `doc_id`, `text`, `quotable`, `score` and the other citation fields); every
+search returns them, which is useful before #19 merges and for tuning thresholds on fixed
+evidence.
+
+The AgentCore Runtime entrypoint serves the same run as server-sent events on port 8080:
+
+```sh
+uv run python askwri/answer/app.py
+curl -N localhost:8080/invocations -d '{"action": "ask", "question": "How fast is solar power growing?", "mode": "quick", "language": "en", "audience": "researcher", "format": "summary", "filters": {}, "sessionId": "local-test-session-0123456789abcdef"}'
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `ASKWRI_DECLINE_SCORE` | `0.3` | A best rerank score below this is weak evidence: retry, then decline. |
+| `ASKWRI_GUARDRAIL_ID`, `ASKWRI_GUARDRAIL_VERSION` | unset | The guardrail for the grounding check. Unset skips the check, and the answer says `groundingCheck: "skipped"`. |
+| `ASKWRI_GROUNDING_THRESHOLD` | `0.7` | A sentence whose grounding score is below this is dropped. |
+
+The grounding check makes one `ApplyGuardrail` call on `bedrock-runtime` per sentence, at
+most 4 at a time, so the caller needs `bedrock:ApplyGuardrail` on that guardrail. Dropped
+sentences and each check's latency are logged, never shown.
 
 ## Deploy to AWS
 
@@ -266,7 +311,7 @@ It is safe to rerun.
 | VPC | `askwri-vpc` (10.20.0.0/16) | Private subnets `askwri-app-a/b` and `askwri-db-a/b`; no internet route, no NAT |
 | VPC endpoints | `askwri-vpce-*` | S3 (gateway), bedrock-runtime, bedrock-agent-runtime, secretsmanager, logs |
 | Security groups | `askwri-sg-lambda`, `askwri-sg-db`, `askwri-sg-endpoints` | Only Lambda to Aurora (5432) and Lambda to endpoints/S3 (443) |
-| Corpus bucket | `askwri-corpus-<account-id>` | `raw/` PDFs, `text/`, `eval/`; private, encrypted, TLS only; objects readable only by the deploy role and the askwri-* roles |
+| Corpus bucket | `askwri-corpus-<account-id>` | `raw/` PDFs, `figures/` PNGs, `text/`, `eval/`; private, encrypted, TLS only; objects readable only by the deploy role and the askwri-* roles |
 | Database | `askwri-db` | Aurora PostgreSQL 18 Serverless v2 with pgvector; Data API on; pauses after an hour idle (resume takes 15 s or more; set `db_min_capacity = 0.5` for demos) |
 | Secret | `askwri/db` | Master credentials, used only by the Data API. Lambdas sign in with IAM database auth as `askwri_ingest` or `askwri_tools` |
 | Tool Lambdas | `askwri-tool-search`, `-passage`, `-coverage`, `-authors`, `-translate` | In the app subnets; role `askwri-tools-role` (database as `askwri_tools`, the embedding, rerank and small models). Search is hybrid: pgvector + full text, fused, then reranked |

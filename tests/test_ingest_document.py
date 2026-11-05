@@ -33,7 +33,9 @@ def two_column_report(path: Path) -> Path:
         pymupdf.Rect(50, 440, 550, 600), (PARAGRAPH * 3).replace("Forests", "Wetlands"), fontsize=10
     )
     scanned = doc.new_page()
-    scanned.draw_rect(pymupdf.Rect(100, 100, 400, 400), color=(0, 0, 0), fill=(0.5, 0.5, 0.5))
+    scan = pymupdf.Pixmap(pymupdf.csGRAY, pymupdf.IRect(0, 0, 300, 400), False)
+    scan.set_rect(scan.irect, (128,))
+    scanned.insert_image(pymupdf.Rect(10, 10, 585, 830), pixmap=scan)
     doc.set_metadata({"title": "Restoring Degraded Land"})
     doc.save(path)
     return path
@@ -93,6 +95,7 @@ def test_chunk_ids_are_identical_across_runs(report, result):
 def test_audit_passes_and_reports_the_page_without_text_layer(result):
     assert result.audit.passed, result.audit.failures
     assert result.audit.pages_without_text == [2]
+    assert result.pictures.scanned == 1  # the scan is not described
     assert result.audit.unquotable == []
     assert all(chunk.quotable for chunk in result.chunks)
 

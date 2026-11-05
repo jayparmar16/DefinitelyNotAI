@@ -2,11 +2,20 @@
 
 import html
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pymupdf
 
+from askwri.ingest.figures import (
+    MAX_CONTEXT_CHARS,
+    Figure,
+    PictureReport,
+    claim_captions,
+    figure_number,
+    is_scan,
+    is_small,
+)
 from askwri.ingest.pages import PrintedPage, printed_pages
 from askwri.ingest.tables import (
     Region,
@@ -19,10 +28,12 @@ from askwri.ingest.tables import (
 )
 from askwri.ingest.text import comparable, missing_words, words
 
-# Layout classes that carry body text. Pictures get their own chunk kind later.
+# Layout classes that carry body text. Pictures become figure blocks (see `figure_blocks`).
 TEXT_CLASSES = {"text", "list-item", "footnote", "formula", "caption"}
 HEADING_CLASSES = {"title", "section-header"}
 RUNNING_CLASSES = {"page-header", "page-footer"}  # kept out of chunks, read for page numbers
+FIGURE_DPI = 110  # enough to read chart labels, small enough to send to the vision model
+INSIDE_SHARE = 0.8  # a text region this much inside a picture belongs to the picture
 
 
 @dataclass(frozen=True)
@@ -33,6 +44,7 @@ class Block:
     heading_level: int  # 0 for body text, 1 for "#", 2 for "##", ...
     text: str
     table: Table | None = None  # set for a table region; `text` is then the table's full text
+    figure: Figure | None = None  # set for a picture; `text` is then its caption, maybe empty
 
 
 @dataclass(frozen=True)
@@ -42,6 +54,7 @@ class ParsedPdf:
     title: str
     blocks: list[Block]
     printed_pages: list[PrintedPage]  # one per PDF page, in order
+    pictures: PictureReport  # picture counts so far: found, small, scanned
 
 
 def parse_pdf(path: Path) -> ParsedPdf:
@@ -53,16 +66,17 @@ def parse_pdf(path: Path) -> ParsedPdf:
     others, so body text equal to a header or footer seen anywhere in the document is dropped
     too (digits ignored, so a lone page number counts). A table region becomes one table block
     together with its caption and note lines (see `claim_tables`), so those never become text
-    or headings. A layout grid that is not a data table stays a text block. Pictures are
-    skipped. OCR is off: a page without a text layer yields no blocks, so every passage stays
-    checkable against the PDF's own text.
+    or headings. A layout grid that is not a data table stays a text block. Pictures become
+    figure blocks, with their caption and the text inside them (see `figure_blocks`). OCR is
+    off: a page without a text layer yields no blocks, so every passage stays checkable
+    against the PDF's own text.
     """
     with pymupdf.open(path) as doc:
         pages = doc.to_markdown(
             page_chunks=True, header=False, footer=False, use_ocr=False, show_progress=False
         )
         title = (doc.metadata or {}).get("title", "").strip()
-        blocks, region_texts = [], []
+        blocks, region_texts, pictures = [], [], PictureReport()
         for chunk in pages:
             page = doc[chunk["metadata"]["page_number"] - 1]
             page_text = page.get_text()
@@ -75,11 +89,20 @@ def parse_pdf(path: Path) -> ParsedPdf:
             )
             boxes = sorted(chunk["page_boxes"], key=lambda box: box["index"])
             markdowns = [chunk["text"][box["pos"][0] : box["pos"][1]].strip() for box in boxes]
-            claims = claim_tables(_regions(boxes, markdowns))
+            regions = _regions(boxes, markdowns)
+            claims = claim_tables(regions)
             tables = {claim.table: claim for claim in claims}
             claimed = {i for c in claims for i in (c.caption, *c.notes) if i is not None}
+            figures, in_figures, found = figure_blocks(
+                page, page_text, boxes, markdowns, regions, claimed
+            )
+            pictures += found
+            claimed |= in_figures
             for position, (box, markdown) in enumerate(zip(boxes, markdowns, strict=True)):
                 if position in claimed:
+                    continue
+                if position in figures:
+                    blocks.append(figures[position])
                     continue
                 if position in tables:
                     block = table_block(page, page_text, boxes, markdowns, tables[position])
@@ -97,7 +120,7 @@ def parse_pdf(path: Path) -> ParsedPdf:
         printed = printed_pages([page.get_label() for page in doc], region_texts)
     running = {running_key(text) for texts in region_texts for text in texts}
     blocks = [b for b in blocks if b.heading_level or running_key(b.text) not in running]
-    return ParsedPdf(title=title, blocks=blocks, printed_pages=printed)
+    return ParsedPdf(title=title, blocks=blocks, printed_pages=printed, pictures=pictures)
 
 
 def _regions(boxes: list[dict], markdowns: list[str]) -> list[Region]:
@@ -145,6 +168,71 @@ def table_block(
         grid = layer_text(page, bbox)
     text = "\n\n".join(part for part in (caption, grid, *notes) if part)
     return Block(page=page.number + 1, heading_level=0, text=text) if text else None
+
+
+def figure_blocks(
+    page: pymupdf.Page,
+    page_text: str,
+    boxes: list[dict],
+    markdowns: list[str],
+    regions: list[Region],
+    taken: set[int],
+) -> tuple[dict[int, Block], set[int], PictureReport]:
+    """The figure blocks of a page, by picture position, the regions they absorb, and the counts.
+
+    Pictures under 2% of the page (logos, icons) and scanned pages are skipped. Each other
+    picture is rendered to a PNG from its bounding box and paired with its caption (see
+    `claim_captions`; `taken` are the regions tables have claimed). The caption and the
+    text regions inside the picture (axis labels, legends) are absorbed: they never become
+    text blocks. The text inside goes to the vision model as context. If the picture is later
+    judged decorative, that text goes with it.
+    """
+    page_area = page.rect.width * page.rect.height
+    pictures = [i for i, box in enumerate(boxes) if box["class"] == "picture"]
+    report = PictureReport(found=len(pictures))
+    big = []
+    for i in pictures:
+        area = _area(boxes[i]["bbox"])
+        if is_small(area, page_area):
+            report = replace(report, small=report.small + 1)
+        elif is_scan(area, page_area, page_text):
+            report = replace(report, scanned=report.scanned + 1)
+        else:
+            big.append(i)
+    captions = claim_captions(regions, big, taken)
+    figures: dict[int, Block] = {}
+    absorbed = set(captions.values())
+    for i in big:
+        bbox = boxes[i]["bbox"]
+        caption = ""
+        if i in captions:
+            position = captions[i]
+            caption = region_text(
+                page, page_text, boxes[position]["bbox"], plain_text(markdowns[position])
+            )
+        pixmap = page.get_pixmap(clip=pymupdf.Rect(bbox), dpi=FIGURE_DPI)
+        inside = layer_text(page, bbox)[:MAX_CONTEXT_CHARS]
+        figure = Figure(png=pixmap.tobytes("png"), text=inside, number=figure_number(caption))
+        figures[i] = Block(page=page.number + 1, heading_level=0, text=caption, figure=figure)
+        absorbed |= {
+            j
+            for j, box in enumerate(boxes)
+            if box["class"] in TEXT_CLASSES | HEADING_CLASSES and _inside(box["bbox"], bbox)
+        }
+    return figures, absorbed, report
+
+
+def _area(bbox: tuple[float, float, float, float]) -> float:
+    return max(bbox[2] - bbox[0], 0) * max(bbox[3] - bbox[1], 0)
+
+
+def _inside(
+    inner: tuple[float, float, float, float], outer: tuple[float, float, float, float]
+) -> bool:
+    """Whether at least INSIDE_SHARE of the inner box lies within the outer box."""
+    overlap = _area((max(inner[0], outer[0]), max(inner[1], outer[1]),
+                     min(inner[2], outer[2]), min(inner[3], outer[3])))  # fmt: skip
+    return _area(inner) > 0 and overlap >= INSIDE_SHARE * _area(inner)
 
 
 def has_garbled_word(text: str, page_text: str) -> bool:
