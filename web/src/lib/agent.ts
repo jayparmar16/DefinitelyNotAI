@@ -12,6 +12,12 @@ export type Reader = "researcher" | "policymaker" | "partnerships";
 /** "auto": nobody picks a persona when typing, so the agent infers the reader from the question. */
 export type Audience = "auto" | Reader;
 export type ReportFormat = "summary" | "issue-brief" | "talking-points" | "dossier";
+export const REPORT_FORMAT_NAMES: Record<ReportFormat, string> = {
+  "talking-points": "Talking points",
+  "issue-brief": "Issue brief",
+  summary: "Researcher summary",
+  dossier: "Topic dossier",
+};
 
 export type Filters = {
   yearFrom?: number;

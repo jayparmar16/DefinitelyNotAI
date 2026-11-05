@@ -81,7 +81,7 @@ def record(api: str, key: str, chat: tuple) -> dict:
         events += [e for e in drawn if e.get("type") == "visuals"]
     print(f"{title}: {final['type']}", file=sys.stderr, flush=True)
     return {"title": title, "space": space, "sessionId": session, "question": question,
-            "mode": "deep" if mode == "deep" else mode, "events": events}  # fmt: skip
+            "mode": mode, "format": extra.get("format"), "events": events}  # fmt: skip
 
 
 def main() -> int:

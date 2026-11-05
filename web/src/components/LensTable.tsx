@@ -27,6 +27,7 @@ export function LensTable({ lens, activeMarker, onMarker, matrix }: LensTablePro
         {title} <span>{matrix ? `${lens.rows.length} documents` : lens.goal}</span>
       </h5>
       <MatrixTable
+        text
         label={title}
         columns={lens.aspects.map((aspect) => ({ label: aspect }))}
         rows={lens.rows.map((row) => ({

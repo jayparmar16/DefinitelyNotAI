@@ -9,13 +9,14 @@ import type { ReactNode } from "react";
 
 export type MatrixTableProps = {
   label: string;
+  text?: boolean; // cells hold sentences (lens, dossier): readable widths, scrolling sideways
   columns: { label: string; title?: string }[];
   rows: { key: string; title: string; meta: string; cells: { content: ReactNode; empty?: boolean; tick?: boolean }[] }[];
 };
 
-export function MatrixTable({ label, columns, rows }: MatrixTableProps) {
+export function MatrixTable({ label, columns, rows, text }: MatrixTableProps) {
   return (
-    <div className="aw-matrix" role="region" aria-label={label}>
+    <div className={text ? "aw-matrix text" : "aw-matrix"} role="region" aria-label={label}>
       <table>
         <thead>
           <tr>

@@ -616,3 +616,7 @@ a.aw-btn{text-decoration:none}
 .aw-map-updated{fill:var(--warning-100);stroke:var(--warning-500)}
 .aw-map-updated-t{font-size:10px;font-weight:700;fill:var(--warning-900)}
 .aw-map-update-note{display:block;margin:4px 0;padding:4px var(--space-200);border-radius:var(--radius-300);background:var(--warning-100);color:var(--warning-900);font-size:13px}
+/* Text matrices (lens, dossier): sentences need room; the table scrolls sideways instead. */
+.aw-matrix.text table{table-layout:auto}
+.aw-matrix.text th,.aw-matrix.text td{min-width:170px}
+.aw-matrix.text thead th:first-child,.aw-matrix.text tbody th{width:auto;min-width:160px}

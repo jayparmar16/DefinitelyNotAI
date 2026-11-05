@@ -112,6 +112,7 @@ export function ChatApp() {
       setSessionId(chat.sessionId);
       setLens(chat.lens ?? null);
       setSpace(chat.space ?? null);
+      restoreSettings(chat.turns);
     }
   }, []);
 
@@ -160,7 +161,7 @@ export function ChatApp() {
   async function ask(
     question: string, mode: Mode, reportFormat = format, reader: Audience = audience, reuse?: Answer, scope = space,
   ) {
-    const turn = { ...newTurn(crypto.randomUUID(), question, mode), space: scope };
+    const turn = { ...newTurn(crypto.randomUUID(), question, mode), space: scope, ...(mode === "deep" && { format: reportFormat }) };
     setTurns((all) => [...all, turn]);
     if (mode === "deep") setPanel({ turnId: turn.id, tab: "report", openDocs: [] });
     const controller = new AbortController();
@@ -265,6 +266,7 @@ export function ChatApp() {
     setTurns(chat.turns);
     setLens(chat.lens ?? null);
     setSpace(chat.space ?? null);
+    restoreSettings(chat.turns);
     setSessionId(chat.sessionId);
     setPanel(null);
     setActive(null);
@@ -285,6 +287,15 @@ export function ChatApp() {
     setSpace(null);
     writeSpace(null);
     ask(turn.question, turn.mode, format, audience, undefined, null);
+  }
+
+  /** Put the composer back to how a chat's last question was asked: tool, Deep research, report type. */
+  function restoreSettings(chatTurns: Turn[]) {
+    const last = chatTurns.at(-1);
+    if (!last) return;
+    setTool(last.mode === "factcheck" ? "factcheck" : last.mode === "explore" ? "explore" : "ask");
+    setDeep(last.mode === "deep");
+    if (last.format) setFormat(last.format);
   }
 
   function clearChats() {
@@ -575,7 +586,7 @@ async function downloadPdf(source: Source) {
             openDocs={panel.openDocs}
             activeMarker={active?.turnId === panelTurn.id ? active.marker : null}
             width={panelWidth}
-            format={format}
+            format={panelTurn.format ?? format}
             onFollowUp={followUp}
             pdfUrl={pdfUrl}
             onOpenPage={openLinkPage}

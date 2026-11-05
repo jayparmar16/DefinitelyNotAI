@@ -2,7 +2,7 @@
 
 /** A cited answer: header chips, paragraphs (or report key points) with markers, and actions. */
 
-import type { Answer, Reader } from "@/lib/agent";
+import { type Answer, type Reader, REPORT_FORMAT_NAMES } from "@/lib/agent";
 import { LANGUAGES } from "./AppHeader";
 import { AnswerSections, ReaderChip, VerifiedChip } from "./AnswerSections";
 import { Icon } from "./Icon";
@@ -40,7 +40,7 @@ export function AnswerCard(props: AnswerCardProps) {
     <div className="aw-answer">
       <div className="aw-answer-meta">
         <span className={deep ? "aw-mode-chip deep" : "aw-mode-chip"}>
-          <Icon name="layers" small /> {deep ? "Deep research" : "Quick answer"}
+          <Icon name="layers" small /> {deep ? `Deep research${turn.format ? ` · ${REPORT_FORMAT_NAMES[turn.format]}` : ""}` : "Quick answer"}
         </span>
         <VerifiedChip answer={answer} />
         <ReaderChip answer={answer} onReader={props.onReader} />
