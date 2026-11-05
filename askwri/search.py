@@ -143,7 +143,9 @@ def publication_years(question: str) -> tuple[int | None, int | None, str]:
 
     "What did WRI publish in 2024 about heat?" gives (2024, 2024, "What did WRI about heat?"):
     the years become a filter, and the phrase leaves the keyword search, where "published"
-    and "2024" would match most documents. A question without the phrase gives (None, None)
+    and "2024" would match most documents. The embedding and the reranker keep the whole
+    question: without the phrase, every 2025 candidate for an ocean energy question fell
+    below MIN_RELEVANCE. A question without the phrase gives (None, None)
     and the question unchanged.
     """
     match = PUBLISHED.search(question)
@@ -213,7 +215,7 @@ def _value(value) -> dict:
 
 
 def _rerank(client, question: str, candidates: list[dict]) -> list[dict]:
-    """Reorder candidates by Amazon Rerank 1.0 on description (else content); keep the best 6."""
+    """Reorder candidates by Amazon Rerank 1.0 (see _rerank_text); keep the best RESULTS."""
     if not candidates:
         return []
     model_arn = f"arn:aws:bedrock:{client.meta.region_name}::foundation-model/{MODELS['reranker']}"
@@ -224,7 +226,7 @@ def _rerank(client, question: str, candidates: list[dict]) -> list[dict]:
                 "type": "INLINE",
                 "inlineDocumentSource": {
                     "type": "TEXT",
-                    "textDocument": {"text": row["description"] or row["content"]},
+                    "textDocument": {"text": _rerank_text(row)},
                 },
             }
             for row in candidates
@@ -242,6 +244,16 @@ def _rerank(client, question: str, candidates: list[dict]) -> list[dict]:
         for hit in response["results"][:RESULTS]
         if hit["relevanceScore"] >= MIN_RELEVANCE
     ]
+
+
+def _rerank_text(row: dict) -> str:
+    """Title › section, then the description (else the content).
+
+    Without the title, a passage that never names its subject ("the projects", "these
+    sites") scores as unrelated: the offshore wind paper's passages never mention ocean energy.
+    """
+    address = " › ".join(part for part in (row["title"], row["section"]) if part)
+    return f"{address}\n\n{row['description'] or row['content']}"
 
 
 def _citation(row: dict) -> dict:

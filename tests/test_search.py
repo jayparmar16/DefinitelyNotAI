@@ -113,9 +113,12 @@ def test_fewer_matches_are_not_padded_and_none_is_empty(run):
     assert run([])[0] == []
 
 
-def test_rerank_uses_description_when_there_is_one(run):
+def test_rerank_reads_title_and_section_then_description_else_content(run):
     _, _, reranker = run([row("a", description="a summary"), row("b", content="b" * 500)])
-    assert reranker.texts == ["a summary", "b" * 500]
+    assert reranker.texts == [
+        "A report › Results\n\na summary",
+        "A report › Results\n\n" + "b" * 500,
+    ]
 
 
 def test_every_hit_gets_its_neighbours_in_one_statement(run):
@@ -135,7 +138,8 @@ def test_hits_below_min_relevance_are_dropped(run, monkeypatch):
 
     def rerank(self, **kwargs):
         texts = [s["inlineDocumentSource"]["textDocument"]["text"] for s in kwargs["sources"]]
-        return {"results": [{"index": i, "relevanceScore": scores[t]} for i, t in enumerate(texts)]}
+        found = [scores[t.rsplit("\n\n", 1)[1]] for t in texts]
+        return {"results": [{"index": i, "relevanceScore": f} for i, f in enumerate(found)]}
 
     monkeypatch.setattr(FakeRerank, "rerank", rerank)
     results, _, _ = run([row("a", content="answer"), row("b", content="noise")])

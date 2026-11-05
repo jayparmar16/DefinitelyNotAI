@@ -18,6 +18,10 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
       keyword text; scored as `years`.
 - [x] Keyword search matching any word of the question instead of all; scored as
       `years-anyword`.
+- [x] The reranker reads each candidate's title and section before its text; scored as
+      `titled-rerank`.
+- [x] The question without its publication phrase is embedded and reranked too; scored as
+      `titled-clean-query`.
 - [x] Each step's scores are recorded below, and only steps that raised them are kept.
 
 ## Scores (4 Nov, 14 answerable questions, 2 unanswerable)
@@ -31,6 +35,8 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
 | `cap6-more-neighbours` (+ neighbours of every hit) | 13 | 56 of 76 | 2.3 | 0.97 |
 | `years` (+ publication-year filter) | 13 | 56 of 76 | 2.3 | 0.97 |
 | `years-anyword` (+ keywords match any word) | 13 | 52 of 74 | 2.3 | 0.97 |
+| `titled-rerank` (years, all words, + title in rerank) | 13 | 73 of 95 | 2.0 | 0.87 |
+| `titled-clean-query` (+ phrase out of embedding and rerank) | 12 | 67 of 89 | 2.0 | 0.80 |
 
 Both unanswerable questions were declined in every run. Kept: a cap of 6, up to 10 results,
 neighbours on every hit and the publication-year filter. The year filter changed no score:
@@ -42,8 +48,19 @@ wind India fell from 5 helping passages to 1). One question's results differ by 
 between identical runs (the vector index scan is approximate), so a change of one passage on
 one question is noise; read the totals.
 
-Still failing: `heat-cities-2024` (nothing helps) and `ocean-energy-2025` (2 passages from one
-report; the offshore wind paper is never a candidate).
+Kept also: the title and section in the reranker's text (73 helping passages from 56;
+`heat-cities-2024` answered for the first time; `ocean-energy-2025` from 2 to 5). It ends
+`ai-for-nature`'s three answers, which were RFP passages scoring just over MIN_RELEVANCE;
+with "Request for Proposals" in view the reranker scores them about 0.02. Dropped: removing
+the publication phrase from the embedding and rerank, which left `ocean-energy-2025` with no
+result above MIN_RELEVANCE.
+
+Still failing:
+- `ai-for-nature`: *AI for Nature* (working paper) is a candidate only through its cover
+  page; none of its body passages are retrieved.
+- `ocean-energy-2025`: all 5 passages come from one report; the offshore wind paper is not
+  among the candidates (6 documents), though its card is the 5th closest of 217 2025 cards.
+  Documents-first search through the cards is the next thing to score.
 
 ## Handoff
 

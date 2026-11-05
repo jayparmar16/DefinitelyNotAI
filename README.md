@@ -195,7 +195,8 @@ scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: r
 what the answering agent calls. It embeds the question with Cohere Embed v4, runs one SQL
 statement over `chunks` through the RDS Data API (pgvector cosine search and full-text search
 fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
-on, at most 6 chunks per document), reranks the top 25 with Amazon Rerank 1.0 and returns at
+on, at most 6 chunks per document), reranks the top 25 with Amazon Rerank 1.0 (reading each
+candidate's title and section before its text) and returns at
 most 10 passages with their citation fields and rerank `score`. With no year filter given, a
 question that names its publication years ("published in 2025", "published since 2024")
 is filtered to them. Fewer matches return fewer
