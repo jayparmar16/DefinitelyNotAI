@@ -48,3 +48,11 @@ test("times read naturally", () => {
   assert.equal(whenLabel(now - 5 * 60_000, now), "5 min ago");
   assert.equal(whenLabel(now - 3 * 3600_000, now), "3 h ago");
 });
+
+
+test("a chat remembers the space it was asked in", () => {
+  const turn = { id: "t", question: "Ocean finance?", mode: "quick", status: "done", startedAt: 1, steps: [], found: [] } as unknown as Parameters<typeof upsertChat>[2][number];
+  const [chat] = upsertChat([], "s1", [turn], 10, null, "Ocean");
+  assert.equal(chat.space, "Ocean");
+  assert.equal(upsertChat([], "s2", [turn], 10)[0].space, null);
+});

@@ -14,6 +14,10 @@ export NEXT_PUBLIC_ASKWRI_AUTH_DOMAIN=$(output login_domain)
 export NEXT_PUBLIC_ASKWRI_AUTH_CLIENT_ID=$(output user_pool_client_id)
 unset NEXT_PUBLIC_ASKWRI_API_KEY
 
+# The topic spaces' publication counts, read by the sidebar (web/public is copied into the build).
+mkdir -p web/public
+uv run python -m askwri.spaces > web/public/spaces.json
+
 (cd web && npm ci --silent && npm run build)
 
 # Hashed assets never change; pages must be re-fetched after every deploy.

@@ -27,16 +27,24 @@ type DeclineCardProps = {
   decline: Decline;
   onRephrase: () => void;
   onCopySearched: () => void;
+  space?: string | null; // asked inside a topic space: offer the whole collection
+  onSearchAll?: () => void;
 };
 
 /** Never shown next to a generated answer: a decline replaces the answer entirely. */
-export function DeclineCard({ decline, onRephrase, onCopySearched }: DeclineCardProps) {
+export function DeclineCard({ decline, onRephrase, onCopySearched, space, onSearchAll }: DeclineCardProps) {
   return (
     <div className="aw-decline">
       <div className="aw-decline-h">
         <Icon name="info" /> I couldn&apos;t find WRI evidence that answers this
       </div>
       <p style={{ margin: 0 }}>{decline.message}</p>
+      {space && onSearchAll && (
+        <p style={{ margin: 0 }}>
+          This searched the <b>{space}</b> space only.{" "}
+          <button className="aw-btn sm brand" onClick={onSearchAll}>Search all of WRI instead</button>
+        </p>
+      )}
       <div>
         <div className="aw-meta" style={{ marginBottom: 8 }}>Searched</div>
         <div className="aw-searched">

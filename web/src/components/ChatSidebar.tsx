@@ -1,12 +1,16 @@
 "use client";
 
-/** The left sidebar of chats, as in Claude: New chat, then this browser's recent chats by day. */
+/** The left sidebar: New chat, the topic spaces, then the current space's recent chats by day. */
 
 import { type SavedChat, whenLabel } from "@/lib/chats";
+import type { Spaces } from "@/lib/spaces";
 import { Icon } from "./Icon";
 
 type ChatSidebarProps = {
   chats: SavedChat[];
+  spaces: Spaces;
+  space: string | null; // the open space; null: all of WRI
+  onSpace: (space: string | null) => void;
   current: string;
   onOpen: (chat: SavedChat) => void;
   onNew: () => void;
@@ -18,11 +22,28 @@ function isToday(time: number): boolean {
   return new Date(time).toDateString() === new Date().toDateString();
 }
 
+function count(documents: number | null): string {
+  return documents === null ? "" : String(documents);
+}
+
 export function ChatSidebar(props: ChatSidebarProps) {
+  const inSpace = props.chats.filter((chat) => (chat.space ?? null) === props.space);
   const groups = [
-    { name: "Today", chats: props.chats.filter((chat) => isToday(chat.updatedAt)) },
-    { name: "Earlier", chats: props.chats.filter((chat) => !isToday(chat.updatedAt)) },
+    { name: "Today", chats: inSpace.filter((chat) => isToday(chat.updatedAt)) },
+    { name: "Earlier", chats: inSpace.filter((chat) => !isToday(chat.updatedAt)) },
   ].filter((group) => group.chats.length);
+  const spaceButton = (name: string | null, label: string, documents: number | null) => (
+    <button
+      key={label}
+      className={props.space === name ? "aw-space on" : "aw-space"}
+      aria-current={props.space === name ? "true" : undefined}
+      onClick={() => props.onSpace(name)}
+      title={documents === null ? label : `${label}: ${documents} publications`}
+    >
+      <span>{label}</span>
+      <span className="aw-space-n">{count(documents)}</span>
+    </button>
+  );
 
   return (
     <nav className="aw-sidebar" aria-label="Chats">
@@ -36,7 +57,16 @@ export function ChatSidebar(props: ChatSidebarProps) {
       </div>
 
       <div className="aw-sidebar-list">
-        {groups.length === 0 && <p className="aw-meta aw-sidebar-empty">Your chats will appear here.</p>}
+        <section className="aw-spaces" aria-label="Spaces">
+          <h2 className="aw-sidebar-h">Spaces</h2>
+          {spaceButton(null, "All of WRI", props.spaces.total)}
+          {props.spaces.spaces.map((space) => spaceButton(space.name, space.name, space.documents))}
+        </section>
+        {groups.length === 0 && (
+          <p className="aw-meta aw-sidebar-empty">
+            {props.space ? `Your ${props.space} chats will appear here.` : "Your chats will appear here."}
+          </p>
+        )}
         {groups.map((group) => (
           <section key={group.name}>
             <h2 className="aw-sidebar-h">{group.name}</h2>

@@ -46,5 +46,6 @@ infra/backend.hcl
 
 # Web app build output
 web/out/
+web/public/spaces.json
 *.tsbuildinfo
 eval/results/

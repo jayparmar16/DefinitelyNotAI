@@ -20,8 +20,7 @@ const PUB_TYPES = [
   "Expert note",
 ];
 
-// The ingestion pipeline's fixed lists (askwri/ingest/model_labels.py, askwri/ingest/vocabulary.py).
-const TOPICS = ["Business", "Cities", "Climate", "Economics", "Energy", "Equity", "Finance", "Food", "Forests", "Freshwater", "Ocean"];
+// The ingestion pipeline's regions (askwri/ingest/vocabulary.py); topics are spaces, in the sidebar.
 const REGIONS = [
   "Global", "Africa", "Sub-Saharan Africa", "Middle East and North Africa", "Asia", "East Asia",
   "South Asia", "Southeast Asia", "Central Asia", "Europe", "Latin America and the Caribbean",
@@ -63,7 +62,7 @@ type ComposerProps = {
 
 function filtersLabel(filters: Filters): string {
   const year = filters.yearFrom ? `${filters.yearFrom} on` : "any year";
-  const narrower = [filters.topic, filters.region].filter(Boolean).map((part) => ` · ${part}`).join("");
+  const narrower = [filters.region].filter(Boolean).map((part) => ` · ${part}`).join("");
   return `Filters: ${year} · ${filters.pubType ?? "any type"}${narrower}`;
 }
 
@@ -204,20 +203,6 @@ export function Composer(props: ComposerProps) {
                     <option value="">Any type</option>
                     {PUB_TYPES.map((type) => (
                       <option key={type}>{type}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="row">
-                  Topic
-                  <select
-                    value={props.filters.topic ?? ""}
-                    onChange={(event) =>
-                      props.onFilters({ ...props.filters, topic: event.target.value || undefined })
-                    }
-                  >
-                    <option value="">Any topic</option>
-                    {TOPICS.map((topic) => (
-                      <option key={topic}>{topic}</option>
                     ))}
                   </select>
                 </label>

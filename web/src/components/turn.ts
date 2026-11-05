@@ -5,6 +5,7 @@ import type { AgentEvent, Answer, Decline, FactCheck, Mode, Source, StepStatus, 
 export type Step = { id: string; label: string; detail?: string; status: StepStatus };
 
 export type Turn = {
+  space?: string | null; // the topic space it was asked in (null or absent: all of WRI)
   id: string;
   question: string;
   mode: Mode;

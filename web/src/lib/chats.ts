@@ -7,7 +7,8 @@
 import type { Turn } from "../components/turn.ts";
 import type { Lens } from "./agent.ts";
 
-export type SavedChat = { sessionId: string; title: string; updatedAt: number; turns: Turn[]; lens?: Lens | null };
+// `space`: the topic space the chat was asked in (absent or null: all of WRI).
+export type SavedChat = { sessionId: string; title: string; updatedAt: number; turns: Turn[]; lens?: Lens | null; space?: string | null };
 
 const CHATS_KEY = "askwri.chats.v1";
 const CURRENT_KEY = "askwri.current";
@@ -20,16 +21,17 @@ const MAX_CHATS = 10;
  */
 export function upsertChat(
   chats: SavedChat[], sessionId: string, turns: Turn[], now: number, lens: Lens | null = null,
+  space: string | null = null,
 ): SavedChat[] {
   const finished = turns.filter((turn) => turn.status !== "running");
   if (!finished.length) return chats;
   const title = finished[0].question.slice(0, 80);
   const index = chats.findIndex((c) => c.sessionId === sessionId);
   if (index >= 0 && chats[index].turns.length >= finished.length) {
-    const updated = { ...chats[index], title, turns: finished, lens };
+    const updated = { ...chats[index], title, turns: finished, lens, space };
     return chats.map((c, i) => (i === index ? updated : c));
   }
-  const chat = { sessionId, title, updatedAt: now, turns: finished, lens };
+  const chat = { sessionId, title, updatedAt: now, turns: finished, lens, space };
   return [chat, ...chats.filter((c) => c.sessionId !== sessionId)].slice(0, MAX_CHATS);
 }
 

@@ -9,6 +9,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { type Answer, type Audience, type Filters, type FlowLink, type Lens, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
 import { type SavedChat, readChats, upsertChat, writeChats } from "@/lib/chats";
+import { FALLBACK, type Spaces, loadSpaces, readSpace, scoped, writeSpace } from "@/lib/spaces";
 import { unmatchedMarkers } from "@/lib/citations";
 import { answerMarkdown, formatCitation, saveFile, sourcesBibtex, sourcesCsv } from "@/lib/exports";
 import { factCheckMarkdown } from "@/lib/factcheck";
@@ -57,6 +58,9 @@ export function ChatApp() {
   const [audience, setAudience] = useState<Audience>("auto");
   const [format, setFormat] = useState<ReportFormat>("talking-points");
   const [filters, setFilters] = useState<Filters>({});
+  // The topic space every question is asked in (null: all of WRI); see lib/spaces.ts.
+  const [space, setSpace] = useState<string | null>(null);
+  const [spaces, setSpaces] = useState<Spaces>(FALLBACK);
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [panel, setPanel] = useState<Panel>(null);
   const [panelWidth, setPanelWidth] = useState(480);
@@ -79,6 +83,8 @@ export function ChatApp() {
   useEffect(() => {
     const { chats, current } = readChats();
     setRecent(chats);
+    setSpace(readSpace());
+    loadSpaces().then(setSpaces);
     // Open on wide screens; on narrow ones it covers the chat, so it starts closed.
     setSidebarOpen(window.matchMedia("(min-width: 1001px)").matches);
     const chat = chats.find((c) => c.sessionId === current);
@@ -86,16 +92,17 @@ export function ChatApp() {
       setTurns(chat.turns);
       setSessionId(chat.sessionId);
       setLens(chat.lens ?? null);
+      setSpace(chat.space ?? null);
     }
   }, []);
 
   // Save the chat whenever a turn finishes.
   useEffect(() => {
     if (!turns.length || turns.some((turn) => turn.status === "running")) return;
-    const chats = upsertChat(readChats().chats, sessionId, turns, Date.now(), lens);
+    const chats = upsertChat(readChats().chats, sessionId, turns, Date.now(), lens, space);
     writeChats(chats, sessionId);
     setRecent(chats);
-  }, [turns, sessionId, lens]);
+  }, [turns, sessionId, lens, space]);
 
   // Start this conversation's agent at the first keystroke: a new session's runtime takes 6-9 s
   // to start, and that time passes while the user is still typing.
@@ -131,8 +138,10 @@ export function ChatApp() {
 
   /** Ask the agent. With `reuse` (an answer already shown), it redrafts from that answer's
    * sources in the new format or for the new reader, without searching again. */
-  async function ask(question: string, mode: Mode, reportFormat = format, reader: Audience = audience, reuse?: Answer) {
-    const turn = newTurn(crypto.randomUUID(), question, mode);
+  async function ask(
+    question: string, mode: Mode, reportFormat = format, reader: Audience = audience, reuse?: Answer, scope = space,
+  ) {
+    const turn = { ...newTurn(crypto.randomUUID(), question, mode), space: scope };
     setTurns((all) => [...all, turn]);
     if (mode === "deep") setPanel({ turnId: turn.id, tab: "report", openDocs: [] });
     const controller = new AbortController();
@@ -143,7 +152,7 @@ export function ChatApp() {
       // with it (the runtime answers the second call with an error), so it waits.
       await warming.current;
       const request = {
-        question, mode, language, audience: reader, format: reportFormat, filters, sessionId,
+        question, mode, language, audience: reader, format: reportFormat, filters: scoped(filters, scope), sessionId,
         deep: mode === "factcheck" && deep,
         lens: mode === "quick" || mode === "deep" ? lens : null,
         ...(reuse && { reuse: true, answer: { paragraphs: reuse.paragraphs, sources: reuse.sources } }),
@@ -186,7 +195,7 @@ export function ChatApp() {
     try {
       const agent = await getAgent();
       const request = {
-        question: turn.question, mode: "visuals" as const, language, audience, format, filters, sessionId,
+        question: turn.question, mode: "visuals" as const, language, audience, format, filters: scoped(filters, space), sessionId,
         answer: { paragraphs: turn.answer.paragraphs, sources: turn.answer.sources },
       };
       for await (const event of agent.ask(request, new AbortController().signal)) {
@@ -236,11 +245,27 @@ export function ChatApp() {
     abort.current?.abort();
     setTurns(chat.turns);
     setLens(chat.lens ?? null);
+    setSpace(chat.space ?? null);
     setSessionId(chat.sessionId);
     setPanel(null);
     setActive(null);
     warming.current = null;
     writeChats(readChats().chats, chat.sessionId);
+  }
+
+  /** Open a space: a new chat, scoped to its topic (null: all of WRI). */
+  function openSpace(next: string | null) {
+    closeSidebarIfNarrow();
+    newChat();
+    setSpace(next);
+    writeSpace(next);
+  }
+
+  /** A question a space had nothing for, asked again across all of WRI in the same chat. */
+  function askEverywhere(turn: Turn) {
+    setSpace(null);
+    writeSpace(null);
+    ask(turn.question, turn.mode, format, audience, undefined, null);
   }
 
   function clearChats() {
@@ -326,6 +351,9 @@ async function downloadPdf(source: Source) {
       {sidebarOpen && (
         <ChatSidebar
           chats={recent}
+          spaces={spaces}
+          space={space}
+          onSpace={openSpace}
           current={sessionId}
           onOpen={openChat}
           onNew={() => {
@@ -341,6 +369,8 @@ async function downloadPdf(source: Source) {
           <div className="aw-scroll" ref={scroller}>
             {turns.length === 0 ? (
               <Welcome
+                space={space}
+                documents={space ? spaces.spaces.find((s) => s.name === space)?.documents ?? null : spaces.total}
                 onPick={(question, needsDeep) => {
                   setDraft(question);
                   setDeep(needsDeep);
@@ -479,6 +509,8 @@ async function downloadPdf(source: Source) {
                             input.current?.focus();
                           }}
                           onCopySearched={() => copy(turn.decline!.searched.join("\n"), "Search terms")}
+                          space={turn.space ?? null}
+                          onSearchAll={() => askEverywhere(turn)}
                         />
                       )}
                       {turn.status === "failed" && (
@@ -493,6 +525,12 @@ async function downloadPdf(source: Source) {
               </div>
             )}
           </div>
+          {space && (
+            <div className="aw-space-chip">
+              Searching the <b>{space}</b> space only
+              <button type="button" className="aw-btn sm ghost link" onClick={() => openSpace(null)}>Search all of WRI</button>
+            </div>
+          )}
           <Composer
             inputRef={input}
             draft={draft}
