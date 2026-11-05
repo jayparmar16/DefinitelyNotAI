@@ -1,5 +1,5 @@
-ASKWRI - FINAL DEMO (about 3 minutes 20 seconds)
-=================================================
+ASKWRI - FINAL DEMO (3 minutes)
+================================
 One live question; everything else opens instantly from the sidebar.
 Read the narration as it is. [Square brackets] only tell you what is on screen.
 
@@ -17,104 +17,87 @@ How are AI data centers affecting electricity demand and clean energy in the US?
 >>>
 
 
-0:00  THE PROBLEM AND THE SCREEN                                   (20 s)
-[Empty new chat. The headline is cycling "Ask 580 WRI publications..."]
-WRI has published hundreds of reports. People who rely on them - researchers, policymakers,
-partners - need the right finding, fast, and they need to trust it. This is AskWRI. It answers
-only from WRI's own research: 580 publications, organised into WRI's topics on the left. You
-can ask, fact-check a draft, or explore a topic - in English, Spanish, Portuguese or Bahasa.
+0:00  THE PROBLEM                                                  (15 s)
+[Empty new chat. The headline cycles "Ask 580 WRI publications..."]
+WRI has published hundreds of reports. Researchers, policymakers and partners need the right
+finding fast, and they need to trust it. This is AskWRI. It answers only from WRI's own
+research: 580 publications, organised by topic on the left, in four languages.
 
 
-0:20  LIVE: A QUESTION EVERYONE IS ASKING                          (40 s)
-[Paste the live question. Steps appear while it works - about 20 seconds.]
-Everyone is talking about AI using huge amounts of electricity. So let's ask what WRI's
-research actually says. You can watch it work: it chooses what to search, searches WRI's
-library, finds the reports, writes an answer - and then checks every sentence against the page
-it came from. That checking is why it takes a few seconds: it won't show anything it can't back
-up.
-[Answer appears: summary, "8 of 8 claims verified", "Written for: Researcher", the time.]
-About twenty seconds. A short summary first: data centers and AI are driving the first real
-growth in US electricity demand in decades. Eight of eight claims verified - every sentence was
-checked twice, and anything unsupported would have been removed. It decided on its own that a
-researcher is asking. And it's not "trust me":
-[Click a citation number - the WRI report opens at the page, highlighted.]
-one click, and I'm on the exact page of the WRI report.
+0:15  LIVE QUESTION, AND HOW WE SOLVE IT                           (45 s)
+[Paste the live question. It takes about 20 seconds. Talk over the wait.]
+Let's ask what WRI's research says about AI and electricity. While it works, here's how we solve
+the problem.
+- One library. We loaded all 580 reports into one searchable library, every page, table, chart
+  and map read and described.
+- An agent that researches. An agent on Amazon Bedrock AgentCore plans the search, searches that
+  library, and writes only from what it finds.
+- Every sentence checked. Each sentence is checked against its page, by our own check and by
+  Bedrock Guardrails. Anything unsupported is removed, and if WRI hasn't covered it, it says so.
+[Answer appears: "8 of 8 claims verified", "Written for: Researcher". Click a citation number.]
+Twenty seconds. Eight of eight claims verified, written for a researcher, a choice it made on
+its own. One click, and I'm on the exact page of the WRI report.
 
 
 1:00  THE SAME RESEARCH AS A POLICY BRIEF                          (25 s)
-[Sidebar: "★ Story · AI data centers and the grid" - scroll to the second answer.]
-I continued this research earlier with Deep research and asked for an issue brief. Eighteen
-seconds, seven of seven claims verified - and this time it chose to write for a policymaker:
-the problem, the evidence, the options. Grid planners have nearly doubled their demand
-forecasts. In one market, data centers added 9.4 billion dollars to capacity costs. Only about
-half of the new demand may be met by renewables. And it tells you where WRI's reports
-disagree, and what the evidence can't tell you.
+[Sidebar: "★ Story · AI data centers and the grid". Scroll to the second answer, then open
+Visuals.]
+Earlier I continued with Deep research and asked for an issue brief. This time it wrote for a
+policymaker: grid planners nearly doubled their forecasts, and in one market data centers added
+9.4 billion dollars to capacity costs. It even says where WRI's reports disagree. Under Visuals:
+the key figures quoted word for word, and a map of which reports build on which.
 
 
-1:25  HOW THE RESEARCH CONNECTS                                    (15 s)
-[Click "Visuals" under the brief, then "Expand" on the citation map.]
-The key figures, quoted word for word. And a map of how WRI's work connects - which report
-builds on, or uses the data of, which - with the citing sentence one click away.
-
-
-1:40  FACT-CHECK BEFORE IT GOES OUT                                (20 s)
+1:25  FACT-CHECK BEFORE IT GOES OUT                                (15 s)
 [Scroll to the last answer in the ★ Story chat: the fact-check.]
-Then I pasted a colleague's draft. In eight seconds it found the mistakes: 94 billion should be
-9.4 - a misplaced decimal - and two claims WRI never made. The one true claim is confirmed with
-its source. Nothing goes out in WRI's name that WRI didn't say.
+Then a colleague's draft. In eight seconds it caught 94 billion that should be 9.4, and two
+claims WRI never made. Nothing goes out in WRI's name that WRI didn't say.
 
 
-2:00  NARROW THE SEARCH: REGION, YEAR, TOPIC                       (15 s)
-[Sidebar: "11 · Narrow by region: Sub-Saharan Africa". The label "Sub-Saharan Africa" shows
- above the box.]
-Researchers can narrow any question. Here I set the region to Sub-Saharan Africa: every source
-is about African cities. The same Options menu filters by year and type of publication, and a
-topic space - like Ocean on the left - keeps every answer inside one WRI topic.
+1:40  NARROW THE SEARCH: REGION, YEAR, TOPIC                       (15 s)
+[Sidebar: "11 · Narrow by region: Sub-Saharan Africa".]
+Any question can be narrowed. Here the region is Sub-Saharan Africa, and every source is about
+African cities. The same Options menu filters by year and type of publication, and a topic space
+keeps answers inside one WRI topic.
 
 
-2:15  SEARCH INSIDE MAPS AND CHARTS                                (15 s)
-[Sidebar: "10 · Search WRI's maps and charts". Click the citation in the first sentence.]
-WRI's reports are full of maps and charts. Every one was read and described when we loaded the
-reports - so AskWRI can find what a map shows. This is Figure 7 itself: 51 of 161 Midwest
-ethanol refineries sit in areas of high water stress.
+1:55  SEARCH INSIDE MAPS AND CHARTS                                (15 s)
+[Sidebar: "10 · Search WRI's maps and charts". Click the first citation.]
+Every chart and map was read when we loaded the reports, so AskWRI can find what a map shows:
+Figure 7, 51 of 161 Midwest ethanol refineries in high water stress. And it answers in Spanish,
+Portuguese and Bahasa too.
 
 
-2:30  OTHER LANGUAGES                                              (10 s)
-[Sidebar: "6 · Ask in Spanish, cite in the original".]
-Asked in Spanish, answered in Spanish - seven of seven verified, every number checked to survive
-translation, and the sources stay in the original so the citation is still exact.
+2:10  HOW WE KNOW IT WORKS: THE ADMIN PAGE                         (30 s)
+[Tab 2: the admin page, Quality scorecard.]
+This is how we prove it. Every release is tested on 30 questions from WRI's reports, each with
+the page the answer must come from, plus questions WRI can't answer, to catch guessing. The
+right report is in the top five 92 percent of the time, and every out-of-scope question is
+declined.
+[Scroll to "Model-graded quality".]
+And we don't grade our own work. AgentCore Evaluations uses LLM-as-a-judge: independent models
+score correctness, faithfulness and relevance, on every release and on live questions. About
+five cents an answer.
 
 
-2:40  HOW WE KNOW IT WORKS                                         (20 s)
-[Second tab: the admin page - Quality scorecard, then Model-graded quality.]
-For WRI's team, every release is tested against WRI's own targets: every figure cited, the
-right report in the top five 92 percent of the time, and every question outside WRI's research
-correctly declined. Amazon's AgentCore judges grade every answer, and the cost - about five
-cents an answer - is tracked here.
-
-
-3:00  CONCLUSION                                                   (20 s)
-WRI asked us to solve one problem: its research is spread across hundreds of reports, and people
-need the right finding - fast, from the right page, and without anyone inventing what WRI said.
-We solved it with AskWRI: it answers only from WRI's research, verifies every claim and cites
-the exact page, writes for whoever is asking, says when the evidence isn't there, fact-checks
-drafts, and even searches inside WRI's maps and charts - built on Amazon Bedrock AgentCore,
-Bedrock Guardrails and Aurora, and measured against WRI's own targets. Thank you.
+2:40  CONCLUSION                                                   (15 s)
+WRI needed people to find the right finding, fast, from the right page, with nothing invented.
+AskWRI does that: only WRI's research, every claim verified and cited, built on Amazon Bedrock
+AgentCore, Guardrails and Aurora, and judged against WRI's own targets. Thank you.
 
 
 ---------------------------------------------------------------------
 WHAT THIS COVERS (all differentiators, in order)
-   Answers only from WRI's research ............ 0:00
-   Every claim verified, cited to the page ..... 0:20
-   Written for whoever is asking ............... 0:20 (researcher), 1:00 (policymaker)
-   Honest about disagreement and limits ........ 1:00
-   How the research connects ................... 1:25
-   Fact-checks drafts .......................... 1:40
-   Filters: region, year, type; topic spaces ... 2:00
-   Searches inside maps and charts ............. 2:15
-   Multilingual with exact citations ........... 2:30
-   Measured against WRI's targets; cost ........ 2:40
-   Built on AWS ................................ 3:00
+   The problem; answers only from WRI .......... 0:00
+   How we solve it ............................. 0:15
+   Every claim verified, cited to the page ..... 0:15
+   Writes for whoever is asking ................ 0:15 · 1:00
+   Honest about disagreement; citation map ..... 1:00
+   Fact-checks drafts .......................... 1:25
+   Region, year, type, topic spaces ............ 1:40
+   Searches maps and charts; languages ......... 1:55
+   Admin: test set, LLM-as-a-judge, cost ....... 2:10
+   Built on AWS ................................ 2:40
 
 IF THE LIVE QUESTION IS SLOW
    Keep talking ("it's checking every claim before it shows anything"). Past 30 seconds, open
