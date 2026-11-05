@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { CitationFlow, Timeline } from "./agent.ts";
+import type { CitationFlow, Flow, FlowLink, Timeline } from "./agent.ts";
 import { CARD_H, CARD_W, citationMap, mapEdges, roundedPath, titleLines, beyondPoints, linksCsv } from "./citationMap.ts";
 
 const point = (docId: string, year: number | null, citedInAnswer = true) => ({ docId, title: docId, year, pubType: null, citedInAnswer, citedBy: 0 });
-const link = (docId: string) => ({ docId, title: docId, year: null, relation: "extends" as const, aspect: "", sentence: "s", page: 3, pdfKey: null, confidence: 0.5 });
-const cites = (docId: string, year: number | null, cited: string[]) => ({
+const link = (docId: string): FlowLink => ({ docId, title: docId, year: null, relation: "extends", aspect: "", sentence: "s", page: 3, pdfKey: null, confidence: 0.5 });
+const cites = (docId: string, year: number | null, cited: string[]): Flow => ({
   focus: { docId, title: docId, year, markers: [] }, cites: cited.map(link), moreCites: 0, citedBy: [], moreCitedBy: 0, mainPoint: null,
 });
-const flowOf = (flows: Record<string, ReturnType<typeof cites>>): CitationFlow => ({ focusOptions: [], defaultFocus: "", caption: "", flows });
+const flowOf = (flows: Record<string, Flow>): CitationFlow => ({ focusOptions: [], defaultFocus: "", caption: "", flows });
 
 /** The corners an SVG path passes through (its M and L points). */
 const corners = (d: string) => [...d.matchAll(/[ML]([\d.-]+),([\d.-]+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
