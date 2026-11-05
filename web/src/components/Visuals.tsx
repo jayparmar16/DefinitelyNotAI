@@ -139,7 +139,13 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
     <div className="aw-map">
       {map.nodes.length > 0 && (
         <div className="aw-map-scroll">
-          <svg viewBox={`0 0 ${map.width} ${map.height}`} style={full ? { width: map.width * 1.25, maxWidth: "none" } : { maxWidth: map.width * 1.25 }} role="img" aria-label="Citation tree of the reports">
+          <svg viewBox={`0 0 ${map.width} ${map.height}`} style={
+              full
+                ? { width: map.width * 1.25, maxWidth: "none" }
+                : // Never stretched past 1.25x (a one-report map filled the panel), and a wide
+                  // map scrolls rather than shrinking its text below legibility.
+                  { minWidth: Math.min(map.width, 560), maxWidth: map.width * 1.25 }
+            } role="img" aria-label="Citation tree of the reports">
             <defs>
               {(Object.keys(RELATION_COLORS) as Relation[]).map((relation) => (
                 <marker key={relation} id={`arrow-${relation}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">

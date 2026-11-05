@@ -467,7 +467,7 @@ a.aw-btn{text-decoration:none}
 /* Citation map: years down the side, report cards, arrows coloured by relation */
 :root{--rel-updates:#6a3fbf;--rel-uses:#0e8a78;--rel-extends:#3855a3;--rel-contrasts:#c11101;--rel-supports:#00664d;--rel-mentions:#8a8f9c}
 .aw-map-scroll{overflow-x:auto;border:var(--border-thin) solid var(--line);border-radius:var(--radius-500);background:var(--surface);padding:var(--space-200)}
-.aw-map svg{width:100%;min-width:560px;height:auto;display:block;margin:0 auto}
+.aw-map svg{width:100%;height:auto;display:block;margin:0 auto}
 .aw-map-band{fill:var(--surface-sunken);opacity:.6}
 .aw-map-year-chip{fill:var(--surface);stroke:var(--line)}
 .aw-map-year{font-size:12px;font-weight:700;fill:var(--ink-muted);font-family:var(--font-sans)}
