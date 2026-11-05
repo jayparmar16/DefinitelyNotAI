@@ -220,7 +220,13 @@ class FakeMemory:
 
 
 SUMMARY = {"summary": [{"text": "In short, roofs cool cities.", "passages": ["P1"]}]}
-DRAFT_EXTRAS = {"implications": [], "limits": [], "questions": [], "question_language": "en"}
+DRAFT_EXTRAS = {
+    "implications": [],
+    "limits": [],
+    "questions": [],
+    "question_language": "en",
+    **SUMMARY,
+}
 PROMPTS = []
 
 
@@ -1321,40 +1327,32 @@ def test_the_drafter_is_told_to_decline_false_premises(monkeypatch):
 
 
 def test_an_answer_opens_with_a_verified_summary_citing_its_sources(monkeypatch):
-    events, memory = run(monkeypatch, relevance=0.3)
+    # Claims 0 and 1 are the answer's, claim 2 the summary's: all three share one check.
+    events, memory = run(monkeypatch, relevance=0.3, supported=(0, 2))
     answer = events[-1]["answer"]
     assert answer["summary"] == ["In short, roofs cool cities [1]."]
     assert answer["sources"][0]["marker"] == 1  # the summary's marker is in the sources list
     assert memory.saved[0][2]["summary"] == answer["summary"]
-    prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "summary")
+    # Written by the draft call itself: no second model call for it.
+    prompt = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "draft")
     assert "synthesises what these WRI publications" in prompt
+    assert not any(step == "summary" for step, _ in PROMPTS)
 
 
 def test_summary_sentences_that_fail_verification_or_cite_nothing_real_are_dropped(monkeypatch):
-    fake_models(monkeypatch, DRAFT, {0})
-    fake = llm.ask_json
-    checks = []
-
-    def ask_json(client, size, *, step, **kwargs):
-        if step == "summary":
-            return {
-                "summary": [
-                    {"text": "Invented source.", "passages": ["P9"]},
-                    {"text": "Fails its check.", "passages": ["P1"]},
-                ]
-            }
-        if step == "verify":
-            checks.append(kwargs["prompt"])
-            if len(checks) == 2:  # the summary's check: nothing holds
-                return {"verdicts": [{"index": 0, "supported": False}]}
-        return fake(client, size, step=step, **kwargs)
-
-    monkeypatch.setattr(llm, "ask_json", ask_json)
+    summary = [
+        {"text": "Invented source.", "passages": ["P9"]},
+        {"text": "Fails its check.", "passages": ["P1"]},
+    ]
+    # Claims 0 and 1 are the answer's; claim 2 is the summary's, and it fails.
+    fake_models(monkeypatch, {**DRAFT, "summary": summary}, {0})
     agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
     answer = list(agent.run({"question": "How do cities cool down?"}))[-1]["answer"]
     assert answer["summary"] == []
-    assert "Invented source" not in checks[1]  # dropped before it was even checked
+    check = next(kwargs["prompt"] for step, kwargs in PROMPTS if step == "verify")
+    assert "Invented source" not in check and "Fails its check" in check
     assert answer["paragraphs"]  # the answer itself still shows
+    assert answer["claimsTotal"] == 2  # summary sentences are not counted as the answer's claims
 
 
 def test_explore_opens_with_a_summary_too(monkeypatch):
@@ -1369,7 +1367,7 @@ def test_explore_opens_with_a_summary_too(monkeypatch):
 
 
 def test_a_translated_answer_translates_its_summary(monkeypatch):
-    fake_models(monkeypatch, DRAFT, {0})
+    fake_models(monkeypatch, DRAFT, {0, 2})
     agent = Agent(
         Deps(llm=None, gateway=TranslatingGateway(0.3), memory=None, bedrock=None), SETTINGS
     )
@@ -1378,22 +1376,11 @@ def test_a_translated_answer_translates_its_summary(monkeypatch):
 
 
 def test_each_summary_sentence_is_grounded_against_its_own_passages(monkeypatch):
-    fake_models(monkeypatch, ONE_CLAIM, {0})
-    fake = llm.ask_json
-
-    def ask_json(client, size, *, step, **kwargs):
-        if step == "summary":
-            return {
-                "summary": [
-                    {"text": "Roofs cool cities.", "passages": ["P1"]},
-                    {"text": "They also cured all diseases.", "passages": ["P1"]},
-                ]
-            }
-        if step == "verify":
-            return {"verdicts": [{"index": i, "supported": True} for i in range(10)]}
-        return fake(client, size, step=step, **kwargs)
-
-    monkeypatch.setattr(llm, "ask_json", ask_json)
+    summary = [
+        {"text": "Roofs cool cities.", "passages": ["P1"]},
+        {"text": "They also cured all diseases.", "passages": ["P1"]},
+    ]
+    fake_models(monkeypatch, {**ONE_CLAIM, "summary": summary}, set(range(10)))
     settings = Settings(0.1, 2, 3, guardrail_id="g", guardrail_version="1")
     agent = Agent(
         Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=FakeGuardrail()), settings
@@ -1404,16 +1391,8 @@ def test_each_summary_sentence_is_grounded_against_its_own_passages(monkeypatch)
 
 
 def test_passage_labels_written_into_a_summary_never_reach_the_reader(monkeypatch):
-    fake_models(monkeypatch, ONE_CLAIM, {0})
-    fake = llm.ask_json
-
-    def ask_json(client, size, *, step, **kwargs):
-        if step == "summary":
-            text = "Roofs cool cities [P1] and parks help (P1, P1)."
-            return {"summary": [{"text": text, "passages": ["P1"]}]}
-        return fake(client, size, step=step, **kwargs)
-
-    monkeypatch.setattr(llm, "ask_json", ask_json)
+    text = "Roofs cool cities [P1] and parks help (P1, P1)."
+    fake_models(monkeypatch, {**ONE_CLAIM, "summary": [{"text": text, "passages": ["P1"]}]}, {0, 1})
     agent = Agent(Deps(llm=None, gateway=FakeGateway(0.3), memory=None, bedrock=None), SETTINGS)
     answer = list(agent.run({"question": "How do cities cool down?"}))[-1]["answer"]
     assert answer["summary"] == ["Roofs cool cities and parks help [1]."]

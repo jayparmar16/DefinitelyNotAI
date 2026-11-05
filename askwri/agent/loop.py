@@ -591,7 +591,9 @@ class Agent:
             )
         if dossier:
             compared = yield from self._compare_papers(question, lens_rows, labels)
-        # Lens cells and dossier comparisons share the answer's [n] numbering and sources list.
+        # Lens cells, dossier comparisons and the summary share the answer's [n] numbering and
+        # sources list; the summary is numbered last, so the answer's markers start at [1].
+        summary_groups = draft.get("verified_summary", [])
         lens_groups = [cell["sentences"] for row in lens_rows for cell in row["cells"]]
         compare_groups = [[s] for s in compared["agree"] + compared["differ"]] if compared else []
         # The prompt says never to call them "passages", but drafts still sometimes do ("The
@@ -599,12 +601,17 @@ class Agent:
         numbered, order = number_markers(
             [
                 [Sentence(readers_words(s.text), s.passages) for s in g]
-                for g in groups + lens_groups + compare_groups
+                for g in groups + lens_groups + compare_groups + summary_groups
             ]
         )
         texts = numbered[: len(groups)]
         cell_texts = iter(numbered[len(groups) : len(groups) + len(lens_groups)])
-        compare_texts = numbered[len(groups) + len(lens_groups) :]
+        compare_texts = numbered[
+            len(groups) + len(lens_groups) : len(numbered) - len(summary_groups)
+        ]
+        summary = (
+            [" ".join(numbered[len(numbered) - len(summary_groups) :])] if summary_groups else []
+        )
         sources = [
             source_entry(i + 1, labels[label], authors.get(labels[label]["doc_id"], []))
             | {"citedBy": cited_by.get(labels[label]["doc_id"], 0)}
@@ -621,7 +628,6 @@ class Agent:
                 "keyPoints": texts,
                 "thinEvidence": [readers_words(t) for t in draft["limits"]],
             }
-        summary = yield from self._summarise(question, sources)
         answer = {
             "mode": mode,
             "language": "en",
@@ -904,7 +910,12 @@ class Agent:
         claims were drafted, and the text of every claim that was removed."""
         groups = [g for g in (cited_sentences(g, labels) for g in draft["groups"]) if g]
         drafted = [s.text for g in groups for s in g if s.passages]
-        groups = yield from self._verify(question, groups, labels, step_id)
+        # Summary sentences ride along, each its own group so each is grounded on its own
+        # passages: checked as a whole, a synthesis across documents failed the check.
+        summary = [[s] for s in cited_sentences(draft.get("summary", []), labels) if s.passages]
+        checked = yield from self._verify(question, groups + summary, labels, step_id)
+        draft["verified_summary"] = [g for g in checked if len(g) == 1 and [g[0]] in summary]
+        groups = [g for g in checked if g not in draft["verified_summary"]]
         kept = {s.text for g in groups for s in g if s.passages}
         return groups, len(drafted), [text for text in drafted if text not in kept]
 
@@ -1124,7 +1135,9 @@ class Agent:
                 "Write a short answer: 1 or 2 paragraphs of 2 to 4 sentences. Each sentence lists "
                 "the IDs of the passages that support it."
             )
+        # The summary comes from this same call (a separate one added 2-4 s to every answer).
         properties |= {
+            "summary": claims,
             "implications": texts,
             "limits": texts,
             "questions": texts,
@@ -1152,7 +1165,8 @@ class Agent:
             step=step_id,
             effort=DRAFT_EFFORT[mode],
             system=f"{RULES}\n\n{AUTO if audience == 'auto' else AUDIENCES[audience]}",
-            prompt=f"Question: {question}\n\n{task}\n{EXTRAS}{strict}\n\nPassages:\n\n"
+            prompt=f"Question: {question}\n\n{task}\nAlso fill `summary`. {SUMMARY_TASK}\n"
+            f"{EXTRAS}{strict}\n\nPassages:\n\n"
             f"{passages_block(labels)}",
             schema={
                 "type": "object",
@@ -1164,6 +1178,12 @@ class Agent:
         yield step(step_id, "Redrafted" if removed else "Drafted a cited answer", "done")
         draft = {
             "answerable": reply["answerable"],
+            "summary": to_sentences(
+                [
+                    {**item, "text": INLINE_LABELS.sub("", item["text"]).strip()}
+                    for item in reply["summary"][:3]
+                ]
+            ),
             "implications": reply["implications"][:3],
             "limits": reply["limits"][:3],
             "questions": reply["questions"][:3],
