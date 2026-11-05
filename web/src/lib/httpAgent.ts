@@ -1,0 +1,63 @@
+/** The AgentClient for the AskWRI API (askwri-api): chat over server-sent events, PDF links. */
+
+import type { AgentClient, Answer, AskRequest } from "./agent.ts";
+import { readEvents } from "./sse.ts";
+
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English", es: "Spanish", pt: "Portuguese", fr: "French", id: "Indonesian", hi: "Hindi",
+};
+
+export function httpAgent(baseUrl: string, apiKey: string): AgentClient {
+  const base = baseUrl.replace(/\/$/, "");
+  // shortcut: a shared key in the browser bundle only slows down misuse; replace it with a
+  // Cognito sign-in before the UI is hosted publicly.
+  const headers = { "Content-Type": "application/json", "X-AskWRI-Key": apiKey };
+
+  async function* ask(request: AskRequest, signal: AbortSignal) {
+    const response = await fetch(`${base}/chat`, {
+      method: "POST", headers, body: JSON.stringify(request), signal,
+    });
+    if (!response.ok || !response.body) {
+      throw new Error(`The AskWRI API answered ${response.status}. Check the API URL and key.`);
+    }
+    yield* readEvents(response.body);
+  }
+
+  return {
+    ask,
+
+    async sourceDownloadUrl(source) {
+      if (!source.pdfKey) return null;
+      const response = await fetch(
+        `${base}/sources/download?key=${encodeURIComponent(source.pdfKey)}`,
+        { headers },
+      );
+      if (!response.ok) throw new Error(`Download link failed (${response.status})`);
+      return (await response.json()).url as string;
+    },
+
+    // The agent translates its previous answer in the session ("now in Spanish"), reusing the
+    // evidence and checking every number, so translation is a follow-up turn on the same session.
+    async translate(_paragraphs, language, sessionId) {
+      const request: AskRequest = {
+        question: `Now in ${LANGUAGE_NAMES[language] ?? language}`,
+        mode: "quick", language, audience: "auto", format: "summary", filters: {}, sessionId,
+      };
+      let answer: Answer | null = null;
+      for await (const event of ask(request, new AbortController().signal)) {
+        if (event.type === "answer") answer = event.answer;
+        if (event.type === "decline") throw new Error(event.decline.message);
+      }
+      if (!answer) throw new Error("No translation came back");
+      const { report, implications, limits, questions } = answer;
+      return { paragraphs: report?.keyPoints ?? answer.paragraphs, report, implications, limits, questions };
+    },
+
+    async warmup(sessionId) {
+      const response = await fetch(`${base}/warm`, {
+        method: "POST", headers, body: JSON.stringify({ sessionId }),
+      });
+      if (!response.ok) throw new Error(`Warm-up failed (${response.status})`);
+    },
+  };
+}

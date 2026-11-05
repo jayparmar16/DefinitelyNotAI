@@ -278,6 +278,42 @@ It is safe to rerun.
 Interface endpoints and Aurora bill by the hour. After the event, tear everything down with
 `cd infra && terraform destroy`, then check that `askwri-rg` is empty.
 
+## Chat UI (`web/`)
+
+A Next.js app built from the AskWRI design system (WRI Design System colors and spacing): one
+search box with a Deep research toggle, answers with `[n]` citation markers, source cards, a
+side panel with the report or the source at its cited page, and the helpful decline. It builds
+to static files for S3 + CloudFront. Needs Node 22+.
+
+```sh
+cd web
+npm install
+npm run dev        # http://localhost:3000
+npm test           # citation, export and mock-data checks (Node's built-in test runner)
+npm run lint       # type check
+npm run build      # static site in web/out/
+```
+
+**Mock agent.** Until the API exists (runbook phase 5), the UI talks to a mock in
+`web/src/mock/` and shows a "Mock data" badge. Its titles, authors and figures are
+placeholders, not real WRI publications. Questions about transport (buses, transit, BRT) get a
+cited answer, or a streamed report with Deep research on; anything else gets the decline;
+"Now make it in Spanish" after a report reuses it, machine-translated. Everything goes through
+the contract in `web/src/lib/agent.ts`.
+
+**Real agent.** Put the API's URL and key in `web/.env.local` (gitignored) and restart
+`npm run dev`; the "Mock data" badge disappears:
+
+```sh
+NEXT_PUBLIC_ASKWRI_API_URL=<terraform output api_url>
+NEXT_PUBLIC_ASKWRI_API_KEY=<value of the askwri/api-key secret>
+```
+
+Get them with `terraform -chdir=infra output -raw api_url` and
+`aws secretsmanager get-secret-value --secret-id askwri/api-key --query SecretString --output text`.
+The API allows browser calls from `http://localhost:3000` only (Terraform `allowed_origins`).
+Without the URL the UI uses the mock; delete `web/src/mock/` when it is no longer wanted.
+
 ## The rules
 
 - `main` is protected, so every change goes in through a pull request.
