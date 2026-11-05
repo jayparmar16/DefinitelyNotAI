@@ -65,6 +65,7 @@ export function ChatApp() {
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [panel, setPanel] = useState<Panel>(null);
   const [panelWidth, setPanelWidth] = useState(480);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
   const [active, setActive] = useState<{ turnId: string; marker: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [recent, setRecent] = useState<SavedChat[]>([]);
@@ -364,7 +365,7 @@ async function downloadPdf(source: Source) {
   const bodyStyle = { "--panel-width": `${panelWidth}px` } as CSSProperties;
 
   return (
-    <div className={sidebarOpen ? "aw-app with-sidebar" : "aw-app"}>
+    <div className={sidebarOpen ? "aw-app with-sidebar" : "aw-app"} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
       <AppHeader
         mock={usingMock}
         language={language}
@@ -384,6 +385,8 @@ async function downloadPdf(source: Source) {
           spaces={spaces}
           space={space}
           onSpace={openSpace}
+          width={sidebarWidth}
+          onWidth={setSidebarWidth}
           current={sessionId}
           onOpen={openChat}
           onNew={() => {

@@ -394,7 +394,7 @@ a.aw-btn{text-decoration:none}
 /* Chats sidebar, as in Claude: the header spans the top, the sidebar sits left of the chat */
 .aw-app.with-sidebar{grid-template-columns:var(--sidebar-width) minmax(0,1fr)}
 .aw-app.with-sidebar > .aw-header{grid-column:1 / -1}
-.aw-sidebar{--sidebar-width:300px;width:var(--sidebar-width);display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:var(--border-thin) solid var(--line)}
+.aw-sidebar{position:relative;width:var(--sidebar-width);display:flex;flex-direction:column;min-height:0;background:var(--surface);border-right:var(--border-thin) solid var(--line)}
 :root{--sidebar-width:300px}
 .aw-sidebar-top{display:flex;gap:var(--space-200);padding:var(--space-300)}
 .aw-sidebar-new{flex:1;justify-content:flex-start}
@@ -620,3 +620,8 @@ a.aw-btn{text-decoration:none}
 .aw-matrix.text table{table-layout:auto}
 .aw-matrix.text th,.aw-matrix.text td{min-width:170px}
 .aw-matrix.text thead th:first-child,.aw-matrix.text tbody th{width:auto;min-width:160px}
+
+/* The sidebar's resize handle on its right edge (wide screens; on narrow ones it is an overlay). */
+.aw-sidebar-resize{position:absolute;top:0;bottom:0;right:-4px;width:8px;cursor:col-resize;z-index:3}
+.aw-sidebar-resize:hover,.aw-sidebar-resize.dragging{background:var(--secondary-200)}
+@media (max-width:1000px){.aw-sidebar-resize{display:none}}
