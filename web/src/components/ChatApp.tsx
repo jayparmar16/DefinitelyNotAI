@@ -9,6 +9,7 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { type Answer, type Audience, type Filters, type FlowLink, type Lens, type Mode, type ReportFormat, type Source, getAgent, usingMock } from "@/lib/agent";
 import { type SavedChat, readChats, upsertChat, writeChats } from "@/lib/chats";
+import { fetchDemoChats } from "@/lib/demo";
 import { FALLBACK, type Spaces, loadSpaces, readSpace, scoped, writeSpace } from "@/lib/spaces";
 import { unmatchedMarkers } from "@/lib/citations";
 import { answerMarkdown, formatCitation, saveFile, sourcesBibtex, sourcesCsv } from "@/lib/exports";
@@ -81,6 +82,20 @@ export function ChatApp() {
   // Reopen the chat that was open before a refresh. Read after the first render: the page is
   // pre-rendered without browser storage.
   useEffect(() => {
+    // /?demo=load: replace this browser's chats with the ready-made demo chats, then start fresh.
+    if (new URLSearchParams(window.location.search).get("demo") === "load") {
+      window.history.replaceState(null, "", "/");
+      fetchDemoChats(Date.now()).then(
+        (demo) => {
+          writeChats(demo, null);
+          writeSpace(null);
+          setRecent(demo);
+          setSpace(null);
+          setToast(`Loaded ${demo.length} demo chats`);
+        },
+        (error: Error) => setToast(error.message),
+      );
+    }
     const { chats, current } = readChats();
     setRecent(chats);
     setSpace(readSpace());

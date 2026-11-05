@@ -7,12 +7,15 @@
 import type { Turn } from "../components/turn.ts";
 import type { Lens } from "./agent.ts";
 
-// `space`: the topic space the chat was asked in (absent or null: all of WRI).
-export type SavedChat = { sessionId: string; title: string; updatedAt: number; turns: Turn[]; lens?: Lens | null; space?: string | null };
+// `space`: the topic space the chat was asked in (absent or null: all of WRI). `named`: the
+// title was given (a demo chat's use case), so it is kept instead of the first question.
+export type SavedChat = {
+  sessionId: string; title: string; updatedAt: number; turns: Turn[]; lens?: Lens | null; space?: string | null; named?: boolean;
+};
 
 const CHATS_KEY = "askwri.chats.v1";
 const CURRENT_KEY = "askwri.current";
-const MAX_CHATS = 10;
+const MAX_CHATS = 12;
 
 /**
  * Save a chat's finished turns and cap the list. A chat moves to the top only when it has a new
@@ -28,7 +31,7 @@ export function upsertChat(
   const title = finished[0].question.slice(0, 80);
   const index = chats.findIndex((c) => c.sessionId === sessionId);
   if (index >= 0 && chats[index].turns.length >= finished.length) {
-    const updated = { ...chats[index], title, turns: finished, lens, space };
+    const updated = { ...chats[index], title: chats[index].named ? chats[index].title : title, turns: finished, lens, space };
     return chats.map((c, i) => (i === index ? updated : c));
   }
   const chat = { sessionId, title, updatedAt: now, turns: finished, lens, space };

@@ -20,12 +20,12 @@ test("a chat is saved first, replacing its older copy, without turns still runni
   assert.deepEqual(chats[0].turns.map((t) => t.question), ["Heat in cities?", "And Kigali?"]);
 });
 
-test("a chat with nothing finished isn't saved, and the list keeps the 10 newest", () => {
+test("a chat with nothing finished isn't saved, and the list keeps the 12 newest", () => {
   assert.deepEqual(upsertChat([], "s", [turn("q", "running")], 1), []);
   let chats: ReturnType<typeof upsertChat> = [];
-  for (let i = 0; i < 12; i++) chats = upsertChat(chats, `s${i}`, [turn(`q${i}`)], i);
-  assert.equal(chats.length, 10);
-  assert.equal(chats[0].sessionId, "s11");
+  for (let i = 0; i < 14; i++) chats = upsertChat(chats, `s${i}`, [turn(`q${i}`)], i);
+  assert.equal(chats.length, 12);
+  assert.equal(chats[0].sessionId, "s13");
 });
 
 test("opening or updating a chat keeps the list's order; a new question moves it to the top", () => {
@@ -55,4 +55,12 @@ test("a chat remembers the space it was asked in", () => {
   const [chat] = upsertChat([], "s1", [turn], 10, null, "Ocean");
   assert.equal(chat.space, "Ocean");
   assert.equal(upsertChat([], "s2", [turn], 10)[0].space, null);
+});
+
+
+test("a named chat (a demo chat's use case) keeps its title when saved again", () => {
+  let chats = upsertChat([], "s1", [turn("How do cities cool?")], 1);
+  chats = [{ ...chats[0], title: "1 · Verified answer", named: true }];
+  chats = upsertChat(chats, "s1", [turn("How do cities cool?")], 2);
+  assert.equal(chats[0].title, "1 · Verified answer");
 });
