@@ -5,20 +5,33 @@ Status: in-progress
 
 ## Goal
 
-A small set of real questions, each with the WRI documents a good answer should cite, and a
-script that scores `search_passages()` against it. Search changes (dropping the chunk context
-line, a per-document cap, year and topic filters) are kept only if they raise the score.
+Measure what someone researching WRI's work gets from search, without hand-labelled answers:
+real questions, a model judging every passage returned, and checks that need no judgement.
+A search change (per-document cap, year filter, dropping the chunk context line...) is kept
+only if it raises these scores.
 
 ## Done when
 
-- [ ] `eval/questions.json` holds 10 to 15 questions: vague and specific, filtered by year or
-      not, single- and multi-document, plus at least one the corpus cannot answer. Each lists
-      the `doc_id`s a good answer cites and any filters a user would pass.
-- [ ] Every expected `doc_id` exists in Aurora, and the user has reviewed the expected documents.
-- [ ] `uv run python -m eval.run` prints, per question and in total, how many expected documents
-      appear in the results, how many distinct documents the results come from, and whether an
-      unanswerable question returned nothing.
-- [ ] The scores of today's search are recorded in this file as the baseline.
+- [x] `evals/questions.json` holds 16 questions: vague and specific, by year or not, single-
+      and multi-document, and 2 the corpus cannot answer. No expected documents are listed.
+- [x] `uv run python -m evals.run <label>` searches each question as a user types it, has the
+      `answerer` model rate every passage helps / related / no (ratings cached in
+      `.cache/eval/judge/`), and prints per question and in total: results, distinct
+      documents, passages that help, the share from the asked-for years, whether an
+      unanswerable question was declined, and coverage of the useful documents found by any
+      saved run.
+- [x] The scores of today's search are recorded below as the baseline.
+
+## Baseline (4 Nov, richer-metadata search, full reload)
+
+- 11 of 14 answerable questions get a passage that helps; 45 of 58 passages returned help.
+- Results come from 1.5 documents per question on average: 9 of 14 questions draw on one
+  document only.
+- Three answerable questions get nothing useful: `heat-cities-2024` (2 passages, none help),
+  `us-clean-energy-2025` (1, none help) and `ocean-commitments-progress` (no results, though
+  *Assessing 10 Years of International Commitments to Sustainable Ocean Action* is loaded).
+- `ocean-energy-2025`: 2 passages, both from one report; the offshore wind paper is missed.
+- Both unanswerable questions are declined (no results).
 
 ## Handoff
 

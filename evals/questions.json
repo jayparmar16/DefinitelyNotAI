@@ -1,0 +1,87 @@
+[
+  {
+    "id": "ocean-energy-2025",
+    "kind": "vague, by year",
+    "question": "What are the trends for ocean renewable energies published in 2025?",
+    "years": [2025]
+  },
+  {
+    "id": "offshore-wind-india-impacts",
+    "kind": "specific",
+    "question": "How should India assess the environmental and social impacts of offshore wind projects?"
+  },
+  {
+    "id": "school-bus-barriers",
+    "kind": "multi-document",
+    "question": "What stops US school districts from switching to electric school buses?"
+  },
+  {
+    "id": "school-bus-tax-credits",
+    "kind": "specific",
+    "question": "Which federal tax credits can school districts use to pay for electric school buses?"
+  },
+  {
+    "id": "kenya-food-loss",
+    "kind": "specific fact",
+    "question": "How much food is lost in Kenya's maize and potato value chains, and where along the chain?"
+  },
+  {
+    "id": "india-critical-minerals",
+    "kind": "specific",
+    "question": "Which critical minerals does India need for its clean energy transition, and what are the supply risks?"
+  },
+  {
+    "id": "blue-carbon-ndcs",
+    "kind": "multi-document",
+    "question": "How are countries including mangroves and other blue carbon ecosystems in their national climate plans?"
+  },
+  {
+    "id": "heat-cities-2024",
+    "kind": "vague, by year",
+    "question": "What did WRI publish in 2024 about extreme heat in cities?",
+    "years": [2024]
+  },
+  {
+    "id": "us-clean-energy-2025",
+    "kind": "vague, by year",
+    "question": "How did clean energy investment in the United States change in 2025?",
+    "years": [2025]
+  },
+  {
+    "id": "retail-food-waste",
+    "kind": "specific",
+    "question": "What can food retailers do to reduce food waste by their customers?"
+  },
+  {
+    "id": "ai-for-nature",
+    "kind": "vague",
+    "question": "How can artificial intelligence help protect forests and nature?"
+  },
+  {
+    "id": "climate-finance-access",
+    "kind": "multi-document",
+    "question": "Why do low- and middle-income countries struggle to access climate finance?"
+  },
+  {
+    "id": "wildfires-communities",
+    "kind": "specific",
+    "question": "How do extreme wildfires affect Indigenous peoples and local communities, and how can they be supported?"
+  },
+  {
+    "id": "ocean-commitments-progress",
+    "kind": "compare over time",
+    "question": "How much progress has been made on international commitments to sustainable ocean action over the past decade?"
+  },
+  {
+    "id": "germany-school-buses",
+    "kind": "unanswerable, near miss",
+    "question": "How many electric school buses does Germany operate?",
+    "unanswerable": true
+  },
+  {
+    "id": "world-cup",
+    "kind": "unanswerable, off domain",
+    "question": "Who won the 2022 FIFA World Cup?",
+    "unanswerable": true
+  }
+]

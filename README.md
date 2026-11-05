@@ -148,6 +148,18 @@ model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model
 - **Quotable:** the audit checks each row of a table on its own (a text layer often reads a
   table column by column, so no whole table is one run of text).
 
+## Evaluate search
+
+```sh
+uv run python -m evals.run baseline     # label each search version you try
+```
+
+Runs the questions in `evals/questions.json` through `search_passages()` as a user would type
+them, has the `answerer` model rate every returned passage (helps, related or no), and prints
+per-question and total scores. Ratings are cached in `.cache/eval/judge/` and runs saved in
+`.cache/eval/runs/<label>.json` (git-ignored); "coverage" compares a run with every saved run.
+Needs AWS credentials. The baseline is in [docs/tasks/retrieval-eval.md](docs/tasks/retrieval-eval.md).
+
 ## Load the corpus into Aurora
 
 One command runs the whole ingestion pipeline against the team sandbox:
