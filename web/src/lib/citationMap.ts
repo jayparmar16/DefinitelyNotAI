@@ -6,7 +6,7 @@
  * visuals the agent returns (timeline points and citation links); pure, so it can be tested.
  */
 
-import type { CitationFlow, FlowLink, Relation, Timeline } from "./agent.ts";
+import type { CitationFlow, FlowLink, Relation, Timeline, TimelinePoint } from "./agent.ts";
 
 export const CARD_W = 200;
 export const CARD_H = 64; // two lines of title and a line of details
@@ -23,6 +23,8 @@ export type MapNode = {
   title: string;
   year: number | null;
   citedInAnswer: boolean;
+  outside: boolean; // beyond the answer: a report that cites, or is cited by, one it uses
+  updatedBy: string[]; // newer reports that update this one (its figures may be out of date)
   citedBy: number;
   lines: string[]; // the title in up to two short lines
   row: number;
@@ -40,7 +42,7 @@ export type MapEdge = {
 };
 export type CitationMap = {
   nodes: MapNode[]; // the dated reports, drawn in the tree
-  undated: { docId: string; title: string; citedInAnswer: boolean }[]; // listed under it
+  undated: { docId: string; title: string; citedInAnswer: boolean; outside: boolean }[]; // listed under it
   edges: MapEdge[]; // links between drawn reports
   links: MapEdge[]; // every link, including those to undated reports (for the details)
   paths: Record<string, string>; // SVG path per drawn edge, keyed "from>to"
@@ -200,12 +202,50 @@ function edgePaths(nodes: MapNode[], edges: MapEdge[], width: number): Record<st
   return paths;
 }
 
-export function citationMap(timeline: Timeline, flow: CitationFlow | undefined): CitationMap {
-  const dated = timeline.points.filter((p) => p.year);
-  const undated = [...timeline.points.filter((p) => !p.year), ...timeline.undated];
+export type MapOptions = {
+  beyond?: boolean; // add reports beyond the answer that its reports cite or are cited by
+  linkedOnly?: boolean; // leave out reports with no citation link on the map
+};
+
+const MAX_BEYOND = 12;
+
+type MapPoint = TimelinePoint & { outside?: boolean };
+
+/** Reports outside the timeline that its reports cite or are cited by, most linked first. */
+export function beyondPoints(timeline: Timeline, flow: CitationFlow | undefined): MapPoint[] {
+  const known = new Set([...timeline.points, ...timeline.undated].map((p) => p.docId));
+  const found = new Map<string, { point: MapPoint; links: number }>();
+  for (const f of Object.values(flow?.flows ?? {})) {
+    for (const link of [...f.cites, ...f.citedBy]) {
+      if (known.has(link.docId)) continue;
+      const hit = found.get(link.docId) ?? {
+        point: { docId: link.docId, title: link.title, year: link.year, pubType: null, citedInAnswer: false, citedBy: 0, outside: true },
+        links: 0,
+      };
+      hit.links += 1;
+      found.set(link.docId, hit);
+    }
+  }
+  return [...found.values()].sort((a, b) => b.links - a.links).slice(0, MAX_BEYOND).map((hit) => hit.point);
+}
+
+export function citationMap(timeline: Timeline, flow: CitationFlow | undefined, options: MapOptions = {}): CitationMap {
+  let points: MapPoint[] = [...timeline.points, ...timeline.undated, ...(options.beyond ? beyondPoints(timeline, flow) : [])];
+  const everyLink = mapEdges(flow);
+  const present = new Set(points.map((p) => p.docId));
+  const links = everyLink.filter((e) => present.has(e.from) && present.has(e.to));
+  if (options.linkedOnly) {
+    const linkedIds = new Set(links.flatMap((e) => [e.from, e.to]));
+    points = points.filter((p) => linkedIds.has(p.docId));
+  }
+  const dated = points.filter((p) => p.year);
+  const undated = points.filter((p) => !p.year);
   const years = [...new Set(dated.map((p) => p.year!))].sort((a, b) => a - b);
-  const all = new Set([...dated, ...undated].map((p) => p.docId));
-  const links = mapEdges(flow).filter((e) => all.has(e.from) && all.has(e.to));
+  // "updates": the citing (newer) report updates the one it cites.
+  const updatedBy = new Map<string, string[]>();
+  for (const e of links.filter((link) => link.relation === "updates")) {
+    updatedBy.set(e.from, [...(updatedBy.get(e.from) ?? []), e.to]);
+  }
   const drawn = new Set(dated.map((p) => p.docId));
   const edges = links.filter((e) => drawn.has(e.from) && drawn.has(e.to));
   const neighbours = new Map<string, string[]>();
@@ -230,6 +270,8 @@ export function citationMap(timeline: Timeline, flow: CitationFlow | undefined):
         title: point.title,
         year: point.year,
         citedInAnswer: point.citedInAnswer,
+        outside: Boolean(point.outside),
+        updatedBy: updatedBy.get(point.docId) ?? [],
         citedBy: point.citedBy,
         lines: titleLines(point.title),
         row,
@@ -242,7 +284,7 @@ export function citationMap(timeline: Timeline, flow: CitationFlow | undefined):
   const width = right + MARGIN;
   return {
     nodes,
-    undated: undated.map((p) => ({ docId: p.docId, title: p.title, citedInAnswer: p.citedInAnswer })),
+    undated: undated.map((p) => ({ docId: p.docId, title: p.title, citedInAnswer: p.citedInAnswer, outside: Boolean(p.outside) })),
     edges,
     links,
     paths: edgePaths(nodes, edges, right),
@@ -250,4 +292,24 @@ export function citationMap(timeline: Timeline, flow: CitationFlow | undefined):
     width,
     height: Math.max(TOP + years.length * (CARD_H + ROW_GAP) - ROW_GAP + 16, CARD_H + TOP + 16),
   };
+}
+
+
+const csvCell = (value: string | number | null) => {
+  const text = value === null ? "" : String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+/** The map's citation links as CSV, one row per link, for a literature review. */
+export function linksCsv(map: CitationMap): string {
+  const titles = new Map<string, { title: string; year: number | null }>([
+    ...map.nodes.map((n) => [n.docId, { title: n.title, year: n.year }] as const),
+    ...map.undated.map((n) => [n.docId, { title: n.title, year: null }] as const),
+  ]);
+  const rows = map.links.map((e) => [
+    titles.get(e.to)?.title ?? e.to, titles.get(e.to)?.year ?? null, e.relation.replace(/_/g, " "),
+    titles.get(e.from)?.title ?? e.from, titles.get(e.from)?.year ?? null, e.aspect, e.page, e.sentence,
+  ]);
+  const header = ["citing report", "citing year", "relation", "cited report", "cited year", "what it uses", "page", "sentence"];
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
 }

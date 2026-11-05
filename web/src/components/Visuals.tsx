@@ -9,7 +9,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { CitationFlow, Empty, FlowLink, KeyFigure, LensResult, Relation, Source, Timeline, Visuals } from "@/lib/agent";
-import { CARD_H, CARD_W, citationMap } from "@/lib/citationMap";
+import { CARD_H, CARD_W, citationMap, linksCsv } from "@/lib/citationMap";
 import { type ClaimsMatrix, claimsMatrix } from "@/lib/matrix";
 import { MatrixTable } from "./MatrixTable";
 import { LensTable } from "./LensTable";
@@ -125,7 +125,9 @@ type MapProps = {
  * down to the later reports that build on it, and undated reports listed under the tree. */
 function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
   const [actual, setActual] = useState(false);
-  const map = citationMap(timeline, flow);
+  const [beyond, setBeyond] = useState(false);
+  const [linkedOnly, setLinkedOnly] = useState(false);
+  const map = citationMap(timeline, flow, { beyond, linkedOnly });
   const linked = new Set(map.links.flatMap((e) => [e.from, e.to]));
   const [picked, setPicked] = useState<string | null>(map.edges[0]?.to ?? map.links[0]?.to ?? timeline.newest);
   const titles = new Map([...map.nodes, ...map.undated].map((n) => [n.docId, n.title]));
@@ -136,8 +138,22 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
   const citedBy = map.links.filter((e) => e.from === picked);
   const relations = [...new Set(map.edges.map((e) => e.relation))];
 
+  function downloadCsv() {
+    const url = URL.createObjectURL(new Blob([linksCsv(map)], { type: "text/csv;charset=utf-8" }));
+    const link = Object.assign(document.createElement("a"), { href: url, download: "askwri-citation-links.csv" });
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="aw-map">
+      <div className="aw-map-tools" role="group" aria-label="Citation map options">
+        <label><input type="checkbox" checked={beyond} onChange={(e) => setBeyond(e.target.checked)} /> Reports beyond the answer</label>
+        <label><input type="checkbox" checked={linkedOnly} onChange={(e) => setLinkedOnly(e.target.checked)} /> Only linked reports</label>
+        {map.links.length > 0 && (
+          <button type="button" className="aw-btn sm" onClick={downloadCsv}>Download links (CSV)</button>
+        )}
+      </div>
       {map.nodes.length > 0 && (
         <div className="aw-map-scroll">
           {full && (
@@ -189,7 +205,7 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
             {map.nodes.map((n) => (
               <g
                 key={n.docId}
-                className={`aw-map-node${n.citedInAnswer ? " cited" : ""}${n.docId === picked ? " on" : ""}${linked.has(n.docId) ? "" : " alone"}`}
+                className={`aw-map-node${n.citedInAnswer ? " cited" : ""}${n.outside ? " outside" : ""}${n.docId === picked ? " on" : ""}${linked.has(n.docId) ? "" : " alone"}`}
                 transform={`translate(${n.x},${n.y})`}
                 onClick={() => setPicked(n.docId)}
                 onKeyDown={(event) => event.key === "Enter" && setPicked(n.docId)}
@@ -204,8 +220,15 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
                   <text key={i} x="16" y={22 + i * 16} className="aw-map-title">{line}</text>
                 ))}
                 <text x="16" y={CARD_H - 10} className="aw-map-sub">
-                  {n.year}{n.citedInAnswer ? " · cited in the answer" : ""}
+                  {n.year}{n.citedInAnswer ? " · cited in the answer" : n.outside ? " · beyond the answer" : ""}
                 </text>
+                {n.updatedBy.length > 0 && (
+                  <g transform={`translate(${CARD_W - 66},${CARD_H - 22})`}>
+                    <title>{`Updated by ${n.updatedBy.map(title).join("; ")}`}</title>
+                    <rect width="56" height="16" rx="8" className="aw-map-updated" />
+                    <text x="28" y="12" textAnchor="middle" className="aw-map-updated-t">Updated</text>
+                  </g>
+                )}
                 {n.citedBy > 0 && (
                   <g transform={`translate(${CARD_W - 10},0)`}>
                     <title>{`Cited by ${n.citedBy} report${n.citedBy === 1 ? "" : "s"} in AskWRI`}</title>
@@ -224,7 +247,7 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
           {map.undated.map((n) => (
             <button
               key={n.docId}
-              className={`aw-map-chip${n.citedInAnswer ? " cited" : ""}${n.docId === picked ? " on" : ""}`}
+              className={`aw-map-chip${n.citedInAnswer ? " cited" : ""}${n.outside ? " outside" : ""}${n.docId === picked ? " on" : ""}`}
               onClick={() => setPicked(n.docId)}
               title={n.title}
             >
@@ -235,6 +258,7 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
       )}
       <p className="aw-meta aw-legend">
         <span className="aw-key cited" /> cited in the answer <span className="aw-key" /> linked by citation
+        {beyond && (<> <span className="aw-key outside" /> beyond the answer</>)}
         {relations.map((relation) => (
           <span key={relation} className="aw-legend-rel">
             <span className="aw-legend-line" style={{ background: RELATION_COLORS[relation] }} /> {RELATION_LABELS[relation]}
@@ -245,7 +269,12 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
       {(node || loose) && (
         <div className="aw-flow-detail">
           <b>{(node ?? loose)!.title}</b>
-          <span className="aw-meta">{node?.year ?? "No publication year"}{(node ?? loose)!.citedInAnswer ? " · cited in the answer" : ""}</span>
+          <span className="aw-meta">{node?.year ?? "No publication year"}{(node ?? loose)!.citedInAnswer ? " · cited in the answer" : (node ?? loose)!.outside ? " · beyond the answer" : ""}</span>
+          {node && node.updatedBy.length > 0 && (
+            <span className="aw-map-update-note">
+              Updated by {node.updatedBy.map((id) => title(id)).join("; ")}: check the newer report before citing its figures.
+            </span>
+          )}
           {cites.length + citedBy.length === 0 && (
             <span className="aw-meta">No citation links to other reports in AskWRI&apos;s collection.</span>
           )}

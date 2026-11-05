@@ -603,3 +603,15 @@ a.aw-btn{text-decoration:none}
 .aw-space-n{font-size:12px;color:var(--ink-muted);font-variant-numeric:tabular-nums}
 .aw-space-chip{display:inline-flex;align-items:center;gap:var(--space-200);margin:0 auto var(--space-200);max-width:var(--main-max-width);width:100%;font-size:13px;line-height:20px;color:var(--ink-muted)}
 .aw-space-chip b{color:var(--primary-900);background:var(--primary-100);border:var(--border-thin) solid var(--primary-300);border-radius:var(--radius-900);padding:0 var(--space-200)}
+
+/* ---- Citation map: options, reports beyond the answer, update flags ---- */
+.aw-map-tools{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-200) var(--space-400);margin:var(--space-200) 0;font-size:13px;line-height:20px}
+.aw-map-tools label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.aw-map-tools .aw-btn{margin-left:auto}
+.aw-map-node.outside .aw-map-card{fill:var(--surface-sunken);stroke:var(--neutral-500);stroke-dasharray:4 3}
+.aw-map-node.outside .aw-map-strip{fill:var(--neutral-500)}
+.aw-map-chip.outside{border-style:dashed;color:var(--ink-muted)}
+.aw-key.outside{border-style:dashed;background:var(--surface-sunken)}
+.aw-map-updated{fill:var(--warning-100);stroke:var(--warning-500)}
+.aw-map-updated-t{font-size:10px;font-weight:700;fill:var(--warning-900)}
+.aw-map-update-note{display:block;margin:4px 0;padding:4px var(--space-200);border-radius:var(--radius-300);background:var(--warning-100);color:var(--warning-900);font-size:13px}

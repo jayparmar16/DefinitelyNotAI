@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { CitationFlow, Timeline } from "./agent.ts";
-import { CARD_H, CARD_W, citationMap, mapEdges, roundedPath, titleLines } from "./citationMap.ts";
+import { CARD_H, CARD_W, citationMap, mapEdges, roundedPath, titleLines, beyondPoints, linksCsv } from "./citationMap.ts";
 
 const point = (docId: string, year: number | null, citedInAnswer = true) => ({ docId, title: docId, year, pubType: null, citedInAnswer, citedBy: 0 });
 const link = (docId: string) => ({ docId, title: docId, year: null, relation: "extends" as const, aspect: "", sentence: "s", page: 3, pdfKey: null, confidence: 0.5 });
@@ -81,4 +81,34 @@ test("long titles fold into two short lines", () => {
     ["The Economic Case for", "Landscape Restoration in…"],
   );
   assert.deepEqual(titleLines("Short title"), ["Short title"]);
+});
+
+test("reports beyond the answer join the map only when asked, most linked first", () => {
+  const timeline = { points: [point("a", 2020), point("b", 2022)], undated: [], newest: "b", caption: "" };
+  const flow = flowOf({
+    a: { ...cites("a", 2020, []), citedBy: [{ ...link("x"), year: 2024 }, { ...link("y"), year: 2025 }] },
+    b: { ...cites("b", 2022, []), citedBy: [{ ...link("x"), year: 2024 }] },
+  });
+  assert.deepEqual(citationMap(timeline, flow).nodes.map((n) => n.docId).sort(), ["a", "b"]);
+  const wide = citationMap(timeline, flow, { beyond: true });
+  assert.deepEqual(beyondPoints(timeline, flow).map((p) => p.docId), ["x", "y"]);
+  assert.ok(wide.nodes.find((n) => n.docId === "x")!.outside);
+  assert.equal(wide.edges.length, 3);
+});
+
+test("only linked reports leaves out reports with no link", () => {
+  const timeline = { points: [point("a", 2020), point("b", 2022), point("c", 2023)], undated: [point("u", null)], newest: "c", caption: "" };
+  const flow = flowOf({ b: cites("b", 2022, ["a"]) });
+  assert.deepEqual(citationMap(timeline, flow, { linkedOnly: true }).nodes.map((n) => n.docId).sort(), ["a", "b"]);
+  assert.equal(citationMap(timeline, flow, { linkedOnly: true }).undated.length, 0);
+});
+
+test("an older report updated by a newer one is flagged, and links export as CSV", () => {
+  const timeline = { points: [point("old", 2018), point("new", 2025)], undated: [], newest: "new", caption: "" };
+  const flow = flowOf({ new: { ...cites("new", 2025, []), cites: [{ ...link("old"), relation: "updates" as const, sentence: 'Revises "2018" figures, page 4' }] } });
+  const map = citationMap(timeline, flow);
+  assert.deepEqual(map.nodes.find((n) => n.docId === "old")!.updatedBy, ["new"]);
+  const csv = linksCsv(map).split("\n");
+  assert.equal(csv[0], "citing report,citing year,relation,cited report,cited year,what it uses,page,sentence");
+  assert.equal(csv[1], 'new,2025,updates,old,2018,,3,"Revises ""2018"" figures, page 4"');
 });
