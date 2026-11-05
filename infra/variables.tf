@@ -111,7 +111,7 @@ variable "allowed_origins" {
 variable "api_max_concurrency" {
   description = "Most API requests served at once (Lambda reserved concurrency)."
   type        = number
-  default     = 5
+  default     = 15
 }
 
 variable "web_adapter_layer_arn" {
