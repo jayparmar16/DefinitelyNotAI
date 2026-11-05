@@ -25,8 +25,10 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
 - [x] `evals/rerankers.py` judges all 25 candidates per question and compares orderings
       (fused, Amazon Rerank, Cohere Rerank 3.5) and the cutoff; MIN_RELEVANCE set from it and
       scored as `cutoff-0.02`.
-- [ ] Documents first: candidates come from the documents whose cards match best; scored as
-      `documents-first`.
+- [x] Documents first: the best chunks of the 10 documents whose cards match best join the
+      fusion (`documents-first`), with cards matched on the question without its publication
+      phrase (`documents-first-clean-card`), and then each one's best chunk is a guaranteed
+      candidate (`documents-first-guaranteed`). Dropped: no score rose.
 - [ ] Bigger chunks (1,000 to 4,000 characters) in database `askwri_big`; scored as
       `big-chunks` against the same search.
 - [x] Each step's scores are recorded below, and only steps that raised them are kept.
@@ -45,6 +47,18 @@ Change `search_passages()` step by step, keeping each change only if `evals.run`
 | `titled-rerank` (years, all words, + title in rerank) | 13 | 73 of 95 | 2.0 | 0.87 |
 | `titled-clean-query` (+ phrase out of embedding and rerank) | 12 | 67 of 89 | 2.0 | 0.80 |
 | `cutoff-0.02` (titled rerank, MIN_RELEVANCE 0.05 to 0.02) | 14 | 77 of 101 | 2.4 | 0.94 |
+| `documents-first` (+ best chunks of the 10 closest cards in the fusion) | 14 | 73 of 104 | 2.5 | 0.92 |
+| `documents-first-clean-card` (+ cards matched without "published in") | 14 | 73 of 104 | 2.5 | 0.92 |
+| `documents-first-guaranteed` (+ each card document's best chunk a candidate) | 14 | 73 of 104 | 2.5 | 0.92 |
+
+### Documents first
+
+In the fusion, a card document's best chunk enters through one ranking only and is outscored
+by chunks that match in two, so the offshore wind paper never became a candidate. Guaranteed a
+place, it did, and the reranker scored that chunk (its Recommendations) 0.0000: it is about
+assessment rules for Indian projects, not trends in ocean energy. Expecting that paper for
+`ocean-energy-2025` was an assumption; the judge already finds 6 passages that help. With no
+score raised, the extra query and embedding call were removed.
 
 ### Is the reranker the problem? (`python -m evals.rerankers`)
 
