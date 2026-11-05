@@ -94,9 +94,36 @@ first pages as text and returns structured output, with the topic limited to the
 - **Page without a usable topic:** the model gives only the topic. `label_source` stays
   `wri.org`, and the catalog's `topic_source` is `model`.
 
-The Bedrock client is created only when a document first needs the model (a missing wri.org
-page, or a table to describe), so a run where every document has a wri.org page and no
-tables needs no AWS setup. Otherwise it needs Bedrock access to the `labeler`
+### Richer labels
+
+Every document also gets the labels below, so vague questions ("trends in ocean renewable
+energy published in 2025") can match it. They are columns of `documents` (and `role` of
+`chunks`) and fields of the catalog row; see [docs/richer-metadata.md](docs/richer-metadata.md)
+for how to check them.
+
+- **By rule, no model:**
+  - `year` is the publication date's year, else the corpus folder's (`2025/report.pdf`);
+    `date_source` is `wri.org`, `model` or `folder`.
+  - From the wri.org page: `abstract` (its description) and the `initiatives` and `programs`
+    of its "This Working Paper is part of ... within ..." line.
+  - WRI's tags are sorted into `topics` (the 11) and `concepts`, a controlled vocabulary in
+    `askwri/ingest/vocabulary.py`, matched ignoring case. `tags` keeps the originals.
+  - `acronyms` the text defines, e.g. `OSW = Offshore wind`.
+  - A chunk under a References, Notes, Contents, Acknowledgements, About or Abbreviations
+    heading gets a `role`; search skips those chunks.
+- **One `labeler` call per document** (after the audit passes): more `topics` and `concepts`,
+  `keywords`, `countries`, `regions`, 3 to 5 `key_findings`, a `genre` and the years its data
+  covers (`coverage_start`, `coverage_end`). They are added after WRI's labels and never
+  replace them. A topic, concept, region or genre outside its list raises an error naming the
+  document (structured output makes this unlikely).
+- **What search embeds:** each chunk's embedded text has a context line after its address
+  with the document's year, topics, concepts, initiatives and places. Each document has a card
+  (title, abstract or summary, labels, key findings) stored as `card_embedding` and, with the
+  acronyms, as the keyword index `doc_tsv`. Key findings and cards are model-written:
+  searchable, never quoted.
+
+The Bedrock client is created the first time a document needs the model. Every document that
+passes the audit gets the enrichment call, so a run needs Bedrock access to the `labeler`
 model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model call fails that document with an error naming it.
 
 ### Table chunks
@@ -121,12 +148,38 @@ model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model
 - **Quotable:** the audit checks each row of a table on its own (a text layer often reads a
   table column by column, so no whole table is one run of text).
 
+## Evaluate search
+
+```sh
+uv run python -m evals.run baseline     # label each search version you try
+```
+
+Runs the questions in `evals/questions.json` through `search_passages()` as a user would type
+them, has the `answerer` model rate every returned passage (helps, related or no), and prints
+per-question and total scores. Ratings are cached in `.cache/eval/judge/` and runs saved in
+`.cache/eval/runs/<label>.json` (git-ignored); "coverage" compares a run with every saved run.
+Needs AWS credentials. The baseline is in [docs/tasks/retrieval-eval.md](docs/tasks/retrieval-eval.md).
+
+### Experiments beside the demo data
+
+Two environment variables point a run elsewhere without touching the `askwri` database:
+
+- `ASKWRI_DATABASE` (default `askwri`): the database in `askwri-db` that the loader, search,
+  `db/apply_schema.py` and `db/query.py` use. Create one first with
+  `uv run python db/query.py "CREATE DATABASE <name>"`, then apply the schema with the variable set.
+- `ASKWRI_CHUNK_CHARS` (default `400-2000`): the chunk size band, in characters.
+
+For example, the bigger-chunk experiment: `ASKWRI_DATABASE=askwri_big ASKWRI_CHUNK_CHARS=1000-4000
+uv run python -m askwri.ingest.load 2024_publications 2025_publications 2026_publications`, then
+`ASKWRI_DATABASE=askwri_big uv run python -m evals.run big-chunks`.
+
 ## Load the corpus into Aurora
 
 One command runs the whole ingestion pipeline against the team sandbox:
 
 ```sh
-scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
+scripts/run-pipeline.sh 2024 2025 2026            # one corpus folder per publication year
+scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: reload everything
 ```
 
 - **First run:** if the Aurora cluster `askwri-db` or the corpus bucket is missing, it creates
@@ -140,8 +193,16 @@ scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
   described by the `vision` model, and uploaded to `s3://$CORPUS_BUCKET/figures/<chunk id>.png`
   (`#` becomes `-`); the line for each document counts its pictures small, scanned, decorative
   and described.
-- **Reruns** skip documents already loaded with the same file hash. A document whose audit
-  fails or whose model call is refused is reported as `SKIPPED` and not written.
+- **Reruns** skip documents already loaded with the same file hash and a document card, so
+  rerunning after an interruption resumes; `--reload` loads them again, which a change to
+  ingestion needs. A document whose audit fails, whose model call is refused or whose label
+  is off-list is reported as `SKIPPED` and not written (its earlier rows stay).
+- **Saved model work:** every finished Haiku reply is kept in `.cache/ingest/model-calls/`
+  (git-ignored) and replayed when the same request comes again, so a rerun or `--reload`
+  pays only for calls it has never made. Each loaded document's labels and table
+  descriptions are also written to `.cache/ingest/documents/<doc_id>.json`.
+- **Folder names** start with the publication year (`2025` or `2025_publications`): an
+  undated document takes its folder's year.
 - Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
 
 ## Search the index
@@ -150,10 +211,14 @@ scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
 what the answering agent calls. It embeds the question with Cohere Embed v4, runs one SQL
 statement over `chunks` through the RDS Data API (pgvector cosine search and full-text search
 fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
-on), reranks the top 25 with Amazon Rerank 1.0 and returns at most 6 passages with their
-citation fields and rerank `score`. Fewer matches return fewer results, and none returns an
-empty list. A hit under 400 characters also carries its previous and next chunk of the same
-section as `neighbours`.
+on, at most 6 chunks per document), reranks the top 25 with Amazon Rerank 1.0 (reading each
+candidate's title and section before its text) and returns at
+most 10 passages with their citation fields and rerank `score`. With no year filter given, a
+question that names its publication years ("published in 2025", "published since 2024")
+is filtered to them. Fewer matches return fewer
+results, and none returns an empty list. Chunks with a `role` (references, notes,
+contents...) are never returned. Every hit carries its previous and next chunk of the same
+section as `neighbours`, for the answering model to read the passage in context.
 
 ```sh
 uv run python -m askwri.search "Which countries had the highest deforestation?" --topic Forests --year-from 2024

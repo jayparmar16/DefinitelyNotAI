@@ -26,7 +26,8 @@ AGENTS.override.md
 /20*_publications/
 /20*_publications.zip
 
-# Build and tool caches
+# Build and tool caches; .cache/ingest holds the loader's saved model replies and labels
+.cache/
 __pycache__/
 *.pyc
 .ruff_cache/

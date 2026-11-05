@@ -8,7 +8,7 @@ import pytest
 
 from askwri.ingest.document import ingest_document
 from askwri.models import MODELS, ModelError
-from tests.fake_claude import FakeClaude
+from tests.fake_claude import NO_ENRICHMENT, FakeClaude
 
 PARAGRAPH = (
     "Forests store large amounts of carbon and support the livelihoods of many communities. "
@@ -64,7 +64,8 @@ def chart_report(path: Path) -> Path:
 
 
 class ScriptedClaude(FakeClaude):
-    """Answers each kind of request: the vision description, the decorative check, the labels."""
+    """Answers each kind of request: the vision description, the decorative check, the labels
+    and the enrichment."""
 
     def __init__(self, informative: bool = True):
         super().__init__()
@@ -72,7 +73,9 @@ class ScriptedClaude(FakeClaude):
 
     def _create(self, **request):
         schema = request.get("output_config", {}).get("format", {}).get("schema", {})
-        if "informative" in schema.get("properties", {}):
+        if "key_findings" in schema.get("properties", {}):
+            reply = NO_ENRICHMENT
+        elif "informative" in schema.get("properties", {}):
             reply = json.dumps({"informative": self.informative})
         elif "description" in schema.get("properties", {}):
             reply = json.dumps({"kind": "chart", "description": DESCRIPTION})
@@ -132,5 +135,6 @@ def test_an_uncaptioned_picture_judged_decorative_is_dropped_and_chunks_stay_con
 
 
 def test_a_model_refusal_fails_the_document(chart_pdf):
-    with pytest.raises(ModelError, match="forest-cover.*vision call did not finish"):
+    # The labeler is the first model call, so its refusal is the one reported.
+    with pytest.raises(ModelError, match="forest-cover.*call did not finish: refusal"):
         ingest_document(chart_pdf, client=FakeClaude({"stop_reason": "refusal"}))

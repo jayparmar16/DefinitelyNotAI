@@ -16,6 +16,29 @@ def test_search_needs_a_query_and_defaults_to_including_undated():
     assert params["year_from"] == 2010 and params["country"] is None
 
 
+def test_a_published_year_becomes_a_filter_like_the_pipeline_search():
+    from askwri.search import publication_years as pipeline_rule
+    from askwri.tools.search import publication_years
+
+    for question in (
+        "What did WRI publish in 2025 on mangroves?",
+        "reports published between 2024 and 2025 on heat",
+        "work released since 2024 about water",
+        "investment in 2025 for adaptation",
+    ):
+        assert publication_years(question) == pipeline_rule(question)
+    params = search_parameters({"query": "What did WRI publish in 2025 on mangroves?"})
+    assert (params["year_from"], params["year_to"], params["include_undated"]) == (
+        2025,
+        2025,
+        False,
+    )
+    assert params["query"] == "What did WRI publish in 2025 on mangroves?"  # embedded, reranked
+    assert params["keywords"] == "What did WRI on mangroves?"  # keyword search only
+    chosen = search_parameters({"query": "published in 2025 heat", "year_from": 2020})
+    assert (chosen["year_from"], chosen["year_to"]) == (2020, None)  # explicit filters win
+
+
 def test_matched_terms_reads_headline_marks_without_repeats():
     assert matched_terms("«Urban» heat in «cities» and «urban» areas") == ["Urban", "cities"]
     assert matched_terms("no marks here") == []
@@ -33,6 +56,9 @@ ROW = {
     "pub_type": "Research",
     "office": None,
     "topic": "Cities",
+    "topics": ["Cities"],
+    "regions": None,
+    "abstract": None,
     "language": "en",
     "page": 6,
     "printed_page": "4",

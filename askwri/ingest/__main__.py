@@ -44,6 +44,7 @@ def write_chunks(chunks: list[Chunk], out_dir: Path) -> None:
             "topic": chunk.topic,
             "wri_type": chunk.wri_type,
             "tags": list(chunk.tags),
+            "role": chunk.role,
             "number": chunk.number,
             "table_first_chunk": chunk.table_first_chunk,
             "description": chunk.description,
@@ -67,7 +68,8 @@ def write_catalog(results: list[IngestResult], out_dir: Path) -> None:
 class _ClientOnFirstUse:
     """The Bedrock Claude client, created the first time a document needs the labeler.
 
-    A run where every document has a wri.org page then needs no AWS credentials or region.
+    Every document that passes the audit gets an enrichment call, so a run with any such
+    document needs AWS credentials and a region.
     """
 
     def __init__(self):

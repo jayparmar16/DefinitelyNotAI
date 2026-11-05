@@ -6,6 +6,7 @@ import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
+from html import unescape
 from html.parser import HTMLParser
 from urllib.parse import urlsplit, urlunsplit
 
@@ -24,6 +25,11 @@ SLUG_STOP_WORDS = {
     *("to", "up", "via", "with"),
 }
 MAX_SITEMAP_CANDIDATES = 3
+# A research page's taxonomy line: "This Working Paper is part of <a>Ocean Climate
+# Diplomacy</a> within <a>Energy</a> and <a>Clean Energy</a>. Reach out to <a>...</a>"
+# The site writes the tag as `<div  class=...>`, with two spaces.
+TAXONOMY_LINE = re.compile(r'<div\s+class="narrative-taxonomy">\s*<p>(.*?)</p>', re.DOTALL)
+LINK_TEXT = re.compile(r"<a\b[^>]*>(.*?)</a>", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -56,6 +62,8 @@ class Page:
     title: str
     meta: dict[str, list[str]]  # meta tag name or property -> every content value, in order
     match: str  # "doi" or "title": how it was found
+    initiatives: tuple[str, ...] = ()  # named in the page's "part of ... within ..." line
+    programs: tuple[str, ...] = ()
 
 
 class WriSite:
@@ -88,7 +96,9 @@ class WriSite:
         title = _page_title(meta)
         if not titles_match(pdf_title, title):
             return None
-        return Page(urlunsplit(parts._replace(query="", fragment="")), title, meta, match)
+        initiatives, programs = part_of(response.body)
+        url = urlunsplit(parts._replace(query="", fragment=""))
+        return Page(url, title, meta, match, initiatives, programs)
 
     def _sitemap_candidates(self, title: str) -> list[str]:
         """Sitemap URLs whose slug reads like the title, closest first, at most a few."""
@@ -129,6 +139,24 @@ def titles_match(pdf_title: str, page_title: str) -> bool:
     if not short:
         return False
     return short == long or (len(short) >= MIN_PARTIAL_MATCH_CHARS and short in long)
+
+
+def part_of(page_html: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The initiatives and programs a page's "This ... is part of X within Y" line links to.
+
+    Link texts before "within" are initiatives, those after it are programs; the "Reach out
+    to ..." sentence is left out. A page without the line gives two empty tuples.
+    """
+    line = TAXONOMY_LINE.search(page_html)
+    if line is None:
+        return (), ()
+    head, _, tail = line.group(1).split("Reach out")[0].partition(" within ")
+    return _link_texts(head), _link_texts(tail)
+
+
+def _link_texts(fragment: str) -> tuple[str, ...]:
+    texts = (unescape(re.sub(r"<[^>]+>", "", text)).strip() for text in LINK_TEXT.findall(fragment))
+    return tuple(text for text in texts if text)
 
 
 def _slug_key(text: str) -> str:

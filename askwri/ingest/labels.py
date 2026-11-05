@@ -1,16 +1,28 @@
-"""Document labels: WRI's own from its wri.org page, the labeler model's where the page has none."""
+"""Document labels: WRI's own from its wri.org page, the labeler model's where the page has none.
+
+Also what is built from them: the year fallback, the chunk context line and the document card.
+"""
 
 import html
 import re
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime
+from itertools import chain
 from pathlib import Path
 
 import pymupdf
 
 from askwri.ingest.classify import detect_doc_type
-from askwri.ingest.model_labels import TOPICS, label_from_text, topic_from_text
+from askwri.ingest.model_labels import (
+    NO_TOPIC,
+    TOPICS,
+    Enrichment,
+    label_from_text,
+    topic_from_text,
+)
 from askwri.ingest.text import comparable
+from askwri.ingest.vocabulary import CONCEPTS
 from askwri.ingest.wri_site import Page, WriSite
 
 # Site topic names that differ from the 11 menu topics. Any other value is an error.
@@ -23,6 +35,15 @@ DOI_REACH = 600  # characters after a citation marker in which its DOI must star
 SUGGESTED_CITATION = re.compile(r"suggested citation", re.IGNORECASE)
 QUOTED_TITLE = re.compile(r"[\u201c\"]([^\u201d\"]{8,}?)[\u201d\"]")
 TITLE_REACH = 800  # a long author list can sit between the marker and the quoted title
+# The corpus is filed in one folder per publication year: "2025" or "2025_publications".
+FOLDER_YEAR = re.compile(r"(\d{4})(?!\d)")
+CONCEPT_BY_KEY = {concept.casefold(): concept for concept in CONCEPTS}
+# A chunk's context line names only the first few: a long list would crowd out the passage.
+CONTEXT_CONCEPTS = 6
+CONTEXT_PLACES = 6
+# A document's topics: the main one and at most one more. Past two, the labeler's choice
+# changed from run to run; WRI's choices come first, and `tags` keeps all of WRI's.
+MAX_TOPICS = 2
 
 
 @dataclass(frozen=True)
@@ -46,6 +67,22 @@ class DocumentLabels:
     countries: tuple[str, ...]  # from the labeler
     summary: str | None  # from the labeler
     deadline: str | None  # RFPs the labeler read, ISO date
+    year: int | None = None  # from `published`, else the corpus folder's year (with_year)
+    date_source: str | None = None  # where `year` came from: "wri.org", "model" or "folder"
+    abstract: str | None = None  # the wri.org page's description: WRI's own words
+    initiatives: tuple[str, ...] = ()  # from the page's "part of ... within ..." line
+    programs: tuple[str, ...] = ()
+    # At most MAX_TOPICS, `topic` first. `topic` stays the one that is counted.
+    topics: tuple[str, ...] = ()
+    concepts: tuple[str, ...] = ()  # of vocabulary.CONCEPTS: WRI's tags, then the labeler's
+    acronyms: tuple[str, ...] = ()  # "OSW = Offshore wind", as the text defines them
+    # From the labeler's enrichment call (with_enrichment); empty without a model client.
+    keywords: tuple[str, ...] = ()
+    regions: tuple[str, ...] = ()
+    key_findings: tuple[str, ...] = ()  # model-written: searchable, never quoted
+    genre: str | None = None
+    coverage_start: int | None = None  # the years the document's data or analysis covers
+    coverage_end: int | None = None
 
 
 def label_document(pdf_path: Path, title: str, site: WriSite | None, client=None) -> DocumentLabels:
@@ -70,8 +107,91 @@ def label_document(pdf_path: Path, title: str, site: WriSite | None, client=None
     labels = _page_labels(page, doi)
     if labels.topic is None and client is not None:
         topic = topic_from_text(client, pdf_path.name, front_text)
-        labels = replace(labels, topic=topic, topic_source="model")
+        labels = replace(
+            labels, topic=topic, topic_source="model", topics=_topics(topic, labels.tags)
+        )
     return labels
+
+
+def with_year(labels: DocumentLabels, pdf_path: Path) -> DocumentLabels:
+    """Set `year` and `date_source`: the publication date's year, else the corpus folder's.
+
+    A folder name that does not start with a year (not "2025" or "2025_publications") leaves
+    an undated document undated.
+    """
+    if labels.published:
+        source = "wri.org" if labels.label_source == "wri.org" else "model"
+        return replace(labels, year=int(labels.published[:4]), date_source=source)
+    if folder := FOLDER_YEAR.match(pdf_path.parent.name):
+        return replace(labels, year=int(folder.group(1)), date_source="folder")
+    return labels
+
+
+def with_enrichment(labels: DocumentLabels, more: Enrichment) -> DocumentLabels:
+    """Add the labeler's richer labels after the document's own; none of them is replaced.
+
+    Topics stop at MAX_TOPICS, so the labeler adds one only where WRI gave fewer than two.
+    """
+    return replace(
+        labels,
+        topics=_merged(labels.topics, more.topics)[:MAX_TOPICS],
+        concepts=_merged(labels.concepts, more.concepts),
+        countries=_merged(labels.countries, more.countries),
+        keywords=more.keywords,
+        regions=more.regions,
+        key_findings=more.key_findings,
+        genre=more.genre,
+        coverage_start=more.coverage_start,
+        coverage_end=more.coverage_end,
+    )
+
+
+def _merged(*groups: Iterable[str]) -> tuple[str, ...]:
+    """Every value of the groups in order, each once (ignoring case), empties dropped."""
+    seen: dict[str, str] = {}
+    for value in chain(*groups):
+        if value:
+            seen.setdefault(value.casefold(), value)
+    return tuple(seen.values())
+
+
+def chunk_context(labels: DocumentLabels) -> str:
+    """The document's year, topics, concepts, initiatives and places as one line.
+
+    It is embedded with each chunk, so a passage that never names its year, topic or place
+    still matches a question that does. For example "2025 · Energy, Ocean · offshore wind,
+    renewable energy · Ocean Climate Diplomacy · India, South Asia". Empty when the document
+    has none of these labels.
+    """
+    parts = (
+        str(labels.year or ""),
+        ", ".join(labels.topics),
+        ", ".join(labels.concepts[:CONTEXT_CONCEPTS]),
+        ", ".join(labels.initiatives),
+        ", ".join((*labels.countries, *labels.regions)[:CONTEXT_PLACES]),
+    )
+    return " · ".join(part for part in parts if part)
+
+
+def document_card(labels: DocumentLabels) -> str:
+    """The document as one text for document-level search.
+
+    Title, the wri.org abstract (else the labeler's summary), the labels and the key findings.
+    Parts are model-written, so the card is for finding documents, never for quoting.
+    """
+    lines = (
+        labels.title,
+        labels.abstract or labels.summary or "",
+        _card_line("Published", [str(labels.year)] if labels.year else []),
+        _card_line("Genre", [labels.genre] if labels.genre else []),
+        _card_line("Part of", [*labels.initiatives, *labels.programs]),
+        _card_line("Topics", labels.topics),
+        _card_line("Concepts", labels.concepts),
+        _card_line("Keywords", labels.keywords),
+        _card_line("Places", [*labels.countries, *labels.regions]),
+        _card_line("Key findings", labels.key_findings, " "),
+    )
+    return "\n".join(line for line in lines if line)
 
 
 def citation_title(front_text: str) -> str | None:
@@ -101,14 +221,15 @@ def catalog_row(doc_id: str, pdf_file: str, labels: DocumentLabels) -> dict:
 
 
 def chunk_label_fields(labels: DocumentLabels) -> dict:
-    """The label fields every chunk of the document carries, for filtering at search time."""
+    """The label fields every chunk of the document carries: filters, and the context line."""
     return {
         "label_source": labels.label_source,
         "link": labels.link,
-        "year": int(labels.published[:4]) if labels.published else None,
+        "year": labels.year,
         "topic": labels.topic,
         "wri_type": labels.wri_type,
         "tags": labels.tags,
+        "context": chunk_context(labels),
     }
 
 
@@ -152,6 +273,7 @@ def _model_labels(
         label_source="model",
         title=read.title or labels.title,
         topic=read.topic,
+        topics=_topics(read.topic, ()),
         topic_source="model",
         published=read.published,
         doc_type=read.doc_type,
@@ -175,7 +297,29 @@ def _page_labels(page: Page, doi: str | None) -> DocumentLabels:
         authors=tuple(meta.get("citation_author", [])),
         published=_published(meta),
         tags=tags,
+        abstract=_abstract(meta),
+        initiatives=page.initiatives,
+        programs=page.programs,
+        topics=_topics(topic, tags),
+        concepts=_merged(CONCEPT_BY_KEY.get(tag.casefold(), "") for tag in tags),
     )
+
+
+def _topics(topic: str | None, tags: Iterable[str]) -> tuple[str, ...]:
+    """The main topic first, then the first other one of the 11 that WRI's tags name."""
+    main = [topic] if topic and topic != NO_TOPIC else []
+    return _merged(main, (SITE_TOPICS.get(tag, "") for tag in tags))[:MAX_TOPICS]
+
+
+def _abstract(meta: dict[str, list[str]]) -> str | None:
+    return (
+        html.unescape(_first(meta, "description") or _first(meta, "og:description") or "") or None
+    )
+
+
+def _card_line(name: str, values: Iterable[str], separator: str = ", ") -> str:
+    values = list(values)
+    return f"{name}: {separator.join(values)}" if values else ""
 
 
 def _front_text(pdf_path: Path) -> str:

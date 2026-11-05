@@ -1,6 +1,7 @@
 """Cut parsed PDF blocks into section-bounded, size-banded text and table chunks with stable IDs."""
 
 import math
+import os
 import re
 from collections import Counter
 from collections.abc import Iterator
@@ -13,9 +14,11 @@ from askwri.ingest.tables import split_table
 
 # The size band, at about 4 characters per token: roughly 100 to 500 tokens. Shorter chunks
 # embed as little more than their address; longer ones blur several ideas into one vector.
-# A starting point, to be tuned against the evaluation question set.
-MIN_CHUNK_CHARS = 400
-MAX_CHUNK_CHARS = 2000
+# A starting point, to be tuned against the evaluation question set: ASKWRI_CHUNK_CHARS
+# ("1000-4000") sets another band for an experiment.
+MIN_CHUNK_CHARS, MAX_CHUNK_CHARS = (
+    int(chars) for chars in os.environ.get("ASKWRI_CHUNK_CHARS", "400-2000").split("-")
+)
 SEPARATOR = " › "
 
 SENTENCE_BREAK = re.compile(r"[.!?][\"')\]”’]*\s+")
@@ -26,6 +29,28 @@ ABBREVIATIONS = {
     *("al", "cf", "ca", "co", "corp", "dept", "dr", "ed", "eds", "etc", "fig", "figs", "inc"),
     *("jr", "ltd", "mr", "mrs", "ms", "no", "nos", "p", "pp", "prof", "sr", "st", "vol", "vs"),
 }
+# Headings of sections that support a document rather than say anything: their chunks get a
+# `role`, and search skips them. Matched ignoring case and any leading number ("7. Notes").
+SECTION_ROLES = {
+    **dict.fromkeys(("references", "bibliography", "works cited"), "references"),
+    **dict.fromkeys(("endnotes", "notes", "footnotes"), "notes"),
+    **dict.fromkeys(("contents", "table of contents"), "contents"),
+    **dict.fromkeys(("acknowledgments", "acknowledgements"), "acknowledgements"),
+    **dict.fromkeys(
+        (
+            "about the authors",
+            "about the author",
+            "about wri",
+            "about the world resources institute",
+        ),
+        "about",
+    ),
+    **dict.fromkeys(
+        ("abbreviations", "acronyms", "abbreviations and acronyms", "acronyms and abbreviations"),
+        "abbreviations",
+    ),
+}
+HEADING_NUMBER = re.compile(r"^\d+(?:\.\d+)*\.?\s*")
 
 
 @dataclass(frozen=True)
@@ -45,6 +70,9 @@ class Chunk:
     kind: str  # "source_text", "table", "chart" or "image"
     text: str  # passage text, paragraphs separated by blank lines; a figure's caption
     quotable: bool = True  # False when the audit found the words re-ordered against the PDF
+    # "references", "notes", "contents", "acknowledgements", "about" or "abbreviations" when
+    # the section path names one (see SECTION_ROLES); None for the document's own content
+    role: str | None = None
     number: str | None = None  # "Table 2", on every piece of a table that has a number; "Figure 3"
     # chunk_id of the first piece of this table: set on later pieces, whether split by rows or
     # continued on the next page, so all pieces can be found; None on the first piece
@@ -60,6 +88,9 @@ class Chunk:
     topic: str | None = None
     wri_type: str | None = None
     tags: tuple[str, ...] = ()
+    # The document's year, topics, concepts, initiatives and places as one line (labels.py
+    # chunk_context): embedded with the passage, never part of it.
+    context: str = ""
 
     @property
     def address(self) -> str:
@@ -68,8 +99,9 @@ class Chunk:
 
     @property
     def indexed_text(self) -> str:
-        """The text that is embedded and searched: address first, then any description, then the passage."""
-        return "\n\n".join(part for part in (self.address, self.description, self.text) if part)
+        """What is embedded: address, the document's context line, any description, the passage."""
+        parts = (self.address, self.context, self.description, self.text)
+        return "\n\n".join(part for part in parts if part)
 
 
 def build_chunks(
@@ -116,12 +148,25 @@ def build_chunks(
                     section=section,
                     kind="table" if table else "image" if figure else "source_text",
                     text=_joined(group),
+                    role=section_role(section),
                     number=table.number if table else figure.number if figure else None,
                     figure=figure,
                     table_first_chunk=table_head if table and table_head != chunk_id else None,
                 )
             )
     return chunks
+
+
+def section_role(section: str) -> str | None:
+    """The role of a section any of whose headings is in SECTION_ROLES, else None.
+
+    "Conclusion › References" is "references" and "Highlights › CONTENTS" is "contents".
+    """
+    for heading in section.split(SEPARATOR):
+        key = " ".join(HEADING_NUMBER.sub("", heading).strip(" .:").casefold().split())
+        if key in SECTION_ROLES:
+            return SECTION_ROLES[key]
+    return None
 
 
 def _sections(blocks: list[Block], doc_title: str) -> Iterator[tuple[str, list[Block]]]:
