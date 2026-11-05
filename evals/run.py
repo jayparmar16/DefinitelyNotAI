@@ -160,7 +160,7 @@ def print_report(questions: list[dict], run: dict, pool: dict[str, set[str]], ru
         )  # fmt: skip
         print(
             f"{question['id'][:28]:28} {m['results']:3} {m['documents']:4} {m['helps']:5} "
-            f"{m['gain']:4} {'' if cover is None else cover:>5} {m.get('in_years', ''):>5}  "
+            f"{m['gain']:4} {'' if cover is None else cover:>5} {_blank(m.get('in_years')):>5}  "
             f"{unanswerable}"
         )
     answerable = [q for q in questions if not q.get("unanswerable")]
@@ -181,6 +181,10 @@ def print_report(questions: list[dict], run: dict, pool: dict[str, set[str]], ru
         if covers
         else "coverage: no useful documents yet"
     )
+
+
+def _blank(value) -> str:
+    return "" if value is None else str(value)
 
 
 if __name__ == "__main__":

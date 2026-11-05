@@ -160,6 +160,19 @@ per-question and total scores. Ratings are cached in `.cache/eval/judge/` and ru
 `.cache/eval/runs/<label>.json` (git-ignored); "coverage" compares a run with every saved run.
 Needs AWS credentials. The baseline is in [docs/tasks/retrieval-eval.md](docs/tasks/retrieval-eval.md).
 
+### Experiments beside the demo data
+
+Two environment variables point a run elsewhere without touching the `askwri` database:
+
+- `ASKWRI_DATABASE` (default `askwri`): the database in `askwri-db` that the loader, search,
+  `db/apply_schema.py` and `db/query.py` use. Create one first with
+  `uv run python db/query.py "CREATE DATABASE <name>"`, then apply the schema with the variable set.
+- `ASKWRI_CHUNK_CHARS` (default `400-2000`): the chunk size band, in characters.
+
+For example, the bigger-chunk experiment: `ASKWRI_DATABASE=askwri_big ASKWRI_CHUNK_CHARS=1000-4000
+uv run python -m askwri.ingest.load 2024_publications 2025_publications 2026_publications`, then
+`ASKWRI_DATABASE=askwri_big uv run python -m evals.run big-chunks`.
+
 ## Load the corpus into Aurora
 
 One command runs the whole ingestion pipeline against the team sandbox:
@@ -195,10 +208,14 @@ scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: r
 what the answering agent calls. It embeds the question with Cohere Embed v4, runs one SQL
 statement over `chunks` through the RDS Data API (pgvector cosine search and full-text search
 fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
-on), reranks the top 25 with Amazon Rerank 1.0 and returns at most 6 passages with their
-citation fields and rerank `score`. Fewer matches return fewer results, and none returns an
-empty list. Chunks with a `role` (references, notes, contents...) are never returned. A hit under 400 characters also carries its previous and next chunk of the same
-section as `neighbours`.
+on, at most 6 chunks per document), reranks the top 25 with Amazon Rerank 1.0 (reading each
+candidate's title and section before its text) and returns at
+most 10 passages with their citation fields and rerank `score`. With no year filter given, a
+question that names its publication years ("published in 2025", "published since 2024")
+is filtered to them. Fewer matches return fewer
+results, and none returns an empty list. Chunks with a `role` (references, notes,
+contents...) are never returned. Every hit carries its previous and next chunk of the same
+section as `neighbours`, for the answering model to read the passage in context.
 
 ```sh
 uv run python -m askwri.search "Which countries had the highest deforestation?" --topic Forests --year-from 2024
