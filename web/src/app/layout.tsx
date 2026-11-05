@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+// Hanken Grotesk, self-hosted (the latin variable-weight woff2), used through --font-sans.
+import "@fontsource-variable/hanken-grotesk";
 import "./globals.css";
 
 export const metadata: Metadata = {
