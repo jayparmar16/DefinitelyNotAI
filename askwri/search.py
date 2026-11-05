@@ -6,6 +6,7 @@ Needs AWS credentials in the environment; reads through the RDS Data API (no VPC
 
 import argparse
 import json
+import os
 import re
 import sys
 from functools import cache
@@ -17,7 +18,8 @@ from askwri.models import MODELS
 
 CLUSTER = "askwri-db"
 SECRET = "askwri/db"
-DATABASE = "askwri"
+# ASKWRI_DATABASE picks another database in the cluster, e.g. for an experiment beside the demo.
+DATABASE = os.environ.get("ASKWRI_DATABASE", "askwri")
 CANDIDATES = 25  # after fusion and the per-document cap: what the reranker sees
 POOL = 100  # per ranking (meaning, keyword): wide enough that the cap still leaves CANDIDATES
 # Chunks of one document among the candidates. Uncapped, one document's chunks took all 25

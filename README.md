@@ -160,6 +160,19 @@ per-question and total scores. Ratings are cached in `.cache/eval/judge/` and ru
 `.cache/eval/runs/<label>.json` (git-ignored); "coverage" compares a run with every saved run.
 Needs AWS credentials. The baseline is in [docs/tasks/retrieval-eval.md](docs/tasks/retrieval-eval.md).
 
+### Experiments beside the demo data
+
+Two environment variables point a run elsewhere without touching the `askwri` database:
+
+- `ASKWRI_DATABASE` (default `askwri`): the database in `askwri-db` that the loader, search,
+  `db/apply_schema.py` and `db/query.py` use. Create one first with
+  `uv run python db/query.py "CREATE DATABASE <name>"`, then apply the schema with the variable set.
+- `ASKWRI_CHUNK_CHARS` (default `400-2000`): the chunk size band, in characters.
+
+For example, the bigger-chunk experiment: `ASKWRI_DATABASE=askwri_big ASKWRI_CHUNK_CHARS=1000-4000
+uv run python -m askwri.ingest.load 2024_publications 2025_publications 2026_publications`, then
+`ASKWRI_DATABASE=askwri_big uv run python -m evals.run big-chunks`.
+
 ## Load the corpus into Aurora
 
 One command runs the whole ingestion pipeline against the team sandbox:

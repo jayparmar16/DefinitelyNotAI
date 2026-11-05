@@ -26,7 +26,8 @@ from askwri.models import MODELS, ModelError, cached_client, claude_client
 
 CLUSTER = "askwri-db"
 SECRET = "askwri/db"
-DATABASE = "askwri"
+# ASKWRI_DATABASE picks another database in the cluster, e.g. for an experiment beside the demo.
+DATABASE = os.environ.get("ASKWRI_DATABASE", "askwri")
 EMBED_BATCH = 96  # Cohere Embed v4 takes at most 96 texts per request
 ROW_BATCH = 40  # chunk rows per Data API call: each carries a 1,024-float vector as text
 # Parallel documents: PyMuPDF isn't thread-safe, so these are processes. Most time is spent
@@ -248,11 +249,11 @@ def _loaded_hashes() -> dict[str, str]:
 
 
 def _save_labels(result: IngestResult) -> None:
-    """Write CACHE/documents/<doc_id>.json: the catalog row plus every table description."""
+    """Write CACHE/documents/<database>/<doc_id>.json: the catalog row and table descriptions."""
     row = catalog_row(result.doc_id, result.pdf_file, result.labels) | {
         "table_descriptions": {c.chunk_id: c.description for c in result.chunks if c.description}
     }
-    path = CACHE / "documents" / f"{result.doc_id}.json"
+    path = CACHE / "documents" / DATABASE / f"{result.doc_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(row, ensure_ascii=False, indent=2), encoding="utf-8")
 

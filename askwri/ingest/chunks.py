@@ -1,6 +1,7 @@
 """Cut parsed PDF blocks into section-bounded, size-banded text and table chunks with stable IDs."""
 
 import math
+import os
 import re
 from collections import Counter
 from collections.abc import Iterator
@@ -12,9 +13,11 @@ from askwri.ingest.tables import split_table
 
 # The size band, at about 4 characters per token: roughly 100 to 500 tokens. Shorter chunks
 # embed as little more than their address; longer ones blur several ideas into one vector.
-# A starting point, to be tuned against the evaluation question set.
-MIN_CHUNK_CHARS = 400
-MAX_CHUNK_CHARS = 2000
+# A starting point, to be tuned against the evaluation question set: ASKWRI_CHUNK_CHARS
+# ("1000-4000") sets another band for an experiment.
+MIN_CHUNK_CHARS, MAX_CHUNK_CHARS = (
+    int(chars) for chars in os.environ.get("ASKWRI_CHUNK_CHARS", "400-2000").split("-")
+)
 SEPARATOR = " › "
 
 SENTENCE_BREAK = re.compile(r"[.!?][\"')\]”’]*\s+")
