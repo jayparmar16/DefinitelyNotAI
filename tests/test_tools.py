@@ -156,6 +156,7 @@ def test_passage_is_split_from_its_neighbours_in_order():
 
 def test_coverage_refuses_unknown_dimensions():
     assert "unnest(d.countries)" in coverage_sql("country")
+    assert "d.topics" in coverage_sql("topic") and "unnest(d.regions)" in coverage_sql("region")
     with pytest.raises(ValueError):
         coverage_sql("d.topic; DROP TABLE documents")
 

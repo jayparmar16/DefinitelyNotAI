@@ -29,11 +29,12 @@ locals {
       ]
     }
     coverage = {
-      description = "Count WRI documents in the collection by topic, tag, country, year, pub_type or language, optionally within a topic or country. Use it for gap and coverage questions; counts describe the indexed collection only."
+      description = "Count WRI documents in the collection by topic, concept, region, country, genre, tag, year, pub_type or language, optionally within a topic, country or region, or one publication year. Use it for gap and coverage questions; counts describe the indexed collection only."
       properties = [
-        { name = "dimension", type = "string", required = true, description = "One of topic, tag, country, year, pub_type, language." },
+        { name = "dimension", type = "string", required = true, description = "One of topic, concept, region, country, genre, tag, year, pub_type, language." },
         { name = "topic", type = "string", description = "Only count documents on this topic or tag." },
-        { name = "country", type = "string", description = "Only count documents covering this country." },
+        { name = "country", type = "string", description = "Only count documents covering this country or region." },
+        { name = "year", type = "integer", description = "Only count documents published in this year." },
       ]
     }
     authors = {
