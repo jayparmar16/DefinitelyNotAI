@@ -26,7 +26,7 @@ How to read this:  DO = what you click.  SAY = what you say.  (~Ns) = how long A
 BEFORE YOU PRESENT (15 minutes ahead)
 ---------------------------------------------------------------------
 1. Open an Incognito window, go to https://d17gz0gh5g00t3.cloudfront.net and sign in
-   (a.kowta@gwu.edu).
+   (your admin account).
 2. In the same window open https://d17gz0gh5g00t3.cloudfront.net/?demo=load
    -> "Loaded ... demo chats". The first chat in the sidebar is "★ Story · AI data centers and
    the grid" - your backup copy of this whole demo.
