@@ -223,6 +223,11 @@ Q: Why do some publications have no year or no abstract?
 A: Year comes from wri.org, then the document itself, then the folder; 573 of 579 have one.
    Abstracts come only from wri.org pages, which about a third of the documents have.
 
+Q: Why do only some reports show their authors?
+A: Author names come from each report's page on wri.org, which we matched for 187 of the 579
+   publications. For the rest the panel simply leaves the authors out rather than guess. Reading
+   authors from each PDF's cover pages is a straightforward next step.
+
 Q: Is it only English?
 A: The library is English publications, but you can ask and get answers in Spanish, Portuguese
    or Bahasa Indonesia - the citations stay in the original language so they remain exact.
