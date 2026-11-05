@@ -96,6 +96,16 @@ def must_include_rate(text: str, wanted: list[str]) -> float | None:
     return found / len(wanted)
 
 
+def figures_cited(paragraphs: list[str]) -> float | None:
+    """Share of answer sentences stating a figure that carry an [n] citation: every factual
+    claim must be cited, and a sentence with a number is always factual."""
+    sentences = [s for p in paragraphs for s in re.split(r"(?<=[.!?])\s+", p)]
+    with_figures = [s for s in sentences if re.search(r"\d", re.sub(r"\[\d+\]", "", s))]
+    if not with_figures:
+        return None
+    return sum(bool(re.search(r"\[\d+\]", s)) for s in with_figures) / len(with_figures)
+
+
 def score(question: dict, outcome: dict) -> dict:
     """Every metric for one question; None where a metric doesn't apply."""
     event = outcome["event"] or {"type": "error"}
@@ -115,6 +125,7 @@ def score(question: dict, outcome: dict) -> dict:
         "precision_at_5": None,
         "page_hit": None,
         "must_include": None,
+        "figures_cited": None,
         "verified_rate": None,
         "audience_ok": None,
         "language_ok": None,
@@ -135,6 +146,7 @@ def score(question: dict, outcome: dict) -> dict:
         )
     text = " ".join(answer["paragraphs"])
     row["must_include"] = must_include_rate(text, question.get("must_include") or [])
+    row["figures_cited"] = figures_cited(answer["paragraphs"])
     if answer.get("claimsTotal"):
         row["verified_rate"] = answer["claimsVerified"] / answer["claimsTotal"]
     row["audience_ok"] = answer.get("audience") == question.get("expected_audience")
@@ -162,6 +174,7 @@ def summarise(rows: list[dict]) -> dict:
         "precision_at_5": mean(rows, "precision_at_5"),
         "page_hit_rate": mean(rows, "page_hit"),
         "must_include_rate": mean(rows, "must_include"),
+        "figures_cited_rate": mean(rows, "figures_cited"),
         "decline_accuracy": mean(rows, "decline_correct"),
         "unanswerable_declined": f"{sum(r['declined'] for r in rows if not r['answerable'])} of "
         f"{sum(not r['answerable'] for r in rows)}",
@@ -192,6 +205,7 @@ METRICS = {
     "precision_at_5": ("PrecisionAt5", "None"),
     "page_hit_rate": ("PageHitRate", "None"),
     "must_include_rate": ("MustIncludeRate", "None"),
+    "figures_cited_rate": ("FiguresCitedRate", "None"),
     "decline_accuracy": ("DeclineAccuracy", "None"),
     "verified_rate": ("VerifiedRate", "None"),
     "audience_accuracy": ("AudienceAccuracy", "None"),

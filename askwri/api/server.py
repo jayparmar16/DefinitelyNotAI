@@ -19,6 +19,8 @@ from urllib.parse import parse_qs, urlsplit
 import boto3
 from botocore.exceptions import ClientError
 
+from askwri.api import ops
+
 DOWNLOAD_SECONDS = 300  # the design's 5-minute presigned link
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{33,100}$")  # AgentCore runtime session IDs: 33+ chars
 PDF_KEY = re.compile(r"^raw/[^/]+\.pdf$")
@@ -116,6 +118,14 @@ def download_key(query: str) -> str:
     return key
 
 
+def sse_event(line: bytes) -> dict:
+    """The JSON of one 'data: ...' line of the agent's stream ({} if it isn't JSON)."""
+    try:
+        return json.loads(line[6:])
+    except ValueError:
+        return {}
+
+
 def key_matches(expected: str | None, sent: str | None) -> bool:
     """True when no key is required, or the sent key equals it (constant-time compare)."""
     return expected is None or (sent is not None and hmac.compare_digest(expected, sent))
@@ -132,6 +142,8 @@ class Api:
         }
         self.agentcore = boto3.client("bedrock-agentcore")
         self.s3 = boto3.client("s3")
+        self.dynamodb = boto3.client("dynamodb")
+        self.query_log = os.environ.get("ASKWRI_QUERY_LOG_TABLE")
         secret = os.environ.get("ASKWRI_API_KEY_SECRET")
         self.api_key = (
             boto3.client("secretsmanager").get_secret_value(SecretId=secret)["SecretString"]
@@ -180,10 +192,13 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/ping":
             self._json(200, {"status": "Healthy"})
             return
-        if url.path != "/sources/download":
+        if url.path not in ("/sources/download", "/admin/overview", "/admin/review"):
             self._json(404, {"error": "not found"})
             return
         if not self._authorized():
+            return
+        if url.path.startswith("/admin/"):
+            self._admin(url)
             return
         try:
             key = download_key(url.query)
@@ -224,6 +239,7 @@ class Handler(BaseHTTPRequestHandler):
         except (BadRequest, ValueError) as error:
             self._json(400, {"error": str(error)})
             return
+        started = time.monotonic()
         try:
             response = invoke_agent(
                 self.api.agentcore,
@@ -245,15 +261,21 @@ class Handler(BaseHTTPRequestHandler):
         # The agent already sends server-sent events: forward each event (its lines up to the
         # blank line that ends it) as one chunk, as soon as it arrives.
         event = b""
+        seen: list[dict] = []
         # chunk_size=1: a bigger read waits until that many bytes arrive, which holds back the
         # end of each small event until the next one starts. These streams are a few kB.
         for line in response["response"].iter_lines(chunk_size=1):
             event += line + b"\n"
+            if line.startswith(b"data: "):
+                seen.append(sse_event(line))
             if not line:
                 self._chunk(event)
                 event = b""
         if event:
             self._chunk(event)
+        # The client has the answer; log it before ending the stream (Lambda may freeze the
+        # environment once the response ends, so this can't run after it).
+        self._log_question(payload, seen, time.monotonic() - started)
         self._chunk(b"")  # the empty chunk ends the response
 
     def _warm(self, body: bytes) -> None:
@@ -276,6 +298,89 @@ class Handler(BaseHTTPRequestHandler):
             return
         response["response"].read()
         self._json(200, {"status": "warm"})
+
+    def _log_question(self, payload: dict, events: list[dict], seconds: float) -> None:
+        """One query-log record per question, for the admin page. Never fails the answer."""
+        if not self.api.query_log or payload["mode"] == "visuals":
+            return
+        now = ops.utc_now()
+        record = ops.query_record(
+            payload, events, seconds, now, ops.new_id(now, uuid.uuid4().hex[:8])
+        )
+        item = ops.item(record)
+        try:
+            self.api.dynamodb.put_item(
+                TableName=self.api.query_log,
+                Item={
+                    "day": {"S": item["day"]},
+                    "sk": {"S": item["sk"]},
+                    "record": {"S": item["record"]},
+                    "expires": {"N": str(item["expires"])},
+                },
+            )
+        except ClientError as error:
+            log.error("query log not written: %s", error)
+
+    def _admin(self, url) -> None:
+        """GET /admin/overview?source=user&window=7d and GET /admin/review?id=<record id>."""
+        query = parse_qs(url.query)
+        now = ops.utc_now()
+        try:
+            if url.path == "/admin/review":
+                found = self._record(query.get("id", [""])[0])
+                if found is None:
+                    self._json(404, {"error": "no such question in the log"})
+                else:
+                    self._json(200, found)
+                return
+            source = "eval" if query.get("source", ["user"])[0] == "eval" else "user"
+            start = ops.window_start(query.get("window", ["7d"])[0], now)
+        except ValueError as error:
+            self._json(400, {"error": str(error)})
+            return
+        month = self._records(ops.window_start("30d", now), now)
+        window = [r for r in month if r["ts"] >= start.isoformat() and r["source"] == source]
+        self._json(
+            200,
+            {
+                "scorecard": ops.scorecard(self._latest_eval_run()),
+                "live": ops.live([r for r in month if r["source"] == source], window, now),
+                "source": source,
+            },
+        )
+
+    def _records(self, start, now) -> list[dict]:
+        """Query-log records from `start` to now, one DynamoDB query per day."""
+        if not self.api.query_log:
+            return []
+        records = []
+        for day in ops.days(start, now):
+            pages = self.api.dynamodb.get_paginator("query").paginate(
+                TableName=self.api.query_log,
+                KeyConditionExpression="#d = :d",
+                ExpressionAttributeNames={"#d": "day"},
+                ExpressionAttributeValues={":d": {"S": day}},
+            )
+            records += [json.loads(i["record"]["S"]) for page in pages for i in page["Items"]]
+        return [r for r in records if r["ts"] >= start.isoformat()]
+
+    def _record(self, rid: str) -> dict | None:
+        if not self.api.query_log or "." not in rid:
+            return None
+        day, sk = rid.split(".", 1)
+        found = self.api.dynamodb.get_item(
+            TableName=self.api.query_log, Key={"day": {"S": day}, "sk": {"S": sk}}
+        ).get("Item")
+        return json.loads(found["record"]["S"]) if found else None
+
+    def _latest_eval_run(self) -> dict | None:
+        """The newest eval/results/<run id>.json in the corpus bucket (run ids sort by time)."""
+        listed = self.api.s3.list_objects_v2(Bucket=self.api.bucket, Prefix="eval/results/")
+        keys = sorted(o["Key"] for o in listed.get("Contents", []) if o["Key"].endswith(".json"))
+        if not keys:
+            return None
+        body = self.api.s3.get_object(Bucket=self.api.bucket, Key=keys[-1])["Body"].read()
+        return json.loads(body)
 
     def _chunk(self, data: bytes) -> None:
         """Send one chunk of a chunked response; empty data ends it."""

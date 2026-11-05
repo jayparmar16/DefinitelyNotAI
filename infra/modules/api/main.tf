@@ -55,6 +55,54 @@ data "aws_iam_policy_document" "api" {
     actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_secretsmanager_secret.api_key.arn]
   }
+  statement {
+    sid       = "QueryLog"
+    actions   = ["dynamodb:PutItem", "dynamodb:Query", "dynamodb:GetItem"]
+    resources = [aws_dynamodb_table.query_log.arn]
+  }
+  statement {
+    sid       = "ReadEvalResults"
+    actions   = ["s3:GetObject"]
+    resources = ["arn:aws:s3:::${var.corpus_bucket}/eval/results/*"]
+  }
+  statement {
+    sid       = "ListEvalResults"
+    actions   = ["s3:ListBucket"]
+    resources = ["arn:aws:s3:::${var.corpus_bucket}"]
+    condition {
+      test     = "StringLike"
+      variable = "s3:prefix"
+      values   = ["eval/results/*"]
+    }
+  }
+}
+
+# One record per question for the admin page: cost, tokens per step, latency, claims, sources.
+# Partitioned by UTC day; records expire after 90 days.
+resource "aws_dynamodb_table" "query_log" {
+  name         = "askwri-query-log"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "day"
+  range_key    = "sk"
+
+  attribute {
+    name = "day"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  ttl {
+    attribute_name = "expires"
+    enabled        = true
+  }
+  point_in_time_recovery {
+    enabled = true
+  }
+  server_side_encryption {
+    enabled = true
+  }
 }
 
 resource "aws_iam_role_policy" "api" {
@@ -92,6 +140,7 @@ resource "aws_lambda_function" "api" {
       ASKWRI_CORPUS_BUCKET         = var.corpus_bucket
       ASKWRI_ALLOWED_ORIGINS       = join(",", var.allowed_origins)
       ASKWRI_API_KEY_SECRET        = aws_secretsmanager_secret.api_key.name
+      ASKWRI_QUERY_LOG_TABLE       = aws_dynamodb_table.query_log.name
     }
   }
 
