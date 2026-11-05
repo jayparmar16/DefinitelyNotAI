@@ -52,3 +52,18 @@ output "web_distribution_id" {
   description = "CloudFront distribution scripts/deploy-web.sh invalidates."
   value       = module.web.distribution_id
 }
+
+output "user_pool_id" {
+  description = "askwri-users: add people with aws cognito-idp admin-create-user (README)."
+  value       = module.users.user_pool_id
+}
+
+output "user_pool_client_id" {
+  description = "The UI's Cognito app client (NEXT_PUBLIC_ASKWRI_AUTH_CLIENT_ID)."
+  value       = module.users.client_id
+}
+
+output "login_domain" {
+  description = "Cognito managed login domain (NEXT_PUBLIC_ASKWRI_AUTH_DOMAIN)."
+  value       = module.users.login_domain
+}

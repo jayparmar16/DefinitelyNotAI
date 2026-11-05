@@ -82,12 +82,13 @@ export const usd = (value: number | null | undefined, digits = 4) => (value === 
 export const seconds = (value: number | null | undefined) => (value === null || value === undefined ? "–" : `${value.toFixed(1)} s`);
 
 const apiUrl = process.env.NEXT_PUBLIC_ASKWRI_API_URL;
-const apiKey = process.env.NEXT_PUBLIC_ASKWRI_API_KEY ?? "";
 export const adminMock = !apiUrl;
 
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(`${apiUrl!.replace(/\/$/, "")}${path}`, { headers: { "X-AskWRI-Key": apiKey } });
-  if (!response.ok) throw new Error(`The admin API answered ${response.status}`);
+  const { apiHeaders } = await import("./auth.ts");
+  const response = await fetch(`${apiUrl!.replace(/\/$/, "")}${path}`, { headers: await apiHeaders() });
+  if (response.status === 403) throw new Error("your account isn't in the askwri-admins group");
+  if (!response.ok) throw new Error(`the admin API answered ${response.status}`);
   return (await response.json()) as T;
 }
 

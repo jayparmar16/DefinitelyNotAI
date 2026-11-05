@@ -78,6 +78,7 @@ def test_a_reused_connection_survives_an_early_answer_with_an_unread_body():
     class FakeApi:
         origins = frozenset({"http://localhost:3000"})
         api_key = "k1"
+        verifier = None
 
     Handler.api = FakeApi()
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -129,3 +130,43 @@ def test_agent_calls_retry_only_while_the_runtime_is_starting():
         invoke_agent(Runtime([error("AccessDeniedException", "no")]), sleep=lambda s: None)
     with pytest.raises(ClientError):  # and starting gives up after a few tries
         invoke_agent(Runtime([starting] * 9), sleep=lambda s: None)
+
+
+def test_signed_in_users_get_in_and_only_admins_open_the_admin_routes():
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from askwri.api.auth import Caller
+    from askwri.api.server import Handler
+
+    class FakeVerifier:
+        def caller(self, token):
+            return {"admin": Caller("a", admin=True), "user": Caller("u", admin=False)}.get(token)
+
+    class FakeApi:
+        origins = frozenset()
+        api_key = "k1"
+        verifier = FakeVerifier()
+
+    Handler.api = FakeApi()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def status(headers):
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        connection.request("GET", "/admin/overview?window=bad", headers=headers)
+        response = connection.getresponse()
+        response.read()
+        return response.status
+
+    try:
+        assert status({}) == 401
+        assert status({"Authorization": "Bearer forged"}) == 401
+        assert status({"X-AskWRI-Key": "wrong"}) == 401
+        assert status({"Authorization": "Bearer user"}) == 403
+        # Admins and the service key get past the check to the route (400: bad window).
+        assert status({"Authorization": "Bearer admin"}) == 400
+        assert status({"X-AskWRI-Key": "k1"}) == 400
+    finally:
+        server.shutdown()

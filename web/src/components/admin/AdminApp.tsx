@@ -24,6 +24,7 @@ import {
   type Window,
 } from "@/lib/admin";
 
+import { SignOut } from "../SignOut";
 import { ReviewPanel } from "./ReviewPanel";
 
 type TileProps = { label: string; value: string; target?: string; status?: Status; source: "Last run" | "Live" | "Estimated"; note?: string };
@@ -128,12 +129,12 @@ export function AdminApp() {
           <span className="aw-logo-mark">WRI</span>AskWRI <small>admin</small>
         </a>
         <span className="spacer" />
-        <span className="ad-demo">Demo only: access control is Phase 2</span>
+        <SignOut />
       </header>
 
       <main className="ad-main">
         {adminMock && <p className="ad-banner warn">Layout preview: no API URL is set, so these are placeholder numbers, not results.</p>}
-        {error && <p className="ad-banner bad">Couldn&apos;t load the admin numbers: {error}. The /admin API routes may not be deployed yet.</p>}
+        {error && <p className="ad-banner bad">Couldn&apos;t load the admin numbers: {error}.</p>}
 
         <div className="ad-filters">
           <label>Traffic{" "}

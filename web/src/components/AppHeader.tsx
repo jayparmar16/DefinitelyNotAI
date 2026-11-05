@@ -1,10 +1,11 @@
 "use client";
 
-/** The dark header band: mark, audience (Auto by default), language, Download, New chat. */
+/** The dark header band: mark, audience (Auto by default), language, Download, New chat, sign-out. */
 
 import type { Audience } from "@/lib/agent";
 import { Icon } from "./Icon";
 import { Menu } from "./Menu";
+import { SignOut } from "./SignOut";
 
 export const LANGUAGES = [
   { code: "en", name: "English" },
@@ -125,6 +126,7 @@ export function AppHeader(props: AppHeaderProps) {
       <button className="aw-btn on-dark icon" onClick={props.onNewChat} title="New chat">
         <Icon name="plus" small label="New chat" />
       </button>
+      <SignOut />
     </header>
   );
 }

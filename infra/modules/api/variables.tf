@@ -27,3 +27,8 @@ variable "web_adapter_layer_arn" {
   description = "AWS Lambda Web Adapter layer (arm64), which enables response streaming for Python."
   type        = string
 }
+
+variable "user_pool_client_id" {
+  description = "The UI's Cognito app client; askwri-api accepts its users' access tokens."
+  type        = string
+}

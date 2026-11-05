@@ -199,7 +199,7 @@ export const usingMock = !apiUrl;
 export async function getAgent(): Promise<AgentClient> {
   if (apiUrl) {
     const { httpAgent } = await import("./httpAgent.ts");
-    return httpAgent(apiUrl, process.env.NEXT_PUBLIC_ASKWRI_API_KEY ?? "");
+    return httpAgent(apiUrl);
   }
   const { mockAgent } = await import("../mock/mockAgent.ts");
   return mockAgent;

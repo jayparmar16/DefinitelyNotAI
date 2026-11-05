@@ -21,6 +21,11 @@ module "web" {
   account_id = var.team_account_id
 }
 
+module "users" {
+  source  = "./modules/users"
+  origins = local.allowed_origins
+}
+
 module "storage" {
   source          = "./modules/storage"
   account_id      = var.team_account_id
@@ -95,6 +100,7 @@ module "api" {
   allowed_origins       = local.allowed_origins
   max_concurrency       = var.api_max_concurrency
   web_adapter_layer_arn = var.web_adapter_layer_arn
+  user_pool_client_id   = module.users.client_id
 }
 
 module "evaluation" {

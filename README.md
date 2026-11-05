@@ -368,14 +368,30 @@ security headers). After `terraform apply`, publish a build with:
 AWS_PROFILE=<team profile> scripts/deploy-web.sh   # prints the URL (terraform output web_url)
 ```
 
-The API key is baked into the static bundle, so it is a speed bump, not access control.
+**Sign-in.** The hosted UI is invite-only: people sign in on Cognito's managed login page
+(user pool `askwri-users`, authorization code with PKCE) and the UI sends their access token to
+askwri-api, which checks it with Cognito. The shared API key is no longer in the bundle; servers
+(the evaluation runner) still send it. Add a person, and make them an admin:
+
+```sh
+POOL=$(terraform -chdir=infra output -raw user_pool_id)
+aws cognito-idp admin-create-user --user-pool-id "$POOL" --username person@example.org \
+  --user-attributes Name=email,Value=person@example.org Name=email_verified,Value=true
+aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL" --username person@example.org \
+  --group-name askwri-admins   # admins only
+```
+
+Cognito emails a temporary password; the first sign-in sets a new one. Locally (`npm run dev`)
+there is no sign-in: without `NEXT_PUBLIC_ASKWRI_AUTH_DOMAIN` the UI sends
+`NEXT_PUBLIC_ASKWRI_API_KEY` as before. The static files themselves are public; every answer,
+PDF link and admin number needs a signed-in user.
 
 **Admin page (`/admin/`).** The latest evaluation run next to live numbers: what WRI asked us
 to show (claims cited, recall@5, precision@5, unanswerable questions declined, time to a
 useful source), what questions cost (estimated from tokens), and whether quality holds. The API
 logs every question to the DynamoDB table `askwri-query-log` (kept 90 days) and serves
 `GET /admin/overview?source=user|eval&window=24h|7d|30d` and `GET /admin/review?id=<id>`.
-Demo only: anyone with the URL can open it until access control is added. Set
+Only members of the `askwri-admins` group can open it. Set
 `NEXT_PUBLIC_TRACE_URL_TEMPLATE` (with `{session}`) to link each question to its trace.
 
 ## The rules

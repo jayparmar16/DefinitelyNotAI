@@ -492,7 +492,6 @@ a.aw-btn{text-decoration:none}
 /* ---- Admin page ---- */
 .ad-app{min-height:100vh;background:var(--surface-sunken)}
 .ad-app .aw-header{height:var(--header-height)}
-.ad-demo{font-size:12px;line-height:16px;padding:2px var(--space-200);border-radius:var(--radius-900);background:var(--warning-100);color:var(--warning-900);font-weight:600;white-space:nowrap}
 .ad-main{max-width:1120px;margin:0 auto;padding:var(--space-600) var(--space-400) var(--space-1200);display:flex;flex-direction:column;gap:var(--space-600)}
 .ad-banner{margin:0;padding:var(--space-200) var(--space-300);border-radius:var(--radius-500);font-size:14px}
 .ad-banner.warn{background:var(--warning-100);color:var(--warning-900)}
@@ -539,4 +538,13 @@ a.aw-btn{text-decoration:none}
 .ad-review-body{overflow:auto;padding:var(--space-400);display:flex;flex-direction:column;gap:var(--space-200);font-size:14px;line-height:20px}
 .ad-review-body p{margin:0}
 .ad-review-actions{display:flex;gap:var(--space-200);align-items:center;flex-wrap:wrap;margin-top:var(--space-300)}
-@media (max-width:600px){.ad-app .aw-header{padding:0 var(--space-400)}.ad-demo{white-space:normal}}
+@media (max-width:600px){.ad-app .aw-header{padding:0 var(--space-400)}}
+
+/* ---- Sign-in ---- */
+.aw-signout{display:inline-flex;align-items:center;gap:var(--space-200)}
+.aw-signout-email{font-size:12px;color:var(--neutral-400);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aw-signout a.aw-btn{text-decoration:none}
+@media (max-width:900px){.aw-signout-email{display:none}}
+.ad-signin{min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:var(--space-400);background:var(--surface-sunken)}
+.ad-signin-card{width:min(100%,400px);background:var(--surface);border:var(--border-thin) solid var(--line);border-radius:var(--radius-700);padding:var(--space-800);display:flex;flex-direction:column;gap:var(--space-400);align-items:flex-start}
+.ad-signin-card p{margin:0}

@@ -2,8 +2,10 @@
 GET /ping. /warm starts a session's agent runtime while the user is still typing.
 
 Environment: ASKWRI_RUNTIME_ARN (the agent), ASKWRI_CORPUS_BUCKET (stored PDFs),
-ASKWRI_ALLOWED_ORIGINS (comma-separated browser origins for CORS), ASKWRI_API_KEY_SECRET
-(optional: when set, requests must send its value in the X-AskWRI-Key header), PORT (8080).
+ASKWRI_ALLOWED_ORIGINS (comma-separated browser origins for CORS), ASKWRI_API_KEY_SECRET (the
+shared key servers send as X-AskWRI-Key), ASKWRI_USER_POOL_CLIENT_ID (the UI's Cognito app client:
+users send its access token as Authorization: Bearer), PORT (8080). With neither set, every
+request is allowed (local runs). The /admin routes need the askwri-admins group.
 """
 
 import hmac
@@ -20,6 +22,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from askwri.api import ops
+from askwri.api.auth import LOCAL, SERVICE, Caller, Verifier
 
 DOWNLOAD_SECONDS = 300  # the design's 5-minute presigned link
 SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{33,100}$")  # AgentCore runtime session IDs: 33+ chars
@@ -150,6 +153,8 @@ class Api:
             if secret
             else None
         )
+        client_id = os.environ.get("ASKWRI_USER_POOL_CLIENT_ID")
+        self.verifier = Verifier(boto3.client("cognito-idp"), client_id) if client_id else None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -173,17 +178,33 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _authorized(self) -> bool:
-        if key_matches(self.api.api_key, self.headers.get("X-AskWRI-Key")):
-            return True
-        self._json(401, {"error": "missing or wrong X-AskWRI-Key"})
-        return False
+    def _caller(self) -> Caller | None:
+        if self.api.api_key is None and self.api.verifier is None:
+            return LOCAL
+        if self.api.api_key and key_matches(self.api.api_key, self.headers.get("X-AskWRI-Key")):
+            return SERVICE
+        bearer = self.headers.get("Authorization", "")
+        if self.api.verifier and bearer.startswith("Bearer "):
+            return self.api.verifier.caller(bearer.removeprefix("Bearer "))
+        return None
+
+    def _authorized(self, admin: bool = False) -> bool:
+        caller = self._caller()
+        if caller is None:
+            self._json(401, {"error": "sign in to use AskWRI"})
+            return False
+        if admin and not caller.admin:
+            self._json(403, {"error": "the admin page needs the askwri-admins group"})
+            return False
+        return True
 
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-AskWRI-Key")
+        self.send_header(
+            "Access-Control-Allow-Headers", "Authorization, Content-Type, X-AskWRI-Key"
+        )
         self.send_header("Access-Control-Max-Age", "600")
         self.end_headers()
 
@@ -195,7 +216,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path not in ("/sources/download", "/admin/overview", "/admin/review"):
             self._json(404, {"error": "not found"})
             return
-        if not self._authorized():
+        if not self._authorized(admin=url.path.startswith("/admin/")):
             return
         if url.path.startswith("/admin/"):
             self._admin(url)

@@ -140,6 +140,7 @@ resource "aws_lambda_function" "api" {
       ASKWRI_CORPUS_BUCKET         = var.corpus_bucket
       ASKWRI_ALLOWED_ORIGINS       = join(",", var.allowed_origins)
       ASKWRI_API_KEY_SECRET        = aws_secretsmanager_secret.api_key.name
+      ASKWRI_USER_POOL_CLIENT_ID   = var.user_pool_client_id
       ASKWRI_QUERY_LOG_TABLE       = aws_dynamodb_table.query_log.name
     }
   }
