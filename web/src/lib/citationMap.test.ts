@@ -112,3 +112,19 @@ test("an older report updated by a newer one is flagged, and links export as CSV
   assert.equal(csv[0], "citing report,citing year,relation,cited report,cited year,what it uses,page,sentence");
   assert.equal(csv[1], 'new,2025,updates,old,2018,,3,"Revises ""2018"" figures, page 4"');
 });
+
+test("a report filed twice is one card, and links between its copies are dropped", () => {
+  const twin = (docId: string) => ({ ...point(docId, 2025), title: "Strengthening the Investment Case" });
+  const timeline = { points: [twin("s1"), twin("s2"), point("r", 2026)], undated: [], newest: "r", caption: "" };
+  const flow = flowOf({ r: cites("r", 2026, ["s1", "s2"]), s2: cites("s2", 2025, ["s1"]) });
+  const map = citationMap(timeline, flow);
+  assert.deepEqual(map.nodes.map((n) => n.docId).sort(), ["r", "s1"]);
+  assert.deepEqual(map.edges.map((e) => `${e.from}>${e.to}`), ["s1>r"]);
+});
+
+test("reference-list mentions are hidden unless asked for", () => {
+  const timeline = { points: [point("a", 2020), point("b", 2022)], undated: [], newest: "b", caption: "" };
+  const flow = flowOf({ b: { ...cites("b", 2022, []), cites: [{ ...link("a"), relation: "background" }] } });
+  assert.equal(citationMap(timeline, flow).edges.length, 0);
+  assert.equal(citationMap(timeline, flow, { mentions: true }).edges.length, 1);
+});

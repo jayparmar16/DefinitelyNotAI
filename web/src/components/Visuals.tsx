@@ -118,16 +118,17 @@ type MapProps = {
   timeline: Timeline;
   flow?: CitationFlow;
   onOpenPage: (link: FlowLink) => void;
-  full?: boolean; // in the popup: fits the window, with an actual-size toggle to zoom in
+  full?: boolean; // in the popup: actual size by default, with a fit-to-window toggle
 };
 
 /** The citation map as a family tree: a generation per year, elbow connectors from each report
  * down to the later reports that build on it, and undated reports listed under the tree. */
 function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
-  const [actual, setActual] = useState(false);
+  const [actual, setActual] = useState(true);
   const [beyond, setBeyond] = useState(false);
   const [linkedOnly, setLinkedOnly] = useState(false);
-  const map = citationMap(timeline, flow, { beyond, linkedOnly });
+  const [mentions, setMentions] = useState(false);
+  const map = citationMap(timeline, flow, { beyond, linkedOnly, mentions });
   const linked = new Set(map.links.flatMap((e) => [e.from, e.to]));
   const [picked, setPicked] = useState<string | null>(map.edges[0]?.to ?? map.links[0]?.to ?? timeline.newest);
   const titles = new Map([...map.nodes, ...map.undated].map((n) => [n.docId, n.title]));
@@ -150,6 +151,9 @@ function CitationMapView({ timeline, flow, onOpenPage, full }: MapProps) {
       <div className="aw-map-tools" role="group" aria-label="Citation map options">
         <label><input type="checkbox" checked={beyond} onChange={(e) => setBeyond(e.target.checked)} /> Reports beyond the answer</label>
         <label><input type="checkbox" checked={linkedOnly} onChange={(e) => setLinkedOnly(e.target.checked)} /> Only linked reports</label>
+        <label title="Reports only listed in another's references, without building on it">
+          <input type="checkbox" checked={mentions} onChange={(e) => setMentions(e.target.checked)} /> Show mentions too
+        </label>
         {map.links.length > 0 && (
           <button type="button" className="aw-btn sm" onClick={downloadCsv}>Download links (CSV)</button>
         )}

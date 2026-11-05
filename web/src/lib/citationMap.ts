@@ -205,7 +205,11 @@ function edgePaths(nodes: MapNode[], edges: MapEdge[], width: number): Record<st
 export type MapOptions = {
   beyond?: boolean; // add reports beyond the answer that its reports cite or are cited by
   linkedOnly?: boolean; // leave out reports with no citation link on the map
+  mentions?: boolean; // keep "background" links: a report only listed in another's references
 };
+
+// The same report is sometimes filed twice (two folders, two doc IDs): one card by title.
+const titleKey = (title: string) => title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
 const MAX_BEYOND = 12;
 
@@ -230,10 +234,30 @@ export function beyondPoints(timeline: Timeline, flow: CitationFlow | undefined)
 }
 
 export function citationMap(timeline: Timeline, flow: CitationFlow | undefined, options: MapOptions = {}): CitationMap {
-  let points: MapPoint[] = [...timeline.points, ...timeline.undated, ...(options.beyond ? beyondPoints(timeline, flow) : [])];
-  const everyLink = mapEdges(flow);
+  const all: MapPoint[] = [...timeline.points, ...timeline.undated, ...(options.beyond ? beyondPoints(timeline, flow) : [])];
+  // One card per report: a second copy's links move to the first, its own card goes.
+  const first = new Map<string, MapPoint>();
+  const alias = new Map<string, string>();
+  for (const point of all) {
+    const kept = first.get(titleKey(point.title));
+    if (kept) {
+      alias.set(point.docId, kept.docId);
+      kept.citedInAnswer ||= point.citedInAnswer;
+      kept.citedBy = Math.max(kept.citedBy, point.citedBy);
+    } else {
+      first.set(titleKey(point.title), { ...point });
+    }
+  }
+  let points = [...first.values()];
+  const id = (docId: string) => alias.get(docId) ?? docId;
   const present = new Set(points.map((p) => p.docId));
-  const links = everyLink.filter((e) => present.has(e.from) && present.has(e.to));
+  const unique = new Map<string, MapEdge>();
+  for (const e of mapEdges(flow)) {
+    const edge = { ...e, from: id(e.from), to: id(e.to) };
+    if (edge.from === edge.to || (!options.mentions && edge.relation === "background")) continue;
+    if (present.has(edge.from) && present.has(edge.to)) unique.set(`${edge.from}>${edge.to}`, unique.get(`${edge.from}>${edge.to}`) ?? edge);
+  }
+  const links = [...unique.values()];
   if (options.linkedOnly) {
     const linkedIds = new Set(links.flatMap((e) => [e.from, e.to]));
     points = points.filter((p) => linkedIds.has(p.docId));
