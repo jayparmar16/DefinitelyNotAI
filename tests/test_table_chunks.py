@@ -1,6 +1,7 @@
 """Table chunks, driven through synthetic PDFs with ruled tables and the fake model client."""
 
 import json
+import threading
 from pathlib import Path
 
 import pymupdf
@@ -9,14 +10,14 @@ import pytest
 from askwri.ingest.document import ingest_document
 from askwri.ingest.pdf import has_garbled_word
 from askwri.models import MODELS, ModelError
-from tests.fake_claude import FakeClaude
+from tests.fake_claude import NO_ENRICHMENT, FakeClaude
 
 PARAGRAPH = (
     "Forests store large amounts of carbon and support the livelihoods of many communities. "
     "Protecting them requires secure land rights, transparent monitoring and finance that "
     "reaches local groups. "
 )
-# A document with no wri.org page is also labelled by the model, after its tables are described.
+# A document with no wri.org page is labelled by the model before its tables are described.
 LABELS = json.dumps(
     {
         "title": "Forest Cover",
@@ -151,15 +152,29 @@ def report_with_long_table(path: Path, caption: str = "Table 1 | Forest cover by
 
 
 class SummaryClaude(FakeClaude):
-    """Answers the labels request (the one asking for JSON) with LABELS, any other with a summary."""
+    """Answers the labels request with LABELS, the enrichment request with NO_ENRICHMENT and
+    any other with a summary. Locked, because table summaries are requested from threads."""
 
     def __init__(self, summary: str = "A table."):
         super().__init__()
         self.summary = summary
+        self.lock = threading.Lock()
 
     def _create(self, **request):
-        self.replies = [LABELS if "output_config" in request else self.summary]
-        return super()._create(**request)
+        with self.lock:
+            self.replies = [_canned_reply(request, self.summary)]
+            return super()._create(**request)
+
+
+def _canned_reply(request: dict, summary: str) -> str:
+    schema = request.get("output_config", {}).get("format", {}).get("schema")
+    if schema is None:
+        return summary
+    return NO_ENRICHMENT if "coverage" in schema["properties"] else LABELS
+
+
+def is_table_summary(request: dict) -> bool:
+    return "format" not in request.get("output_config", {})
 
 
 def ingest(path: Path):
@@ -296,11 +311,13 @@ def test_description_is_for_search_only(tables_pdf):
     assert table.description == "Forest cover by country in 2020."
     assert "Forest cover by country in 2020." not in table.text
     assert table.indexed_text.startswith(
-        "Forest Cover › Findings\n\nForest cover by country in 2020.\n\n"
+        "Forest Cover › Findings\n\n2025 · Forests\n\nForest cover by country in 2020.\n\n"
     )
     assert all(c.description == "" for c in result.chunks if c.kind == "source_text")
-    assert len(client.requests) == sum(c.kind == "table" for c in result.chunks) + 1
-    request = client.requests[0]
+    summaries = [request for request in client.requests if is_table_summary(request)]
+    assert len(summaries) == sum(c.kind == "table" for c in result.chunks)
+    assert len(client.requests) == len(summaries) + 2  # plus the labels and the enrichment
+    request = next(r for r in summaries if "|Country 3|10.5|6.3|-1.2|" in str(r["messages"]))
     assert request["model"] == MODELS["labeler"]
     assert "|Country 3|10.5|6.3|-1.2|" in request["messages"][0]["content"][0]["text"]
 

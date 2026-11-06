@@ -5,6 +5,7 @@ Usage: `uv run python db/query.py "SELECT count(*) FROM documents"`. See docs/qu
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -14,7 +15,8 @@ from botocore.exceptions import ClientError
 
 CLUSTER = "askwri-db"
 SECRET = "askwri/db"
-DATABASE = "askwri"
+# ASKWRI_DATABASE picks another database in the cluster, e.g. for an experiment beside the demo.
+DATABASE = os.environ.get("ASKWRI_DATABASE", "askwri")
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 # A paused Serverless v2 cluster refuses requests until it resumes (15 s or more).
 RESUME_ATTEMPTS = 7

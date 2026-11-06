@@ -11,10 +11,26 @@ module "network" {
   vpc_cidr = var.vpc_cidr
 }
 
+# The hosted UI's origin joins the configured ones (localhost for development).
+locals {
+  allowed_origins = concat(var.allowed_origins, [module.web.origin])
+}
+
+module "web" {
+  source     = "./modules/web"
+  account_id = var.team_account_id
+}
+
+module "users" {
+  source  = "./modules/users"
+  origins = local.allowed_origins
+}
+
 module "storage" {
-  source       = "./modules/storage"
-  account_id   = var.team_account_id
-  deployer_arn = data.aws_iam_session_context.deployer.issuer_arn
+  source          = "./modules/storage"
+  account_id      = var.team_account_id
+  deployer_arn    = data.aws_iam_session_context.deployer.issuer_arn
+  allowed_origins = local.allowed_origins
 }
 
 module "database" {
@@ -36,4 +52,61 @@ resource "aws_resourcegroups_group" "askwri" {
       TagFilters          = [{ Key = "Project", Values = ["AskWRI"] }]
     })
   }
+}
+
+module "tools" {
+  source                 = "./modules/tools"
+  region                 = var.region
+  account_id             = var.team_account_id
+  package_path           = "${path.root}/../build/tools.zip"
+  subnet_ids             = module.network.app_subnet_ids
+  security_group_id      = module.network.lambda_security_group_id
+  db_host                = module.database.endpoint
+  db_name                = module.database.database_name
+  db_cluster_resource_id = module.database.cluster_resource_id
+  embedding_model_id     = var.embedding_model_id
+  rerank_model_id        = var.rerank_model_id
+  translate_model_id     = var.small_model_id
+}
+
+module "gateway" {
+  source             = "./modules/gateway"
+  region             = var.region
+  account_id         = var.team_account_id
+  tool_function_arns = module.tools.function_arns
+}
+
+module "agent" {
+  source              = "./modules/agent"
+  region              = var.region
+  account_id          = var.team_account_id
+  package_path        = "${path.root}/../build/agent.zip"
+  gateway_url         = module.gateway.gateway_url
+  gateway_secret_name = module.gateway.gateway_client_secret_name
+  gateway_secret_arn  = module.gateway.gateway_client_secret_arn
+  small_model_id      = var.small_model_id
+  large_model_id      = var.large_model_id
+  relevance_threshold = var.relevance_threshold
+  quick_max_rounds    = var.quick_max_rounds
+  deep_max_rounds     = var.deep_max_rounds
+  grounding_threshold = var.grounding_threshold
+}
+
+module "api" {
+  source                = "./modules/api"
+  package_path          = "${path.root}/../build/api.zip"
+  runtime_arn           = module.agent.runtime_arn
+  corpus_bucket         = module.storage.corpus_bucket
+  allowed_origins       = local.allowed_origins
+  max_concurrency       = var.api_max_concurrency
+  web_adapter_layer_arn = var.web_adapter_layer_arn
+  user_pool_client_id   = module.users.client_id
+}
+
+module "evaluation" {
+  source                          = "./modules/evaluation"
+  region                          = var.region
+  account_id                      = var.team_account_id
+  agent_runtime_id                = module.agent.runtime_id
+  online_eval_sampling_percentage = var.online_eval_sampling_percentage
 }

@@ -1,0 +1,370 @@
+ASKWRI - DATA INGESTION AND EXPECTED Q&A
+=========================================
+Part 1 explains what data AskWRI uses and how it was prepared. Part 2 explains, briefly, what
+happens when someone asks a question. Part 3 lists questions a panel is likely to ask, with
+short answers you can give. All numbers are from the system as it runs now (November 2026).
+
+
+=====================================================================
+PART 1 - THE DATA AND HOW IT WAS LOADED
+=====================================================================
+
+WHAT WENT IN
+- WRI's publication folders for 2024, 2025 and 2026 (711 PDFs), plus 16 older WRI reports
+  (before 2019): 727 PDFs in total.
+- After sorting, 580 publications were kept. 147 were set aside: duplicate copies, older
+  versions of the same report, and non-English files (English versions are kept; answers can
+  still be given in Spanish, Portuguese or Bahasa Indonesia).
+- 577 of the 580 loaded successfully. 3 were skipped and logged: a pitch deck whose image the
+  model service rejected, and two US tax forms (Form 990) that failed the quality check.
+- 365 of them are research publications (reports, working papers, technical notes, issue briefs
+  and so on). These are what AskWRI searches by default. Calls for proposals, newsletters and
+  dataset documentation are searched only when someone chooses that type in Filters.
+
+WHAT CAME OUT (the searchable library)
+- 28,104 text passages, each tied to its publication, its PDF page and its printed page number.
+- 3,463 tables, kept as tables and given a short summary so they can be found by meaning.
+- 2,289 pictures described in words: 945 charts and 1,344 images, maps and diagrams.
+- 4,726 passages marked as "supporting material" (references, contents, endnotes,
+  acknowledgements, "about WRI") so they are never used as evidence in an answer.
+- Rich labels for each publication: a year for 573 of 579 (was 232 before this work), WRI's own
+  abstract for 186, WRI initiatives and programmes for 166, topics for 559, finer concepts for
+  538, countries and regions for 528, key findings for 502, and a genre for every one.
+- 2,824 citation links between WRI publications (which report cites which). 234 of them are
+  meaningful relationships - uses data or method, extends, supports, updates, contrasts; the
+  rest are simple mentions in a reference list.
+
+THE PIPELINE, STEP BY STEP (built by Jay; one command runs all of it)
+ 1. Sort.        Find duplicates, older versions and non-English files; guess each document's
+                 type (report, working paper, RFP...) from its name and first pages.
+ 2. Read.        Open each PDF with a layout-aware reader (PyMuPDF) that keeps headings,
+                 paragraphs, tables and reading order.
+ 3. Cut.         Split the text into passages that stay inside one section and a sensible
+                 length, each with a stable ID. Tables are cut by rows, keeping their headers.
+ 4. Page numbers. Record both the PDF page and the number printed on the page, so a citation
+                 says "p. 12" the way a reader sees it.
+ 5. Pictures.    Skip logos and tiny icons; a model drops purely decorative photos; every
+                 informative chart, map or diagram is described in words by a vision model
+                 (Claude Sonnet 5.5), together with its caption and figure number, and saved
+                 as an image. The description is for searching only - it is never quoted.
+ 6. Quality check ("audit"). Every passage is checked against the PDF's own text: words that
+                 aren't on the page fail the document. A passage the reader re-ordered (for
+                 example text around a diagram) is marked "cite by page, don't quote".
+ 7. Labels.      Look up the document on wri.org by its DOI or title and take WRI's own title,
+                 date, topic, abstract and initiatives. Where there is no wri.org page, a small
+                 model (Claude Haiku 5.5) reads the first pages and fills them in. If there is no
+                 date at all, the year comes from the folder it was filed in.
+ 8. Enrichment.  The same model adds up to two topics (from WRI's 11), concepts (from a fixed
+                 list of about 110), keywords, countries and regions, 3-5 key findings, a genre,
+                 and the years the data covers. Acronyms the document defines are found by rule.
+ 9. Supporting material. References, contents pages and similar sections are marked so search
+                 skips them.
+10. Table summaries. A short summary of each table, so "which tables show forest cover by
+                 country?" can find a table that is only numbers.
+11. Document card. Title, abstract, labels and findings combined into one searchable card.
+12. Embeddings.  Every passage (and each card) is turned into a vector with Cohere Embed v4
+                 (multilingual, 1,024 dimensions) on Amazon Bedrock.
+13. Load.        Each document is written to Aurora PostgreSQL (with the pgvector extension) in
+                 one transaction - all of a document or none of it. PDFs and chart images go to
+                 a private S3 bucket. The load can be stopped and resumed, and model answers are
+                 cached, so a re-run never pays twice.
+14. Citation links (after loading). Find where one WRI report mentions another by DOI, web
+                 address or title, and have a small model label the relationship.
+
+WHERE IT LIVES (all in the team's AWS account, us-west-2)
+- Amazon S3: the original PDFs and the chart images (private, encrypted).
+- Amazon Aurora PostgreSQL Serverless v2 + pgvector: passages, labels, vectors, citation links.
+  Read and written through the RDS Data API, so nothing needs network access to the database.
+- Amazon Bedrock: Claude Sonnet 5.5 (pictures, answers), Claude Haiku (labels, checks),
+  Cohere Embed v4 (vectors), Amazon Rerank (ordering results), Bedrock Guardrails (grounding).
+
+
+=====================================================================
+PART 2 - WHAT HAPPENS WHEN SOMEONE ASKS A QUESTION
+=====================================================================
+ 1. The agent (on Amazon Bedrock AgentCore Runtime) reads the question - and, in a follow-up,
+    the conversation so far (AgentCore Memory).
+ 2. It decides what to search. Deep research splits the question into 2-4 sub-questions and
+    searches them in parallel.
+ 3. Search (a tool behind AgentCore Gateway) runs two searches at once - by meaning (vectors)
+    and by keywords - merges them, keeps at most 6 passages per publication, skips supporting
+    material, applies any year, topic space, region or type filter, and reranks the best ~30
+    with Amazon Rerank. "Published in 2025" in a question becomes a year filter automatically.
+ 4. If the evidence is weak, it rewrites the search and tries again; a quick answer widens to
+    a Deep-research-style search before ever declining.
+ 5. Claude Sonnet 5.5 drafts the answer, citing passages by ID, written for the reader it
+    infers (researcher, policymaker or partnerships).
+ 6. Every claim is checked twice: a claim-by-claim check against its own passages, then Bedrock
+    Guardrails' contextual grounding check. Unsupported sentences are removed.
+ 7. If nothing survives, it declines and shows what it searched and the closest WRI work.
+ 8. The answer (and its summary) is translated if asked, with every number checked to survive.
+ 9. The API streams the steps to the browser as they happen, and logs cost and timing for the
+    admin page.
+
+
+=====================================================================
+PART 2b - THE EVALUATION SET (what the admin page's scorecard is based on)
+=====================================================================
+
+WHAT IT IS
+A fixed set of 30 test questions about WRI's own reports, each with a known correct answer.
+Whenever AskWRI changes, all 30 are run through the live system and scored. The admin page's
+"Quality scorecard" shows the latest run; the run is labelled with its ID and date.
+
+HOW IT WAS BUILT - working backwards from WRI's reports
+ 1. Pick a real passage from a WRI research publication (reference lists and contents pages
+    excluded).
+ 2. Have a model write the question that passage answers.
+ 3. Record the expected answer: which report and which PDF page it should cite, the key facts
+    the answer must contain, who is asking (researcher, policymaker or partnerships), and the
+    language.
+ The three "unanswerable" questions are written by hand: things WRI has never published on.
+ A person reviews the questions; WRI's own questions can be added in the same format.
+ (One was replaced on Nov 5: "nuclear power plant safety" became answerable once the full
+ collection was loaded - it now mentions nuclear safety standards.)
+
+WHAT'S IN IT (30 questions)
+  Factual ................. 8   e.g. "What is the projected additional cost per passenger for a
+                                 cross-country flight if the 2035 sustainable aviation fuel
+                                 requirement is met...?" (must say "$20 per passenger")
+  Methods ................. 4   how a study was done
+  Decisions (policymaker) . 5   e.g. "Given that 35 percent of marine fish stocks were overfished
+                                 as of 2019 ... what should ...?"
+  Partnerships ............ 3   e.g. "Can you pull together the key talking points about why we
+                                 need to invest in wildfire resilience...?"
+  Older reports ........... 2   e.g. "What percentage target should be set for native species
+                                 planting according to restoration guidelines?" (pre-2019)
+  Other languages ......... 3   asked in Spanish, French and Portuguese
+                                 (e.g. flood and heat risk in Kochi, in Spanish)
+  Synthesis (Deep) ........ 2   e.g. "What financing mechanisms could help scale nature-based
+                                 solutions...?"
+  Unanswerable ............ 3   e.g. "How did WRI rank the world's best football stadiums for
+                                 energy efficiency?" (must decline)
+
+WHAT IS MEASURED, AND WHERE IT SHOWS ON THE ADMIN PAGE
+ Quality scorecard (from the latest evaluation run, 20261105-050756)
+   Citation coverage ...... answers where every figure is cited ................ 100%  (target 100%)
+   Retrieval recall@5 ..... the expected report is in the top 5 found ........... 92%  (target >= 75%)
+   Retrieval precision@5 .. how many of the top 5 are relevant .................. 67%  (monitored)
+   Abstention accuracy .... unanswerable questions correctly declined ........ 3 of 3  (target all)
+   Median latency ......... time to a cited answer, Quick / Deep (from live use) ~13-20 s (< 1 min)
+ Model-graded quality - AgentCore Evaluations (Amazon's built-in judge models grade all 30)
+   Response relevance 0.97 · Correctness 0.88 · Faithfulness 0.82 · Helpfulness 0.72
+ Also recorded per run (in the results file): page match, must-include facts found, claims kept
+ after verification (90%), reader inferred correctly (96%), language correct (100%), cost.
+
+THE OTHER ADMIN SECTIONS (live, not from the test set)
+ Every real question is logged: time taken, estimated cost, tokens, claims removed by
+ verification, and whether it declined. That feeds "Cost and usage" and "Live quality signals".
+ The Traffic switch separates real users from evaluation runs; Window picks 24 h, 7 or 30 days.
+ Click any of the "Highest-cost requests" to review that question: its answer, the claims that
+ were removed, and the sources.
+
+ONE-LINE VERSION
+"We test AskWRI on 30 questions built from WRI's own reports, each with a known answer - the
+ right report, the right page, the facts it must contain, and some it must refuse. Every change
+ is re-run and scored against WRI's targets, and AgentCore's independent judges grade every
+ answer. That's this scorecard."
+
+
+=====================================================================
+PART 3 - EXPECTED QUESTIONS AND SUGGESTED ANSWERS
+=====================================================================
+
+TRUST AND ACCURACY
+Q: How do you stop it making things up?
+A: Three ways. It may only use WRI passages it retrieved. Every claim is then checked against
+   its own passage, and again by Bedrock Guardrails' grounding check - anything unsupported is
+   removed before you see it. And if the evidence isn't there, it declines rather than guess.
+
+Q: How accurate is it? How do you know?
+A: We evaluate it on a 30-question test set built from WRI's reports: the right source is in
+   the top five results 92% of the time (target 75%), every answer has its figures cited, and
+   every question WRI's research can't answer was declined (3 of 3). Independent model graders
+   in AgentCore Evaluations score relevance 0.97, correctness 0.88, faithfulness 0.82. It's all
+   on the admin page.
+
+Q: What is the evaluation set? Isn't 30 questions small?
+A: 30 questions built backwards from real WRI passages - each with the report and page it must
+   cite, the facts it must contain, the reader and the language - plus three it must refuse
+   (see Part 2b). It's a seed set: the format is ready for WRI's own questions, and a teammate
+   is adding feature checks (topic spaces, charts, fact-check, languages).
+
+Q: Aren't the questions biased toward your system?
+A: They're written from WRI's text, not from AskWRI's answers, and reviewed by a person. The
+   unanswerable ones are hand-written to catch guessing. And the AgentCore judges are
+   independent of our own scoring.
+
+Q: What happens when WRI hasn't published anything on a question?
+A: It says so, shows what it searched and the closest related WRI work. It also declines
+   questions that assume something WRI never concluded.
+
+Q: Can it be wrong?
+A: Yes - which is why every claim links to the exact page. The checks catch unsupported claims,
+   but a reader should still open the cited page for anything important. The answer says how
+   many claims were verified, and shows any it removed.
+
+Q: What about charts - can it misread them?
+A: Chart descriptions are used to FIND the chart, never quoted as evidence. Claims are cited to
+   the page, so the reader sees the chart itself.
+
+THE DATA
+Q: Which publications are included? How current is it?
+A: 580 WRI publications from 2014 to 2026, loaded from WRI's 2024-2026 folders plus older
+   reports. It's a snapshot - new publications are added by re-running the loader, which only
+   processes new or changed files.
+
+Q: How do you add new reports?
+A: Drop the PDFs in the folder and run one command. It skips anything already loaded and
+   resumes if interrupted. Each document is added in one step, so the live system is never
+   half-updated.
+
+Q: Why do some publications have no year or no abstract?
+A: Year comes from wri.org, then the document itself, then the folder; 573 of 579 have one.
+   Abstracts come only from wri.org pages, which about a third of the documents have.
+
+Q: Why do only some reports show their authors?
+A: Author names come from each report's page on wri.org, which we matched for 187 of the 579
+   publications. For the rest the panel simply leaves the authors out rather than guess. Reading
+   authors from each PDF's cover pages is a straightforward next step.
+
+Q: Is it only English?
+A: The library is English publications, but you can ask and get answers in Spanish, Portuguese
+   or Bahasa Indonesia - the citations stay in the original language so they remain exact.
+
+Q: What about confidential or internal documents?
+A: This demo uses public WRI publications only. The design keeps everything in WRI's own AWS
+   account; adding internal documents would mean adding access rules per user.
+
+ARCHITECTURE AND AWS
+Q: Why not just use Bedrock Knowledge Bases?
+A: We needed control over every step: page-exact citations, skipping reference lists, keeping
+   tables and charts searchable, filters like topic spaces and "published in 2025", and a
+   per-document cap so one report can't fill every result. Our own search on Aurora + pgvector
+   with Amazon Rerank gives us that.
+
+Q: Which AWS services does it use?
+A: Bedrock (Claude, Cohere Embed, Rerank, Guardrails), Bedrock AgentCore (Runtime for the agent,
+   Gateway for the tools, Memory for conversations, Evaluations for quality, Observability for
+   traces), Aurora PostgreSQL with pgvector, Lambda, S3, CloudFront, Cognito, CloudWatch,
+   DynamoDB, Secrets Manager. All defined in Terraform.
+
+Q: How fast is it?
+A: About 20 seconds for a quick answer and 25 for a Deep research report, including the
+   verification. Steps stream live so the user sees progress.
+
+Q: What does it cost?
+A: About 4 to 5 cents per answer, roughly $40-50 per thousand answers, tracked live on the
+   admin page.
+
+Q: Can many people use it at once?
+A: Yes. Every chat runs in its own isolated session on AgentCore Runtime; the API serves up to
+   15 questions at the same moment (a setting we can raise).
+
+Q: Is it secure?
+A: Sign-in is by invitation through Amazon Cognito; every request is checked. The admin page
+   needs an admin group. Data stays in private, encrypted S3 and Aurora in WRI's account. No
+   secrets are in the code; the repository is public without account details.
+
+USERS AND VALUE
+Q: Who is it for?
+A: Researchers (find the exact page, compare papers, trace how findings connect), policymakers
+   (a verified brief in seconds), and partnerships or communications staff (talking points, and
+   a fact-check before anything goes out).
+
+Q: How is this different from ChatGPT or a search engine?
+A: It answers only from WRI's research, verifies every claim, cites the exact page, says when
+   it doesn't know, writes for the person asking, shows how reports connect, can search inside
+   charts and maps, and fact-checks drafts against WRI's own words.
+
+Q: What would you build next?
+A: Searching across whole documents for "which reports cover X", user feedback buttons feeding
+   the admin page, automatic loading of new publications as WRI releases them, and more
+   languages.
+
+
+=====================================================================
+PART 4 - HARDER QUESTIONS (judges often ask these)
+=====================================================================
+
+AWS AND ARCHITECTURE DEEP-DIVE
+Q: How do you use AgentCore - is it just hosting?
+A: Five parts: Runtime runs the agent (each chat in its own isolated session); Gateway exposes
+   our six tools (search, passage, authors, coverage, links, translate) to the agent over MCP,
+   secured with Cognito; Memory keeps each conversation so follow-ups work ("now in Spanish",
+   "make it shorter"); Evaluations grades answers with built-in judges, in batch over our test
+   set and online over live traffic; Observability traces every step, which the judges read.
+
+Q: Why Claude, and which models do what?
+A: Claude Sonnet 5.5 drafts answers and reads charts; Claude Haiku is the fast, cheap model for
+   labels, planning and checking claims; Cohere Embed v4 handles meaning (multilingual); Amazon
+   Rerank orders results. Each job uses the smallest model that does it well - that keeps an
+   answer around 5 cents.
+
+Q: What stops a PDF from injecting instructions into the AI ("ignore previous instructions")?
+A: The agent is told that passages are quoted documents and any instructions inside them must be
+   ignored; every claim must match its passage; and Bedrock Guardrails checks grounding. A
+   passage can't make the system say something it doesn't support.
+
+Q: What happens if a service fails or the database is asleep?
+A: The database pauses when idle to save money and wakes in seconds; the API retries while the
+   agent starts. If something still fails, the user sees a clear error - never a made-up answer.
+
+Q: How would it scale to thousands of users or all of WRI's publications?
+A: Every part is serverless or managed: AgentCore Runtime scales sessions, Lambda scales the
+   API, Aurora Serverless scales the database, and the vector index handles far more than
+   30,000 passages. The limits today are settings we chose (for example 15 concurrent questions)
+   and the Bedrock model quotas, both raisable.
+
+Q: How is it deployed? Could WRI run it?
+A: Everything is Terraform in one AWS account: one command plans the infrastructure, one
+   publishes the website, one loads new PDFs. A user guide and admin instructions are in the
+   repository.
+
+HONEST LIMITATIONS (say these before someone else does)
+- It knows only what's loaded: 580 publications, a snapshot - not live wri.org.
+- Translation is machine translation (labelled as such); the sources stay in English.
+- About two-thirds of publications have no matched wri.org page, so no abstract or author list.
+- The evaluation set is small (30 questions) and partly model-written; WRI's own questions would
+  make it stronger.
+- It is sometimes too cautious: in the latest run it declined 2 of 27 answerable questions.
+  We prefer that to guessing, but it's a known area to improve.
+- Chart descriptions help find charts but are never used as evidence on their own.
+
+CHALLENGES AND LESSONS (the "what was hard?" question)
+- Trust over fluency: getting every claim checked without slowing answers. We moved the summary
+  into the same model call and run checks in parallel - quick answers dropped from about 16 s to
+  about 13 s.
+- Messy PDFs: reading order, tables, charts, reference lists. The pipeline audits every passage
+  against the PDF's text and skips reference sections - otherwise answers quoted bibliographies.
+- Broad questions: a single search scored too low on vague questions ("environmental laws in
+  Europe"), so quick answers now split the question and search again before declining.
+- Evaluation needs care: one "unanswerable" test question became answerable once the full
+  library was loaded - the system was right and the test was wrong.
+- Small details matter in production: an ad blocker hid our admin page because its sections were
+  named "ad-"; we renamed them.
+
+IMPACT AND VALUE
+Q: What difference does this make to WRI?
+A: Researchers find the exact finding and page in seconds instead of hours; policy staff get a
+   sourced brief instead of starting from scratch; communications and partnerships teams can
+   fact-check a draft against WRI's own words before it goes out. And it protects WRI's
+   reputation: nothing is said in WRI's name that WRI didn't publish.
+
+Q: Could other organisations use it?
+A: Yes - the design isn't WRI-specific. Any organisation with a library of publications could
+   load its PDFs and get the same verified, page-cited answers.
+
+Q: What does it cost to run for WRI?
+A: About 5 cents per answer, so roughly $40-50 per thousand questions, plus small fixed costs
+   (the database pauses when idle). The admin page tracks spend daily against a budget.
+
+ABOUT THE TEAM (prepare your own answer)
+Q: Who did what? How long did it take?
+A: (Fill in: who built the ingestion pipeline (Jay), the agent and AWS deployment, the UI and
+   admin page, the evaluation - and how many days it took.)
+
+IF YOU DON'T KNOW
+Q: (anything unexpected)
+A: "Good question - I'd want to check that against the system rather than guess, which is
+   exactly what AskWRI does too."

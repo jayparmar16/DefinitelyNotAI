@@ -88,3 +88,16 @@ resource "aws_s3_bucket_policy" "corpus" {
   # The public access block must exist first, or a policy edit could briefly be public.
   depends_on = [aws_s3_bucket_public_access_block.corpus]
 }
+
+# The UI's PDF viewer downloads a stored PDF with a presigned link to draw the cited page and
+# highlight the passage, so the browser needs CORS on object reads. Reads stay limited to
+# presigned links: the bucket policy above still denies everyone but the listed roles.
+resource "aws_s3_bucket_cors_configuration" "corpus" {
+  bucket = aws_s3_bucket.corpus.id
+  cors_rule {
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = var.allowed_origins
+    allowed_headers = ["*"]
+    max_age_seconds = 3600
+  }
+}

@@ -1,0 +1,322 @@
+/**
+ * A stand-in for the AskWRI agent so the UI can be built before the backend exists.
+ *
+ * Routing is by keyword: transport questions get the canned cited answer (Quick answer) or a
+ * streamed report (Deep research); anything else gets the helpful decline. "Now in Spanish"
+ * after a report reuses it, machine-translated. To remove: delete src/mock/ and switch
+ * getAgent() in src/lib/agent.ts to the real client.
+ */
+
+import type { AgentClient, AgentEvent, AskRequest, Answer, CheckedClaim, Reader, ReportFormat, Verdict, Visuals } from "../lib/agent.ts";
+import { QUICK_PARAGRAPHS, REPORT_POINTS, SOURCES, SUB_QUESTIONS, THIN_EVIDENCE } from "./fixtures.ts";
+
+const ON_TOPIC = /\b(bus|buses|transit|transport|electri\w*|mobility|fleets?|brt|briefing|talking points)\b/i;
+const SPANISH_FOLLOW_UP = /\b(spanish|español|espanol)\b/i;
+const FORMAT_TITLES: Record<ReportFormat, string> = {
+  summary: "Researcher summary",
+  "issue-brief": "Issue brief",
+  "talking-points": "Talking points",
+  dossier: "Topic dossier",
+};
+
+// Sessions that already have a report, so a follow-up can reuse the gathered evidence.
+const reports = new Set<string>();
+
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    });
+  });
+}
+
+// The real agent infers the reader from the question; the mock just picks policymaker.
+function reader(request: AskRequest): Reader {
+  return request.audience === "auto" ? "policymaker" : request.audience;
+}
+
+function quickAnswer(request: AskRequest, language: string, startedAt: number): Answer {
+  const translated = language === "es";
+  const paragraphs = translated ? QUICK_PARAGRAPHS.es : QUICK_PARAGRAPHS.en;
+  return {
+    mode: "quick",
+    language,
+    machineTranslated: translated,
+    paragraphs,
+    sources: SOURCES.slice(0, 4),
+    claimsTotal: 6,
+    claimsVerified: 5,
+    elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
+    report: null,
+    audience: reader(request),
+    scope: "Based on 4 of the 1,200 WRI publications indexed in AskWRI",
+    implications: [
+      "Cities planning a fleet change could start with pilots on a few routes before buying at scale.",
+    ],
+    limits: ["These publications don't compare total costs across cities."],
+    questions: ["How did Santiago finance its electric buses?", "What slowed adoption in other cities?"],
+    removedClaims: ["Every Latin American capital now runs electric buses."],
+    lens: request.lens
+      ? {
+          ...request.lens,
+          // Alternate summarised and "not discussed" cells so both states show.
+          rows: SOURCES.slice(0, 3).map((source, row) => ({
+            docId: source.docId,
+            title: source.title,
+            year: source.year,
+            pubType: source.pubType,
+            cells: request.lens!.aspects.map((_, i) =>
+              (row + i) % 2 === 0
+                ? { status: "summarised" as const, text: `${source.passage} [${source.marker}].` }
+                : { status: "not_discussed" as const, text: "" },
+            ),
+          })),
+        }
+      : undefined,
+  };
+}
+
+// A dossier reads every paper through fixed aspects (its evidence matrix) and compares them.
+function mockDossier(): Pick<Answer, "lens" | "dossier"> {
+  const aspects = ["main findings", "key figures", "places covered", "methods and data"];
+  return {
+    lens: {
+      goal: "Topic dossier",
+      aspects,
+      rows: SOURCES.map((source, row) => ({
+        docId: source.docId,
+        title: source.title,
+        year: source.year,
+        pubType: source.pubType,
+        cells: aspects.map((_, i) =>
+          (row + i) % 3 === 2
+            ? { status: "not_discussed" as const, text: "" }
+            : { status: "summarised" as const, text: `${source.passage} [${source.marker}].` },
+        ),
+      })),
+    },
+    dossier: {
+      agree: ["Both reports find pilots on existing routes lower the risk of a fleet change [1][2]."],
+      differ: ["The 2008 baseline puts diesel emissions higher than the 2022 brief does [3][4]."],
+      missing: ["None of these papers compares maintenance costs across cities."],
+    },
+  };
+}
+
+function deepAnswer(request: AskRequest, language: string, startedAt: number): Answer {
+  const translated = language === "es";
+  const keyPoints = translated ? REPORT_POINTS.es : REPORT_POINTS.en;
+  return {
+    mode: "deep",
+    language,
+    machineTranslated: translated,
+    paragraphs: keyPoints,
+    sources: SOURCES,
+    claimsTotal: 7,
+    claimsVerified: 7,
+    elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
+    report: {
+      title: `${FORMAT_TITLES[request.format]}: electric buses in Latin America`,
+      builtFrom: `Built from ${SOURCES.length} WRI publications, 2006 to 2022`,
+      keyPoints,
+      thinEvidence: translated ? THIN_EVIDENCE.es : THIN_EVIDENCE.en,
+    },
+    audience: reader(request),
+    scope: `Based on ${SOURCES.length} of the 1,200 WRI publications indexed in AskWRI`,
+    ...(request.format === "dossier" ? mockDossier() : {}),
+    implications: ["A partner conversation could open with the pilot results before costs."],
+    limits: [],
+    questions: ["Which cities moved first, and why?"],
+    removedClaims: [],
+  };
+}
+
+// The real agent judges each claim against WRI passages; the mock cycles through the verdicts so
+// every state can be seen.
+const MOCK_VERDICTS: Verdict[] = ["supported", "contradicted", "not_found", "outdated"];
+
+async function* factCheckRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  const startedAt = Date.now();
+  yield { type: "step", id: "claims", label: "Finding the claims in your draft", status: "now" };
+  await pause(600, signal);
+  const sentences = request.question.match(/[^.!?]+[.!?]?/g)?.map((s) => s.trim()).filter((s) => s.length > 20) ?? [];
+  const claims: CheckedClaim[] = sentences.slice(0, 8).map((quote, i) => {
+    const verdict = MOCK_VERDICTS[i % MOCK_VERDICTS.length];
+    return {
+      quote,
+      claim: quote,
+      verdict,
+      markers: verdict === "not_found" ? [] : [1],
+      correction: verdict === "contradicted" || verdict === "outdated" ? "Pilots ran on three routes in 2019 [1]." : "",
+      note: verdict === "not_found" ? "No WRI passage settles this." : "Mock verdict for the UI.",
+    };
+  });
+  yield { type: "step", id: "claims", label: `Found ${claims.length} claims to check`, status: "done" };
+  yield { type: "step", id: "judge", label: "Checking each claim against the passages", status: "now" };
+  await pause(900, signal);
+  yield { type: "step", id: "judge", label: "Checked every claim", status: "done" };
+  const counts = { supported: 0, contradicted: 0, outdated: 0, not_found: 0 };
+  for (const claim of claims) counts[claim.verdict]++;
+  yield {
+    type: "factcheck",
+    factcheck: {
+      draft: request.question,
+      claims,
+      counts,
+      sources: claims.some((c) => c.markers.length) ? SOURCES.slice(0, 1) : [],
+      elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
+    },
+  };
+}
+
+// Visuals from the fixture sources: a timeline, one citation link each way, and two figures.
+function mockVisuals(): Visuals {
+  const [first, second, third] = SOURCES;
+  const link = (from: typeof first, relation: "extends" | "updates") => ({
+    docId: from.docId, title: from.title, year: from.year, relation, aspect: "fleet cost estimates",
+    sentence: `As ${from.title} showed, operators could run electric buses on existing routes.`,
+    page: 12, pdfKey: null, confidence: 0.8,
+  });
+  return {
+    keyFigures: {
+      caption: "Figures quoted word for word from the cited WRI passages",
+      cards: [
+        { value: "three", unit: "cities", what: "piloted battery-electric buses on existing routes", place: "Latin America", year: "2019", marker: 1, docId: first.docId, title: first.title },
+        { value: "half", unit: "", what: "of the 2019 cost gap, in updated estimates", place: "", year: "2022", marker: 5, docId: "costs", title: "Zero-emission bus costs" },
+      ],
+    },
+    timeline: {
+      caption: `${SOURCES.length} dated WRI publications, 2006 to 2022`,
+      newest: SOURCES[4].docId,
+      undated: [],
+      points: SOURCES.map((s, i) => ({ docId: s.docId, title: s.title, year: s.year, pubType: s.pubType, citedInAnswer: i < 4, citedBy: i === 2 ? 2 : 0 })),
+    },
+    citationFlow: {
+      caption: "2 of 4 reports link to other reports in AskWRI's collection",
+      defaultFocus: first.docId,
+      focusOptions: [first, second].map((s) => ({ docId: s.docId, title: s.title, year: s.year, markers: [s.marker] })),
+      flows: {
+        [first.docId]: { focus: { docId: first.docId, title: first.title, year: first.year, markers: [1] }, cites: [link(third, "extends")], moreCites: 0, citedBy: [link(second, "updates")], moreCitedBy: 0, mainPoint: "Pilots showed that operators could run battery-electric buses on existing routes [1]." },
+        [second.docId]: { focus: { docId: second.docId, title: second.title, year: second.year, markers: [2] }, cites: [link(first, "updates")], moreCites: 0, citedBy: [], moreCitedBy: 0, mainPoint: null },
+      },
+    },
+  };
+}
+
+async function* visualsRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  yield { type: "step", id: "visuals", label: "Drawing the timeline, citation flow and key figures", status: "now" };
+  await pause(700, signal);
+  yield { type: "step", id: "visuals", label: "Drew the visuals", status: "done" };
+  yield { type: "visuals", visuals: mockVisuals(), ...(request.mode === "explore" ? { sources: SOURCES, topic: request.question } : {}) };
+}
+
+async function* quickRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  const startedAt = Date.now();
+  yield { type: "step", id: "search", label: "Searching WRI publications", status: "now" };
+  await pause(700, signal);
+  yield { type: "step", id: "search", label: "Searched WRI publications", detail: "4 sources", status: "done" };
+  yield { type: "step", id: "verify", label: "Verifying 5 claims against passages", status: "now" };
+  await pause(600, signal);
+  yield { type: "answer", answer: quickAnswer(request, request.language, startedAt) };
+}
+
+async function* deepRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  const startedAt = Date.now();
+  const steps: [string, string, string?][] = [
+    ["plan", "Planned 4 sub-questions", SUB_QUESTIONS],
+    ["round-1", "Round 1: searched 2015 to 2024", "4 sources"],
+    ["round-2", 'Round 2: added pre-2010 terms ("diesel bus fleet", "BRT")', "2 more sources"],
+    ["figures", "Checked for revised figures", "1 newer estimate found"],
+    ["verify", "Verifying 7 claims against passages"],
+    ["draft", `Drafting ${FORMAT_TITLES[request.format].toLowerCase()} for a ${request.audience}`],
+  ];
+  for (const [id, label] of steps) yield { type: "step", id, label, status: "next" };
+  for (const [index, [id, label, detail]] of steps.entries()) {
+    yield { type: "step", id, label, status: "now" };
+    await pause(900, signal);
+    yield { type: "step", id, label, detail, status: "done" };
+    if (index === 1) {
+      for (const source of SOURCES.slice(0, 4)) {
+        yield { type: "source-found", title: source.title, year: source.year };
+      }
+    }
+    if (index === 2) {
+      for (const source of SOURCES.slice(5)) yield { type: "source-found", title: source.title, year: source.year };
+    }
+    if (index === 3) {
+      yield { type: "source-found", title: SOURCES[4].title, year: SOURCES[4].year };
+      yield {
+        type: "outdated-figure",
+        text: "A 2022 issue brief revises the fleet cost estimate from the 2019 report. The report uses the 2022 figure and cites both.",
+        markers: [5, 1],
+      };
+    }
+  }
+  reports.add(request.sessionId);
+  yield { type: "answer", answer: deepAnswer(request, request.language, startedAt) };
+}
+
+async function* translatedFollowUp(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  const startedAt = Date.now();
+  yield { type: "step", id: "reuse", label: "Reusing the evidence from your last report", detail: "no new search", status: "done" };
+  yield { type: "step", id: "translate", label: "Translating to Spanish; checking every number survived", status: "now" };
+  await pause(900, signal);
+  yield { type: "step", id: "translate", label: "Translated to Spanish; every number checked", status: "done" };
+  yield { type: "answer", answer: deepAnswer(request, "es", startedAt) };
+}
+
+async function* declineRun(request: AskRequest, signal: AbortSignal): AsyncGenerator<AgentEvent> {
+  const rounds = request.mode === "deep" ? 3 : 2;
+  for (let round = 1; round <= rounds; round++) {
+    yield { type: "step", id: `round-${round}`, label: `Round ${round}: searching`, status: "now" };
+    await pause(600, signal);
+    yield { type: "step", id: `round-${round}`, label: `Round ${round}: no passage strong enough`, status: "done" };
+  }
+  const terms = request.question.toLowerCase().match(/[a-zà-ÿ]{5,}/g)?.slice(0, 3) ?? [];
+  const scope = [
+    `${rounds} rounds`,
+    request.filters.yearFrom ? `${request.filters.yearFrom} to 2024` : "1998 to 2024",
+    request.filters.pubType ?? "all types",
+  ].join(" · ");
+  yield {
+    type: "decline",
+    decline: {
+      message:
+        "No WRI publication in the searched collection answers this. Rather than guess, here is what was searched and the closest related WRI work.",
+      searched: [...terms, scope],
+      related: SOURCES.slice(0, 2).map(({ title, pubType, year, url }) => ({ title, pubType, year, url })),
+    },
+  };
+}
+
+export const mockAgent: AgentClient = {
+  ask(request, signal) {
+    if (request.mode === "deep" && reports.has(request.sessionId) && SPANISH_FOLLOW_UP.test(request.question)) {
+      return translatedFollowUp(request, signal);
+    }
+    if (!ON_TOPIC.test(request.question)) return declineRun(request, signal);
+    if (request.mode === "factcheck") return factCheckRun(request, signal);
+    if (request.mode === "visuals" || request.mode === "explore") return visualsRun(request, signal);
+    return request.mode === "deep" ? deepRun(request, signal) : quickRun(request, signal);
+  },
+
+  async sourceDownloadUrl() {
+    return null; // no stored PDFs without the backend
+  },
+
+  async warmup() {
+    // nothing to start: the mock answers at once
+  },
+
+  async translate(answer, language) {
+    const paragraphs = answer.report?.keyPoints ?? answer.paragraphs;
+    if (language !== "es") return { paragraphs, report: null };
+    const canned = new Map(
+      [...QUICK_PARAGRAPHS.en.map((text, i) => [text, QUICK_PARAGRAPHS.es[i]] as const),
+       ...REPORT_POINTS.en.map((text, i) => [text, REPORT_POINTS.es[i]] as const)],
+    );
+    return { paragraphs: paragraphs.map((text) => canned.get(text) ?? text), report: null };
+  },
+};

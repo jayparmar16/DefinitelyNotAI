@@ -2,7 +2,7 @@
 # Whole ingestion run in one command. On the first run it creates the AWS resources with
 # Terraform (state bucket, network, corpus bucket, Aurora); every run applies the schema
 # (idempotent) and loads the PDFs in the given folders into Aurora.
-# Usage: scripts/run-pipeline.sh 2024_publications 2025_publications 2026_publications
+# Usage: scripts/run-pipeline.sh [--reload] 2024 2025 2026  (one corpus folder per year)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

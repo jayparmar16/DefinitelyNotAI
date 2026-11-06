@@ -7,3 +7,8 @@ variable "deployer_arn" {
   description = "ARN of the role that runs Terraform and uploads PDFs (WSParticipantRole)."
   type        = string
 }
+
+variable "allowed_origins" {
+  description = "Browser origins allowed to read presigned PDF links (the UI's PDF viewer)."
+  type        = list(string)
+}

@@ -1,0 +1,185 @@
+import pytest
+
+from askwri.api.server import BadRequest, chat_payload, download_key, key_matches
+
+
+def test_chat_payload_keeps_valid_fields_and_defaults_the_rest():
+    payload = chat_payload(
+        {
+            "question": "  How do cities cool down?  ",
+            "mode": "deep",
+            "language": "es",
+            "format": "issue-brief",
+            "filters": {"yearFrom": 2010, "evil": "x", "topic": "Ocean", "region": "Africa"},
+            "sessionId": "a" * 36,
+        }
+    )
+    assert payload["question"] == "How do cities cool down?"
+    assert (payload["mode"], payload["format"], payload["language"]) == (
+        "deep",
+        "issue-brief",
+        "es",
+    )
+    assert payload["filters"] == {"yearFrom": 2010, "topic": "Ocean", "region": "Africa"}
+    assert payload["sessionId"] == "a" * 36
+
+
+def test_unknown_mode_and_short_session_are_replaced_not_trusted():
+    payload = chat_payload({"question": "q", "mode": "admin", "sessionId": "short"})
+    assert payload["mode"] == "quick"
+    assert payload["sessionId"].startswith("askwri-") and len(payload["sessionId"]) >= 33
+
+
+def test_an_answer_comes_back_only_for_work_on_an_answer_already_shown():
+    answer = {"paragraphs": ["A [1]."], "sources": [{"marker": 1}], "report": None, "scope": "s"}
+    base = {"question": "q", "answer": answer}
+    assert chat_payload({**base, "mode": "quick"})["answer"] is None
+    reuse = chat_payload({**base, "mode": "deep", "reuse": True})
+    assert reuse["reuse"] and reuse["answer"] == {
+        "paragraphs": ["A [1]."],
+        "sources": [{"marker": 1}],
+    }
+    assert chat_payload({**base, "mode": "translate"})["answer"] == answer  # the whole answer
+    assert chat_payload({**base, "mode": "translate", "answer": "x"})["answer"] is None
+
+
+def test_empty_or_huge_questions_are_rejected():
+    with pytest.raises(BadRequest):
+        chat_payload({"question": "   "})
+    with pytest.raises(BadRequest):
+        chat_payload({"question": "x" * 4001})
+
+
+def test_download_key_only_allows_stored_pdfs():
+    assert download_key("key=raw/heat-report.pdf") == "raw/heat-report.pdf"
+    for bad in [
+        "key=eval/testset.jsonl",
+        "key=raw/../secret.pdf",
+        "key=raw/a/b.pdf",
+        "",
+        "key=raw/x.txt",
+    ]:
+        with pytest.raises(BadRequest):
+            download_key(bad)
+
+
+def test_api_key_is_required_only_when_configured():
+    assert key_matches(None, None)
+    assert key_matches("k1", "k1")
+    assert not key_matches("k1", None)
+    assert not key_matches("k1", "k2")
+
+
+def test_warm_up_needs_a_valid_session_id():
+    from askwri.api.server import warm_session
+
+    assert warm_session({"sessionId": "s" * 36}) == "s" * 36
+    for bad in [{}, {"sessionId": "short"}, {"sessionId": "x" * 36 + "/../"}]:
+        with pytest.raises(BadRequest):
+            warm_session(bad)
+
+
+def test_a_reused_connection_survives_an_early_answer_with_an_unread_body():
+    """An early 401 or 404 must still consume the request body, or the leftover bytes are
+    parsed as the start of the next request on the same keep-alive connection."""
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from askwri.api.server import Handler
+
+    class FakeApi:
+        origins = frozenset({"http://localhost:3000"})
+        api_key = "k1"
+        verifier = None
+
+    Handler.api = FakeApi()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        body = '{"sessionId": "' + "s" * 36 + '"}'
+        connection.request(
+            "POST", "/nowhere", body=body, headers={"Content-Type": "application/json"}
+        )
+        unknown = connection.getresponse()
+        unknown.read()
+        assert unknown.status == 404  # answered before any route looked at the body
+        connection.request("POST", "/warm", body=body, headers={"Content-Type": "application/json"})
+        first = connection.getresponse()
+        first.read()
+        assert first.status == 401  # no key: answered before the route read the body
+        connection.request("OPTIONS", "/chat", headers={"Origin": "http://localhost:3000"})
+        second = connection.getresponse()
+        second.read()
+        assert second.status == 204
+    finally:
+        server.shutdown()
+
+
+def test_agent_calls_retry_only_while_the_runtime_is_starting():
+    from botocore.exceptions import ClientError
+
+    from askwri.api.server import invoke_agent
+
+    def error(code, message):
+        return ClientError({"Error": {"Code": code, "Message": message}}, "InvokeAgentRuntime")
+
+    class Runtime:
+        def __init__(self, failures):
+            self.failures, self.calls = list(failures), 0
+
+        def invoke_agent_runtime(self, **request):
+            self.calls += 1
+            if self.failures:
+                raise self.failures.pop(0)
+            return {"ok": request}
+
+    starting = error("RuntimeClientError", "Received error (502) from runtime.")
+    runtime = Runtime([starting, starting])
+    assert invoke_agent(runtime, sleep=lambda s: None, x=1) == {"ok": {"x": 1}}
+    assert runtime.calls == 3
+    with pytest.raises(ClientError):  # anything else fails at once
+        invoke_agent(Runtime([error("AccessDeniedException", "no")]), sleep=lambda s: None)
+    with pytest.raises(ClientError):  # and starting gives up after a few tries
+        invoke_agent(Runtime([starting] * 9), sleep=lambda s: None)
+
+
+def test_signed_in_users_get_in_and_only_admins_open_the_admin_routes():
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from askwri.api.auth import Caller
+    from askwri.api.server import Handler
+
+    class FakeVerifier:
+        def caller(self, token):
+            return {"admin": Caller("a", admin=True), "user": Caller("u", admin=False)}.get(token)
+
+    class FakeApi:
+        origins = frozenset()
+        api_key = "k1"
+        verifier = FakeVerifier()
+
+    Handler.api = FakeApi()
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    def status(headers):
+        connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        connection.request("GET", "/admin/overview?window=bad", headers=headers)
+        response = connection.getresponse()
+        response.read()
+        return response.status
+
+    try:
+        assert status({}) == 401
+        assert status({"Authorization": "Bearer forged"}) == 401
+        assert status({"X-AskWRI-Key": "wrong"}) == 401
+        assert status({"Authorization": "Bearer user"}) == 403
+        # Admins and the service key get past the check to the route (400: bad window).
+        assert status({"Authorization": "Bearer admin"}) == 400
+        assert status({"X-AskWRI-Key": "k1"}) == 400
+    finally:
+        server.shutdown()

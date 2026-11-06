@@ -4,6 +4,7 @@ Runs anywhere with the team account's credentials, including CloudShell:
 `python3 db/apply_schema.py`. Uses only the standard library and boto3.
 """
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -12,7 +13,8 @@ import boto3
 
 CLUSTER = "askwri-db"
 SECRET = "askwri/db"
-DATABASE = "askwri"
+# ASKWRI_DATABASE picks another database in the cluster, e.g. for an experiment beside the demo.
+DATABASE = os.environ.get("ASKWRI_DATABASE", "askwri")
 
 
 def split_statements(sql: str) -> list[str]:

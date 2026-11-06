@@ -73,7 +73,7 @@ def run(monkeypatch):
     """Run search_passages against a fake database that returns `candidates`."""
     reranker = FakeRerank()
 
-    def go(candidates, near=(), **filters):
+    def go(candidates, near=(), question="how much water?", **filters):
         data_api = FakeDataApi(candidates, near)
         monkeypatch.setattr(
             search,
@@ -85,7 +85,7 @@ def run(monkeypatch):
                 "target": TARGET,
             },
         )
-        return search.search_passages("how much water?", **filters), data_api, reranker
+        return search.search_passages(question, **filters), data_api, reranker
 
     return go
 
@@ -100,10 +100,10 @@ def test_filters_reach_the_sql_with_none_as_null(run):
         assert params[unset] == {"isNull": True}
 
 
-def test_rerank_order_is_applied_and_cut_to_six(run):
+def test_rerank_order_is_applied_and_cut_to_ten(run):
     candidates = [row(f"c{i}") for i in range(25)]
     results, _, _ = run(candidates)
-    assert [r["chunk_id"] for r in results] == [f"c{i}" for i in range(24, 18, -1)]
+    assert [r["chunk_id"] for r in results] == [f"c{i}" for i in range(24, 14, -1)]
     assert results[0]["score"] > results[-1]["score"]
 
 
@@ -113,21 +113,24 @@ def test_fewer_matches_are_not_padded_and_none_is_empty(run):
     assert run([])[0] == []
 
 
-def test_rerank_uses_description_when_there_is_one(run):
+def test_rerank_reads_title_and_section_then_description_else_content(run):
     _, _, reranker = run([row("a", description="a summary"), row("b", content="b" * 500)])
-    assert reranker.texts == ["a summary", "b" * 500]
+    assert reranker.texts == [
+        "A report › Results\n\na summary",
+        "A report › Results\n\n" + "b" * 500,
+    ]
 
 
-def test_neighbours_only_for_short_hits_in_one_statement(run):
-    short = row("short", content="tiny")
-    near = [{"hit_id": "short"} | row("before"), {"hit_id": "short"} | row("after")]
-    results, data_api, _ = run([short, row("long")], near)
+def test_every_hit_gets_its_neighbours_in_one_statement(run):
+    near = [{"hit_id": "a"} | row("before"), {"hit_id": "a"} | row("after")]
+    results, data_api, _ = run([row("a"), row("b")], near)
     by_id = {r["chunk_id"]: r for r in results}
-    assert [n["chunk_id"] for n in by_id["short"]["neighbours"]] == ["before", "after"]
-    assert "neighbours" not in by_id["long"]
+    assert [n["chunk_id"] for n in by_id["a"]["neighbours"]] == ["before", "after"]
+    assert by_id["b"]["neighbours"] == []
     neighbour_statements = [s for s in data_api.statements if "hit_id" in s["sql"]]
     assert len(neighbour_statements) == 1
-    assert [p["value"] for p in neighbour_statements[0]["parameters"]] == [{"stringValue": "short"}]
+    hit_ids = {p["value"]["stringValue"] for p in neighbour_statements[0]["parameters"]}
+    assert hit_ids == {"a", "b"}
 
 
 def test_hits_below_min_relevance_are_dropped(run, monkeypatch):
@@ -135,8 +138,49 @@ def test_hits_below_min_relevance_are_dropped(run, monkeypatch):
 
     def rerank(self, **kwargs):
         texts = [s["inlineDocumentSource"]["textDocument"]["text"] for s in kwargs["sources"]]
-        return {"results": [{"index": i, "relevanceScore": scores[t]} for i, t in enumerate(texts)]}
+        found = [scores[t.rsplit("\n\n", 1)[1]] for t in texts]
+        return {"results": [{"index": i, "relevanceScore": f} for i, f in enumerate(found)]}
 
     monkeypatch.setattr(FakeRerank, "rerank", rerank)
     results, _, _ = run([row("a", content="answer"), row("b", content="noise")])
     assert [r["chunk_id"] for r in results] == ["a"]
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        (
+            "What are the trends for ocean renewable energies published in 2025?",
+            (2025, 2025, "What are the trends for ocean renewable energies ?"),
+        ),
+        ("What did WRI publish in 2024 about heat?", (2024, 2024, "What did WRI about heat?")),
+        (
+            "Reports published between 2024 and 2026 on mangroves",
+            (2024, 2026, "Reports on mangroves"),
+        ),
+        ("Anything released since 2025 on lithium?", (2025, None, "Anything on lithium?")),
+        (
+            "How did clean energy investment change in 2025?",
+            (None, None, "How did clean energy investment change in 2025?"),
+        ),
+    ],
+)
+def test_publication_years_come_only_from_a_publication_phrase(question, expected):
+    assert search.publication_years(question) == expected
+
+
+def test_a_publication_phrase_becomes_the_filter_unless_one_is_given(run):
+    question = "Ocean energy published in 2025?"
+    _, inferred, _ = run([row("a")], question=question)
+    _, given, _ = run([row("a")], question=question, year_from=2023)
+
+    def hybrid_params(api):
+        hybrid = next(s for s in api.statements if "WITH meaning" in s["sql"])
+        return {p["name"]: p["value"] for p in hybrid["parameters"]}
+
+    assert hybrid_params(inferred)["year_from"] == {"longValue": 2025}
+    assert hybrid_params(inferred)["year_to"] == {"longValue": 2025}
+    assert hybrid_params(inferred)["q"] == {"stringValue": "Ocean energy ?"}
+    assert hybrid_params(given)["year_from"] == {"longValue": 2023}
+    assert hybrid_params(given)["year_to"] == {"isNull": True}
+    assert hybrid_params(given)["q"] == {"stringValue": question}

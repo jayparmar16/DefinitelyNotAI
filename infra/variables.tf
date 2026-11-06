@@ -49,3 +49,79 @@ variable "db_seconds_until_auto_pause" {
   type        = number
   default     = 3600
 }
+
+# Model IDs live here, not in code. Claude models in us-west-2 run only through inference
+# profiles; the embedding and rerank models run in-region.
+variable "embedding_model_id" {
+  description = "Query embedding model (a us. inference profile); must match the model askwri.ingest.load embeds passages with, and vector(1024) in db/schema.sql."
+  type        = string
+  default     = "us.cohere.embed-v4:0"
+}
+
+variable "rerank_model_id" {
+  description = "Rerank model for search results."
+  type        = string
+  default     = "amazon.rerank-v1:0"
+}
+
+variable "small_model_id" {
+  description = "Haiku-class model (inference profile) for translation, planning, rewrites and checks."
+  type        = string
+  # shortcut: Haiku 4.5 - Claude Haiku 5.5 is blocked in the team sandbox (needs an AWS
+  # Marketplace subscription the sandbox role can't make). Switch back when it is enabled.
+  default = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
+}
+
+variable "large_model_id" {
+  description = "Sonnet-class model (inference profile) for the final answer and reports."
+  type        = string
+  default     = "global.anthropic.claude-sonnet-5-5"
+}
+
+variable "relevance_threshold" {
+  description = "Best rerank score that counts as strong evidence. Measured on the sample: answerable questions scored 0.018+, unanswerable 0.002 or less. Re-tune with the test set."
+  type        = number
+  default     = 0.01
+}
+
+variable "quick_max_rounds" {
+  description = "Search rounds per question in Quick answer."
+  type        = number
+  default     = 2
+}
+
+variable "deep_max_rounds" {
+  description = "Search rounds per sub-question in Deep research."
+  type        = number
+  default     = 3
+}
+
+variable "grounding_threshold" {
+  description = "Bedrock Guardrails contextual grounding threshold for answers (0-0.99)."
+  type        = number
+  default     = 0.5
+}
+
+variable "allowed_origins" {
+  description = "Extra browser origins allowed to call askwri-api; the hosted UI's CloudFront origin is added automatically."
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+}
+
+variable "api_max_concurrency" {
+  description = "Most API requests served at once (Lambda reserved concurrency)."
+  type        = number
+  default     = 15
+}
+
+variable "web_adapter_layer_arn" {
+  description = "AWS Lambda Web Adapter layer for arm64 (published by AWS), for response streaming."
+  type        = string
+  default     = "arn:aws:lambda:us-west-2:753240598075:layer:LambdaAdapterLayerArm64:25"
+}
+
+variable "online_eval_sampling_percentage" {
+  description = "Share of live AskWRI sessions AgentCore judges (0-100); each judged session costs judge-model tokens."
+  type        = number
+  default     = 100
+}

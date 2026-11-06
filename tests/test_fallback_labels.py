@@ -11,7 +11,7 @@ from askwri.ingest.document import ingest_document
 from askwri.ingest.labels import citation_title, label_document
 from askwri.ingest.wri_site import WriSite
 from askwri.models import MODELS, ModelError
-from tests.fake_claude import FakeClaude
+from tests.fake_claude import NO_ENRICHMENT, FakeClaude
 from tests.test_wri_labels import FULL_TITLE, OWN_DOI, PAGE_URL, web, wri_page
 
 COVER = "Request for Proposals: Hydrological modelling for the Tana basin"
@@ -252,7 +252,7 @@ def test_ingest_records_the_model_as_the_source_in_the_catalog_and_on_every_chun
     page.insert_textbox(pymupdf.Rect(50, 100, 550, 300), COVER + ". " + PARAGRAPH, fontsize=10)
     doc.save(pdf)
 
-    result = ingest_document(pdf, WriSite(web()), FakeClaude(reply()))
+    result = ingest_document(pdf, WriSite(web()), FakeClaude(reply(), NO_ENRICHMENT))
     write_catalog([result], tmp_path / "out")
 
     assert result.chunks

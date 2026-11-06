@@ -1,0 +1,303 @@
+ASKWRI - LIVE DEMO: "AI DATA CENTERS AND THE GRID"  (3 minutes)
+=================================================================
+
+You build ONE chat live, step by step, like a researcher would. Everyone has heard that AI uses
+a lot of electricity, so the audience can follow every step. Each step proves some of AskWRI's
+differentiators (D1-D8 below) - say the one-liner when you reach it.
+
+How to read this:  DO = what you click.  SAY = what you say.  ★ = differentiator line.
+                   (~Ns) = how long AskWRI takes.
+
+
+=====================================================================
+PASTE BOX - everything you copy, in one place
+(Copy only the text between the ">>>" lines.)
+=====================================================================
+
+LINK 1 - the chatbot
+>>>
+https://d17gz0gh5g00t3.cloudfront.net
+>>>
+
+LINK 2 - load the demo chats (do this once, after signing in)
+>>>
+https://d17gz0gh5g00t3.cloudfront.net/?demo=load
+>>>
+
+LINK 3 - admin page (Step 6 - open it in a second tab before you start)
+>>>
+https://d17gz0gh5g00t3.cloudfront.net/admin/?source=eval&window=30d
+>>>
+
+PASTE 1 - Step 1 question   [tool: Ask · Deep research OFF]
+>>>
+How are AI data centers affecting electricity demand and clean energy in the US?
+>>>
+
+PASTE 2 - Step 2 question   [tool: Ask · Deep research ON · Report type: Issue brief]
+>>>
+AI data centers and the clean energy transition
+>>>
+
+PASTE 3 - Step 4 draft to fact-check   [tool: Fact-check]
+>>>
+AI data centers already use most of America's electricity growth, and a PJM study found that data center load added $94 billion to capacity costs in 2024. WRI expects renewables to supply all new data center demand, and grid planners have nearly doubled their five-year demand forecasts.
+>>>
+
+PASTE 4 - Step 5 maps & charts question   [tool: Ask · Deep research OFF]
+>>>
+Which WRI maps show water stress near ethanol refineries in the US Midwest?
+>>>
+
+
+=====================================================================
+THE DIFFERENTIATORS - what makes AskWRI different (and where you show it)
+=====================================================================
+D1  Verified, not just generated ....... every sentence is checked against its source, twice.
+                                          Anything unsupported is removed before you see it.   (Step 1)
+D2  Cited to the exact page ............ one click opens the WRI report at the page, highlighted. (Step 1)
+D3  Written for whoever is asking ...... it works out the reader (researcher, policymaker,
+                                          partner) and writes in the right form.            (Steps 1-2)
+D4  Honest about limits ................ it says where reports disagree, what the evidence
+                                          can't tell you, and declines rather than guess.   (Step 2)
+D5  Shows how the research connects .... a map of which WRI report builds on which, and the
+                                          key figures quoted word for word.                 (Step 3)
+D6  Protects WRI's credibility ......... fact-checks a draft against WRI's own words before
+                                          it goes out.                                      (Step 4)
+D7  Built on WRI's own knowledge ....... 580 WRI publications, organised in WRI's topics,
+                                          with WRI's own labels - even its charts and maps are
+                                          searchable.                              (Tour, Step 5) 
+D8  Ready for real use ................. runs on AWS with sign-in, and is measured against
+                                          WRI's own targets on an admin scorecard.          (Step 6)
+
+
+---------------------------------------------------------------------
+BEFORE YOU PRESENT (15 minutes ahead)
+---------------------------------------------------------------------
+1. Open an Incognito window. Go to LINK 1 and sign in:
+     >>>
+     https://d17gz0gh5g00t3.cloudfront.net
+     >>>
+   with your admin account.
+2. In the same window, go to LINK 2:
+     >>>
+     https://d17gz0gh5g00t3.cloudfront.net/?demo=load
+     >>>
+   You'll see "Loaded 11 demo chats". The first chat in the
+   sidebar, "★ Story · AI data centers and the grid", is your backup copy of this whole demo.
+3. Warm the agent up: click "New chat", ask anything ("What is WRI?"), wait for the answer.
+4. Click "New chat" again and leave it empty. Check: tool "Ask", Deep research OFF.
+5. Open LINK 3 (the admin page) in a SECOND TAB of the same window, ready for Step 6.
+6. Keep this file open next to the browser. Everything to paste is in the PASTE BOX at the top,
+   and again inside each step below.
+7. Rule: don't click another chat while an answer is still appearing - it stops that answer.
+
+
+---------------------------------------------------------------------
+QUICK TOUR OF THE SCREEN  (0:00 - 0:20)
+---------------------------------------------------------------------
+DO: point at each part as you name it - the headline, the left side, the box, the top.
+
+SAY:
+"This is AskWRI, a research assistant built only on WRI's own work - 580 publications over
+ twelve years. You can see it cycling through what you can ask, right in the headline.
+ On the left are Spaces: one for each WRI topic, using WRI's own labels, so a researcher can stay
+ inside their topic. Even WRI's charts and maps are searchable.
+ At the bottom is where I ask. Ask for a cited answer, Fact-check for a draft, Explore to see how
+ a topic connects. Deep research turns an answer into a full report.
+ And at the top: who the answer is for - it works that out itself - and the language."
+
+★ D7  "It knows WRI's research the way WRI organises it - not the open internet."
+
+
+---------------------------------------------------------------------
+OPENING  (0:20 - 0:30)
+---------------------------------------------------------------------
+SAY:
+"Everyone's talking about AI using huge amounts of electricity. Imagine you advise a state energy
+office and need to know: what does the evidence actually say? Let me ask - live."
+
+
+---------------------------------------------------------------------
+STEP 1 - ASK A QUICK QUESTION  (0:30 - 1:00)
+---------------------------------------------------------------------
+DO: paste this (PASTE 1) into the box and press Enter.  (~20 s)
+    >>>
+    How are AI data centers affecting electricity demand and clean energy in the US?
+    >>>
+
+SAY (while it works - point at the steps appearing):
+"Watch it work: it decides what to search, searches WRI's library, finds the reports, drafts an
+answer - and then checks every sentence against the page it came from."
+
+DO: when the answer appears, point at the SUMMARY, then "8 of 8 claims verified".
+SAY:
+"Short version first: data centers and AI are driving the first real growth in US electricity
+demand in decades, and that's straining the grid."
+★ D1  "Eight of eight claims verified. Every sentence was checked against its source - twice.
+       If something couldn't be backed up, it was removed, not shown."
+
+DO: click a small citation number, like [1]. The WRI report opens on the right, at that page,
+    with the passage highlighted.
+★ D2  "It's not 'trust me'. One click and I'm on the exact page of the WRI report. I could quote
+       this in a paper tomorrow."
+
+DO: point at "Written for: Researcher".
+★ D3  "Nobody told it I'm a researcher. It read that from my question."
+
+
+---------------------------------------------------------------------
+STEP 2 - TURN IT INTO A POLICY BRIEF  (1:00 - 1:35)
+---------------------------------------------------------------------
+SAY:
+"Now I need to brief a policymaker. A paragraph isn't enough."
+
+DO: switch "Deep research" ON, choose Report type "Issue brief", then paste this (PASTE 2)
+    and press Enter.  (~20 s)
+    >>>
+    AI data centers and the clean energy transition
+    >>>
+
+SAY (while it works):
+"Deep research splits the topic into sub-questions and searches them all at once - like sending
+three research assistants to the library at the same time."
+
+DO: point at "Deep research · Issue brief" and "Written for: Policymaker", then read two points.
+SAY:
+"A real policy brief: the problem, the evidence, the options. Grid planners have nearly DOUBLED
+their demand forecasts. In one market, data center demand added 9.4 BILLION dollars to capacity
+costs - passed on to people's bills. And only about half of new data-center demand may be met
+by renewables; the rest by gas and coal."
+★ D3  "Same evidence, now written for a policymaker - it changed the form, not the facts."
+
+DO: point at the summary, and the "What this can't tell you" list under the brief.
+★ D4  "And it's honest: it tells me where WRI's reports DISAGREE - whether AI helps or hurts the
+       transition - and what the evidence can't tell me. When WRI hasn't studied something, it
+       says so instead of guessing."
+
+
+---------------------------------------------------------------------
+STEP 3 - SEE HOW THE RESEARCH CONNECTS  (1:35 - 2:00)
+---------------------------------------------------------------------
+DO: under the brief, click "Visuals".  (~5 s)
+    Point at the Key figures (for example $9.4 billion; they can vary a little run to run).
+SAY:
+"The key numbers, quoted word for word from the reports - nothing rounded or invented."
+
+DO: on the Citation map, click "Expand", then click a report card.
+★ D5  "This is how WRI's research connects: around 30 publications from 2024 to 2026. Each arrow
+       means one report builds on another or uses its data. Click one and you see the exact
+       sentence where it's cited - and older figures that a newer report updated are flagged."
+DO: click Close.
+
+
+---------------------------------------------------------------------
+STEP 4 - FACT-CHECK A DRAFT  (2:00 - 2:30)
+---------------------------------------------------------------------
+SAY:
+"Last step. A colleague wrote this for a blog post. Before it goes out, let's check it."
+
+DO: stay in the same chat. Click "Fact-check" (next to "Ask") - the grey hint changes to
+    "Paste a draft, email or proposal...". Paste this (PASTE 3) and press Enter.  (~12 s)
+    >>>
+    AI data centers already use most of America's electricity growth, and a PJM study found that data center load added $94 billion to capacity costs in 2024. WRI expects renewables to supply all new data center demand, and grid planners have nearly doubled their five-year demand forecasts.
+    >>>
+
+SAY (while it checks):
+"I've hidden four claims in this paragraph. Some are right, some aren't."
+
+DO: point at each verdict:
+    "$94 billion" ......................... CONTRADICTED  "WRI's figure is $9.4 billion -
+                                                          a misplaced decimal."
+    "most of America's electricity growth" . NOT FOUND    "WRI lists data centers as one of
+                                                          several drivers."
+    "renewables to supply ALL new demand" .. NOT FOUND    "WRI never says that - its sources
+                                                          say about half."
+    "grid planners nearly doubled forecasts" SUPPORTED    "This one is right - with the source."
+★ D6  "It caught the misplaced decimal and two claims WRI never made, and confirmed the one that's
+       right. Nothing goes out in WRI's name that WRI didn't say."
+
+
+---------------------------------------------------------------------
+STEP 5 - SEARCH WRI'S MAPS AND CHARTS  (2:30 - 2:42)   - from the ready-made chat
+---------------------------------------------------------------------
+SAY:
+"One more thing. WRI's reports are full of maps and charts. Normally a search engine can't see
+what's inside them. AskWRI can - here's one I asked earlier."
+
+DO: in the sidebar, click "10 · Search WRI's maps and charts". (Opens instantly.)
+    The question was:
+    >>>
+    Which WRI maps show water stress near ethanol refineries in the US Midwest?
+    >>>
+    (It's also PASTE 4, if you'd rather ask it live in a new chat - about 20-30 s.)
+
+DO: point at the first sentence - it names the map itself: "Figure 7 in Rethinking Biofuels in
+    the US Midwest". Then click its citation number [1]. The report opens on the right, at the
+    page with the map.
+SAY:
+"It found the map itself - Figure 7 - and opened it. Every WRI chart and map was read and
+described when we loaded the reports, so you can search what a map SHOWS, not just its title:
+51 of 161 ethanol refineries in the Midwest sit in areas of high or extremely high water stress."
+★ D7  "Even WRI's maps and charts are searchable - about 2,300 of them."
+
+
+---------------------------------------------------------------------
+STEP 6 - THE ADMIN PAGE  (2:42 - 2:50)
+---------------------------------------------------------------------
+DO: switch to the second tab, already open on the admin page (LINK 3):
+    >>>
+    https://d17gz0gh5g00t3.cloudfront.net/admin/?source=eval&window=30d
+    >>>
+    Point at the Quality scorecard, then the Model-graded quality row.
+★ D8  SAY (one line):
+"And for WRI's team: every release is tested against WRI's own targets - 100% of figures cited,
+the right report in the top five 92% of the time, every out-of-scope question declined - and
+graded by AgentCore's independent judges, with the cost of every answer tracked here."
+
+
+---------------------------------------------------------------------
+CONCLUSION  (2:50 - 3:00)
+---------------------------------------------------------------------
+SAY:
+"WRI asked us to solve one problem: its research is spread across hundreds of reports, and
+people need the right finding - fast, from the right page, and without anyone inventing what
+WRI said.
+
+We solved it with AskWRI: an AI research assistant that answers only from WRI's own
+publications, verifies every claim and cites the exact page, writes for whoever is asking,
+says when the evidence isn't there, fact-checks drafts, and even searches inside WRI's maps
+and charts - built on Amazon Bedrock AgentCore, Bedrock Guardrails and Aurora, and measured
+against WRI's own targets.
+
+Thank you."
+
+
+---------------------------------------------------------------------
+IF SOMETHING GOES WRONG
+---------------------------------------------------------------------
+- A step takes more than ~30 s: say "it's checking every claim before it shows anything".
+  Still nothing? Open "★ Story · AI data centers and the grid" in the sidebar - the same four
+  steps, finished - and carry on from the same step.
+- An error appears: open the ★ Story chat and continue.
+- Step 6: if the admin page is still loading or looks empty, reload it once (Cmd+R), or just
+  say the one line and go to the conclusion.
+- Don't click another chat while an answer is still appearing.
+
+
+---------------------------------------------------------------------
+FOR QUESTIONS AFTERWARDS (each shows a differentiator)
+---------------------------------------------------------------------
+- "Other languages?" (D3) -> under the brief, click "Translate" -> Español. Or open chat
+  "6 · Ask in Spanish, cite in the original".
+- "Does it ever say no?" (D4) -> open chat "4 · Won't make things up".
+- "Can it compare reports?" (D5) -> open chat "8 · Compare 8 papers at once", or
+  "9 · Read every paper through your lens" (the lens is under Options).
+- "How do you know it's accurate?" (D8) -> open LINK 3, the admin page:
+    >>>
+    https://d17gz0gh5g00t3.cloudfront.net/admin/?source=eval&window=30d
+    >>>
+    Quality scorecard - citation coverage 100%, the right source in the top five 92%, every
+    out-of-scope question declined (3 of 3), about 20 seconds per answer.
+    AgentCore model grades - relevance 0.97, correctness 0.88, faithfulness 0.82.
+    Cost - about 5 cents per answer.
