@@ -238,7 +238,8 @@ window and keep it open: closing it forgets the chats. How the data was prepared
 ## For the technical team
 
 Everything is on the `release-branch` branch. The technical setup, commands and AWS resources
-are in [README.md](README.md). The tasks you'll be asked for most:
+are in [README.md](README.md); a full deployment is in [docs/REPRODUCE.md](docs/REPRODUCE.md) and
+the current state and next steps in [docs/HANDOFF.md](docs/HANDOFF.md). The tasks you'll be asked for most:
 
 - **Add a person** (they receive the invitation email):
   ```sh
@@ -253,4 +254,4 @@ are in [README.md](README.md). The tasks you'll be asked for most:
   change has been applied with Terraform).
 - **Refresh the demo chats:** `uv run python scripts/record_demo_chats.py > web/public/demo-chats.json`,
   then publish the website.
-- **Run the evaluation:** see `docs/evaluation-spec.md`.
+- **Run the evaluation:** see [docs/REPRODUCE.md, step 9](docs/REPRODUCE.md#9-evaluate) and `docs/evaluation-spec.md`.

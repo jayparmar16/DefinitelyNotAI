@@ -1,533 +1,158 @@
-# DefinitelyNotAI
+# AskWRI
 
-AskWRI: a research assistant that answers questions from World Resources Institute
-publications, with a citation for every claim. Built on Amazon Bedrock and AgentCore for an
-AWS hackathon.
+A research assistant that answers questions from the World Resources Institute's own
+publications. Every claim is checked against the page it came from and cited to it, and when
+WRI's research doesn't answer a question, AskWRI says so instead of guessing. Built by team
+DefinitelyNotAI for an AWS hackathon, on Amazon Bedrock and Bedrock AgentCore.
 
-**Using AskWRI (no technical knowledge needed):** see [USER-GUIDE.md](USER-GUIDE.md): the link,
-signing in, and how to use every feature. Live at https://d17gz0gh5g00t3.cloudfront.net.
+- **Live:** https://d17gz0gh5g00t3.cloudfront.net (invite only)
+- **Using it, no technical knowledge needed:** [USER-GUIDE.md](USER-GUIDE.md)
+- **What we built and why:** [docs/PROJECT-OVERVIEW.md](docs/PROJECT-OVERVIEW.md)
+- **Deploy it from an empty AWS account:** [docs/REPRODUCE.md](docs/REPRODUCE.md)
+- **Taking it over:** [docs/HANDOFF.md](docs/HANDOFF.md)
 
-## Get started
+## The problem
 
-1. Install [Claude Code](https://docs.claude.com/en/docs/claude-code) or [Codex](https://developers.openai.com/codex).
-   Either works, and teammates can mix them.
-2. Clone the repo and open your AI tool in it:
+WRI has published hundreds of research reports. The findings people need are in there, but
+finding the right one, on the right page, takes hours. A general chatbot is fast, but it can
+invent a number or a conclusion, and for WRI one invented figure is a credibility problem.
 
-   ```sh
-   git clone https://github.com/jayparmar16/DefinitelyNotAI.git
-   cd DefinitelyNotAI
-   claude        # or: codex
-   ```
+## What AskWRI does
 
-3. Type **`/setup`** (Claude Code) or **`$setup`** (Codex) and do what it says until
-   every line says PASS.
-
-## Every task
-
-| When you want to | Claude Code | Codex |
-|---|---|---|
-| Start a task | `/claim-task` | `$claim-task` |
-| Stop before it's done | `/handoff` | `$handoff` |
-| Check your code | `/review` | `$review` |
-| Finish and open a PR | `/create-pr` | `$create-pr` |
-
-You can also just say it in plain words, e.g. "claim a task for PDF ingestion" or "open a PR".
-
-## Ingest PDFs locally
-
-The ingestion pipeline (spec: issue #2) turns WRI PDFs into audited, citable chunks.
-
-```sh
-uv sync                                   # install Python dependencies
-uv run pytest                             # run the tests
-uv run python -m askwri.ingest path/to/report.pdf --out chunks/
-```
-
-For each PDF the command writes one `.txt` file per chunk, plus a `.metadata.json` sidecar,
-under `chunks/<doc_id>/` (a stand-in until the chunks go to Aurora pgvector, #11). Before
-anything is written, the citation audit checks every chunk against the PDF's own text layer:
-
-- **Blocked:** a chunk that is empty, garbled, or has words that aren't on its page. Nothing
-  is written for that PDF, and the command exits with an error.
-- **Page ranges:** a chunk may run on across a page break when its section continues. It
-  records where it starts and ends (`pdf_page`, `pdf_page_end`), and the audit checks that its
-  first passage is on the first page and its last on the last.
-- **Not quotable:** a chunk whose words are all on its page, but in a different order (for
-  example diagram labels). It is written with `quotable: false`, so answers can cite its
-  page but never quote it word for word.
-
-Chunks are sized for vector search: 400 to 2,000 characters (about 100 to 500 tokens), set by
-`MIN_CHUNK_CHARS` and `MAX_CHUNK_CHARS` in `askwri/ingest/chunks.py`, to be tuned against the
-evaluation questions. A chunk never crosses a heading. Short paragraphs merge with their
-neighbours in the same section; a paragraph over the maximum is cut at sentence boundaries
-(a single sentence is never cut, so one longer than the maximum stays whole). A section
-whose whole text is short stays one short chunk. Each chunk has `seq`, its position in the
-document's chunk order (1, 2, 3, ... with no gaps, the same on every rerun), so a short hit's
-neighbours can be fetched by `seq`.
-
-Each sidecar carries two kinds of page number. `pdf_page` and `pdf_page_end` are numbers (the
-position in the file, for opening the PDF at the right page). `printed_page` and
-`printed_page_end` are the numbers printed on the pages, as text because front matter uses
-Roman numerals ("iv"). They come from the PDF's page labels where it has them, else from the
-page-header or page-footer text (a number counts only when at least two pages agree on the
-same offset from the PDF page). When neither exists, `printed_page` is the PDF page and
-`printed_page_fallback` is `true`. Page headers and footers never appear in chunk text.
-
-Each table becomes its own chunk of kind `table` (see "Table chunks" below).
-
-The command also looks each PDF up on wri.org (it needs internet access). It finds the document's own WRI DOI in its suggested-citation block and resolves
-`doi.org/<doi>`; with no DOI, or a DOI whose page has a different title, it matches the PDF
-title against the wri.org sitemap. A page is used only if it answers 200 and its title
-matches. From that page the WRI type, authors, publication date (`wri_published`), tags and
-topic are read. The topic is `wri_topic` mapped onto the 11 topics, else the first tag that
-is one of them, else empty (never an error). The topic, year, type, tags and link are copied
-onto every chunk record (and its sidecar) next to `label_source`.
-`chunks/catalog.json` holds one row per document with its labels, link, DOI and label source.
-
-When the title from the PDF's metadata finds no page (it is often "HIGHLIGHTS" or a file
-name), the lookup is retried with the title quoted in the suggested-citation block.
-
-Where wri.org has no labels, the `labeler` model (see Models) fills them in. It reads only the
-first pages as text and returns structured output, with the topic limited to the 11 topics or
-`none` (any other value fails the document). It never overwrites a label wri.org has.
-
-- **No page:** the model gives the title, date, document type, topic, countries and a short
-  summary; an RFP also gets its `deadline` (its country is in `countries`). `label_source` is
-  `model`.
-- **Page without a usable topic:** the model gives only the topic. `label_source` stays
-  `wri.org`, and the catalog's `topic_source` is `model`.
-
-### Richer labels
-
-Every document also gets the labels below, so vague questions ("trends in ocean renewable
-energy published in 2025") can match it. They are columns of `documents` (and `role` of
-`chunks`) and fields of the catalog row; see [docs/richer-metadata.md](docs/richer-metadata.md)
-for how to check them.
-
-- **By rule, no model:**
-  - `year` is the publication date's year, else the corpus folder's (`2025/report.pdf`);
-    `date_source` is `wri.org`, `model` or `folder`.
-  - From the wri.org page: `abstract` (its description) and the `initiatives` and `programs`
-    of its "This Working Paper is part of ... within ..." line.
-  - WRI's tags are sorted into `topics` (the 11) and `concepts`, a controlled vocabulary in
-    `askwri/ingest/vocabulary.py`, matched ignoring case. `tags` keeps the originals.
-  - `acronyms` the text defines, e.g. `OSW = Offshore wind`.
-  - A chunk under a References, Notes, Contents, Acknowledgements, About or Abbreviations
-    heading gets a `role`; search skips those chunks.
-- **One `labeler` call per document** (after the audit passes): more `topics` and `concepts`,
-  `keywords`, `countries`, `regions`, 3 to 5 `key_findings`, a `genre` and the years its data
-  covers (`coverage_start`, `coverage_end`). They are added after WRI's labels and never
-  replace them. A topic, concept, region or genre outside its list raises an error naming the
-  document (structured output makes this unlikely).
-- **What search embeds:** each chunk's embedded text has a context line after its address
-  with the document's year, topics, concepts, initiatives and places. Each document has a card
-  (title, abstract or summary, labels, key findings) stored as `card_embedding` and, with the
-  acronyms, as the keyword index `doc_tsv`. Key findings and cards are model-written:
-  searchable, never quoted.
-
-The Bedrock client is created the first time a document needs the model. Every document that
-passes the audit gets the enrichment call, so a run needs Bedrock access to the `labeler`
-model and a region (`AWS_DEFAULT_REGION`, see Models). A refused or failed model call fails that document with an error naming it.
-
-### Table chunks
-
-- **What is in one:** the caption, the Markdown rows, and the `Notes:` and `Sources:` lines
-  under the table, as the chunk's `text`. The caption is the nearest `Table N` heading or
-  caption region on the page, above the table or (if it is much nearer) below it; it does not
-  have to be the next region, and it never becomes a section heading. `number` is the table
-  number ("Table 2", "Table A-1"); it is empty when the caption has none.
-- **Large tables:** a table over 2,000 characters is cut by rows into pieces that each repeat
-  the caption and the header row. Notes go on the last piece. A row is never cut.
-- **Continued tables:** a table whose number repeats on the same or the next page (for
-  example "Table 3 (cont.)") is a continuation. Every later piece, including row pieces,
-  has `table_first_chunk`, the `chunk_id` of the first piece; each piece keeps its own page.
-- **Not a table:** a grid with no caption and no numbers (a grid of names), a contents list
-  with dot leaders, or a table whose cell words the layout model got wrong stays a text
-  chunk.
-- **Description:** the `labeler` model writes one or two sentences per table chunk, stored in
-  the chunk's `description`. It is embedded and searched with the chunk (`indexed_text`) but
-  is not in `text`, so it is never quoted. Documents that fail the audit get no model calls;
-  a model refusal or error fails the document.
-- **Quotable:** the audit checks each row of a table on its own (a text layer often reads a
-  table column by column, so no whole table is one run of text).
-
-## Evaluate search
-
-```sh
-uv run python -m evals.run baseline     # label each search version you try
-```
-
-Runs the questions in `evals/questions.json` through `search_passages()` as a user would type
-them, has the `answerer` model rate every returned passage (helps, related or no), and prints
-per-question and total scores. Ratings are cached in `.cache/eval/judge/` and runs saved in
-`.cache/eval/runs/<label>.json` (git-ignored); "coverage" compares a run with every saved run.
-Needs AWS credentials. The baseline is in [docs/tasks/retrieval-eval.md](docs/tasks/retrieval-eval.md).
-
-### Experiments beside the demo data
-
-Two environment variables point a run elsewhere without touching the `askwri` database:
-
-- `ASKWRI_DATABASE` (default `askwri`): the database in `askwri-db` that the loader, search,
-  `db/apply_schema.py` and `db/query.py` use. Create one first with
-  `uv run python db/query.py "CREATE DATABASE <name>"`, then apply the schema with the variable set.
-- `ASKWRI_CHUNK_CHARS` (default `400-2000`): the chunk size band, in characters.
-
-For example, the bigger-chunk experiment: `ASKWRI_DATABASE=askwri_big ASKWRI_CHUNK_CHARS=1000-4000
-uv run python -m askwri.ingest.load 2024_publications 2025_publications 2026_publications`, then
-`ASKWRI_DATABASE=askwri_big uv run python -m evals.run big-chunks`.
-
-## Load the corpus into Aurora
-
-One command runs the whole ingestion pipeline against the team sandbox:
-
-```sh
-scripts/run-pipeline.sh 2024 2025 2026            # one corpus folder per publication year
-scripts/run-pipeline.sh --reload 2024 2025 2026   # after an ingestion change: reload everything
-```
-
-- **First run:** if the Aurora cluster `askwri-db` or the corpus bucket is missing, it creates
-  the Terraform state bucket and runs `terraform apply` in `infra/` (no prompt). It uses
-  `TF_VAR_team` (default `DefinitelyNotAI`), `TF_VAR_owner` (default your git email) and
-  `TF_VAR_db_min_capacity` (default 0.5).
-- **Every run:** applies `db/schema.sql` (safe to rerun), then `python -m askwri.ingest.load`:
-  sort the corpus, ingest each kept PDF, upload it to `s3://$CORPUS_BUCKET/raw/<doc_id>.pdf`,
-  embed its chunks with Cohere Embed v4 and replace the document's rows in `documents` and
-  `chunks` in one transaction. Each informative chart, map or image is rendered to a PNG,
-  described by the `vision` model, and uploaded to `s3://$CORPUS_BUCKET/figures/<chunk id>.png`
-  (`#` becomes `-`); the line for each document counts its pictures small, scanned, decorative
-  and described.
-- **Reruns** skip documents already loaded with the same file hash and a document card, so
-  rerunning after an interruption resumes; `--reload` loads them again, which a change to
-  ingestion needs. A document whose audit fails, whose model call is refused or whose label
-  is off-list is reported as `SKIPPED` and not written (its earlier rows stay).
-- **Saved model work:** every finished Haiku reply is kept in `.cache/ingest/model-calls/`
-  (git-ignored) and replayed when the same request comes again, so a rerun or `--reload`
-  pays only for calls it has never made. Each loaded document's labels and table
-  descriptions are also written to `.cache/ingest/documents/<doc_id>.json`.
-- **Folder names** start with the publication year (`2025` or `2025_publications`): an
-  undated document takes its folder's year.
-- Needs AWS credentials in the environment. `CORPUS_BUCKET` is set by the script.
-
-## Search the index
-
-`askwri.search.search_passages(question, *, year_from, year_to, topic, doc_type, country)` is
-what the answering agent calls. It embeds the question with Cohere Embed v4, runs one SQL
-statement over `chunks` through the RDS Data API (pgvector cosine search and full-text search
-fused by reciprocal rank fusion, filters applied in the same statement, HNSW iterative scans
-on, at most 6 chunks per document), reranks the top 25 with Amazon Rerank 1.0 (reading each
-candidate's title and section before its text) and returns at
-most 10 passages with their citation fields and rerank `score`. With no year filter given, a
-question that names its publication years ("published in 2025", "published since 2024")
-is filtered to them. Fewer matches return fewer
-results, and none returns an empty list. Chunks with a `role` (references, notes,
-contents...) are never returned. Every hit carries its previous and next chunk of the same
-section as `neighbours`, for the answering model to read the passage in context.
-
-```sh
-uv run python -m askwri.search "Which countries had the highest deforestation?" --topic Forests --year-from 2024
-```
-
-Options: `--topic`, `--year-from`, `--year-to`, `--doc-type`, `--country`. Needs AWS
-credentials and region in the environment. The first query after Aurora auto-pauses can take
-30 seconds or more; the clients wait up to 90 seconds.
-
-## Query Aurora by hand
-
-```sh
-uv run python db/query.py "SELECT count(*) FROM documents"   # rows printed as JSON
-```
-
-Runs one SQL statement on `askwri-db` through the RDS Data API as the master user. It reads
-`AWS_DEFAULT_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and `AWS_SESSION_TOKEN`
-from `.env` in the repo root. See [docs/query-aurora.md](docs/query-aurora.md).
-
-## Models
-
-Every model call picks its model by role from the registry in `askwri/models.py`, so swapping
-a model is a one-line change:
-
-| Role | Model ID |
+| Feature | What it means for the reader |
 |---|---|
-| `vision`, `answerer` | `global.anthropic.claude-sonnet-5-5` |
-| `labeler` | `global.anthropic.claude-haiku-5-5` |
-| `embedder` | `us.cohere.embed-v4:0` (Cohere Embed v4, 1,024 dimensions) |
-| `reranker` | `amazon.rerank-v1:0` |
+| **Cited answers** | Every sentence is cited to a WRI publication and page. One click opens the PDF at that page with the passage highlighted. |
+| **Checked before it's shown** | Each claim is checked against its passage, then by Bedrock Guardrails' grounding check. Unsupported sentences are removed. |
+| **Honest "no answer"** | When the evidence isn't there, it declines and shows what it searched and the closest WRI work. |
+| **Written for the reader** | It works out who is asking (researcher, policymaker, partnerships) and writes in the right form. |
+| **Deep research and briefings** | Splits a topic into sub-questions searched in parallel and writes a structured report: summary, issue brief, evidence matrix and more. |
+| **Fact-check a draft** | Paste a draft; each claim comes back supported, contradicted or not found in WRI's research, with the source. |
+| **Search inside charts and maps** | Every informative chart, map and table was described when loaded, so you can find what a figure shows. |
+| **How the research connects** | A citation map of which WRI report builds on, uses or updates which, with the citing sentence. Key figures quoted word for word. |
+| **Spaces and filters** | WRI's 11 topics as spaces in the sidebar; filters for region, year and publication type. |
+| **Research lens** | State your goal and the topics to compare; every paper gets a focused summary for each. |
+| **Languages** | Ask and get answers in Spanish, Portuguese or Bahasa Indonesia; sources stay in the original so citations stay exact. |
+| **Follow-ups** | "Make it shorter", "now in Spanish", "turn it into talking points": the chat remembers. |
+| **Admin page** | Quality scorecard from the evaluation run, model-graded scores, live cost, latency and declines, and a review view for any question. |
+| **Sign-in** | Invite-only Amazon Cognito accounts; an admin group for the admin page. |
 
-Region is **us-west-2**: set `AWS_DEFAULT_REGION=us-west-2` (or `AWS_REGION`). Claude is
-called through the Anthropic SDK's `AnthropicBedrock` client on the `bedrock-runtime`
-endpoint, signed (SigV4) with credentials from the standard AWS chain: environment
-variables, `AWS_PROFILE`, or the task role. (The newer `bedrock-mantle` endpoint and
-`AnthropicBedrockMantle` client are not used: AWS lists these two models on Mantle only in
-GovCloud.) Calls need Bedrock model access for both Claude models in the account.
+## How it works
 
-```sh
-uv run python -m askwri.models smoke   # one tiny call per Claude role: PASS or the exact error
+```mermaid
+flowchart LR
+  U[Browser<br/>Next.js on S3 + CloudFront] -->|Cognito token| API[askwri-api<br/>Lambda Function URL, streaming]
+  API --> RT[AgentCore Runtime<br/>askwri_agent]
+  RT <--> MEM[AgentCore Memory]
+  RT -->|MCP| GW[AgentCore Gateway]
+  GW --> T[Tool Lambdas<br/>search · passage · authors<br/>coverage · links · translate]
+  T --> DB[(Aurora PostgreSQL<br/>+ pgvector)]
+  T --> RR[Amazon Rerank<br/>Cohere Embed v4]
+  RT --> LLM[Claude Sonnet and Haiku<br/>on Bedrock]
+  RT --> GR[Bedrock Guardrails<br/>grounding check]
+  API --> LOG[(DynamoDB<br/>query log)]
+  RT --> OBS[AgentCore Observability<br/>+ Evaluations]
+  PDF[(S3: PDFs and figures)] --- DB
 ```
 
-The smoke test sends an image to `vision`, asks `labeler` for structured (JSON Schema)
-output, and asks `answerer` a plain question. In code, use `call_claude` (text) or
-`call_claude_json` (structured). Both take the client as their first argument, so tests pass
-`tests/fake_claude.FakeClaude` and never touch the network. A refusal, a truncated reply or
-an API error raises `ModelError` naming the document.
+1. **Ingestion** (one resumable command): sort the PDFs, read them with a layout-aware parser,
+   cut passages with PDF and printed page numbers, describe charts and maps with a vision model,
+   audit every passage against the PDF text, label each document from wri.org (else a small
+   model), embed with Cohere Embed v4, and load each document into Aurora in one transaction.
+2. **Search** (a tool behind AgentCore Gateway): vector and keyword search fused by reciprocal
+   rank fusion, filters, at most 6 passages per document, supporting material (references,
+   contents) skipped, best 30 reranked by Amazon Rerank.
+3. **Agent** (AgentCore Runtime): plans the searches, retries or widens when evidence is weak,
+   drafts with Claude Sonnet 5.5 citing passages, verifies every claim twice, declines when
+   nothing survives, translates when asked. Steps stream to the browser.
+4. **Evaluation**: a 30-question test set scored on every release, plus AgentCore Evaluations'
+   built-in judges (LLM-as-a-judge) on the same traces and on live traffic.
 
-## Ask a question
+## Results
 
-Quick answer (`askwri/answer/`) plans 1 or 2 English search queries with `labeler`,
-searches up to two rounds, drafts 2 to 6 cited sentences with `answerer`, and checks every
-sentence before it is shown. A sentence is dropped when it has no source, quotes words its
-cited passage doesn't contain (or a passage marked not quotable), states a number its
-passages don't, or fails the Bedrock Guardrails grounding check. When nothing was found, the
-evidence is weak, the passages don't answer the question, or fewer than half the claims
-survive, the answer is a decline that lists what was searched and the closest WRI work.
+Evaluation run `20261105-050756`, 30 questions, on the full library:
 
-Filters set in the request always apply. Filters read from the question ("since 2025") are
-dropped if the first search finds nothing strong enough, and the retry's progress step names
-them ("4 passages, without Since 2025").
-
-```sh
-uv run python -m askwri.answer "How fast is solar power growing?"          # search the index (#19)
-uv run python -m askwri.answer "How fast is solar power growing?" --passages passages.json
-```
-
-Each event prints as one JSON line, ending with one `answer`, `decline` or `error`.
-`--passages` takes a JSON list of search results with the C1 attribute names from issue #38
-(`chunk_id`, `doc_id`, `text`, `quotable`, `score` and the other citation fields); every
-search returns them, which is useful before #19 merges and for tuning thresholds on fixed
-evidence.
-
-The AgentCore Runtime entrypoint serves the same run as server-sent events on port 8080:
-
-```sh
-uv run python askwri/answer/app.py
-curl -N localhost:8080/invocations -d '{"action": "ask", "question": "How fast is solar power growing?", "mode": "quick", "language": "en", "audience": "researcher", "format": "summary", "filters": {}, "sessionId": "local-test-session-0123456789abcdef"}'
-```
-
-| Variable | Default | Meaning |
+| Measure | Result | Target |
 |---|---|---|
-| `ASKWRI_DECLINE_SCORE` | `0.3` | A best rerank score below this is weak evidence: retry, then decline. |
-| `ASKWRI_GUARDRAIL_ID`, `ASKWRI_GUARDRAIL_VERSION` | unset | The guardrail for the grounding check. Unset skips the check, and the answer says `groundingCheck: "skipped"`. |
-| `ASKWRI_GROUNDING_THRESHOLD` | `0.7` | A sentence whose grounding score is below this is dropped. |
+| Answers with every figure cited | 100% | 100% |
+| Expected report among the first 5 cited (recall@5) | 92% | ≥ 75% |
+| Out-of-scope questions declined | 3 of 3 | all |
+| Claims kept after verification | 90% | — |
+| Reader inferred correctly | 96% | — |
+| AgentCore judges: relevance · correctness · faithfulness | 0.97 · 0.88 · 0.82 | — |
+| Median time to a cited answer, Quick · Deep | ~20 s · ~25 s | < 60 s |
+| Cost per answer | about $0.05 | — |
 
-The grounding check makes one `ApplyGuardrail` call on `bedrock-runtime` per sentence, at
-most 4 at a time, so the caller needs `bedrock:ApplyGuardrail` on that guardrail. Dropped
-sentences and each check's latency are logged, never shown.
+Library: 580 WRI publications (2014–2026) from 727 PDFs; 28,104 passages, 3,463 tables, 2,289
+charts, maps and images described; 2,824 citation links between reports. How these were
+measured, and their limits, are in [docs/PROJECT-OVERVIEW.md](docs/PROJECT-OVERVIEW.md#results-and-how-we-measured-them).
 
-## Deploy to AWS
+## Run it
 
-Everything deploys with Terraform into **one team sandbox account** in us-west-2, following
-[the solution design](docs/askwri-solution-design.md) ("AWS deployment layout"). Teammates'
-sandboxes are for local experiments only: Terraform refuses any account other than
-`TF_VAR_team_account_id`. Needs Terraform 1.11+ (`brew install hashicorp/tap/terraform`).
+**Use the hosted app:** ask an admin for an account, then open the live link above.
 
-```sh
-export AWS_PROFILE=<team sandbox profile> AWS_REGION=us-west-2
-export TF_VAR_team_account_id=$(aws sts get-caller-identity --query Account --output text)
-
-infra/bootstrap/create-state-bucket.sh        # once: S3 state bucket, writes infra/backend.hcl
-cp infra/terraform.tfvars.example infra/terraform.tfvars   # once: set the Team and Owner tags
-infra/build/tools.sh                          # package the tool Lambdas into build/tools.zip
-infra/build/agent.sh                          # package the agent for AgentCore Runtime (build/agent.zip)
-cd infra && terraform init -backend-config=backend.hcl
-terraform plan -out=plan.tfplan && terraform apply plan.tfplan
-cd .. && uv run python db/apply_schema.py     # tables, indexes and database users
-```
-
-**Load documents.** The ingestion pipeline loads the corpus (see "Load the corpus into
-Aurora" above). In the team account, run its loader directly rather than
-`scripts/run-pipeline.sh`, which runs `terraform apply` without a plan when it thinks
-resources are missing:
+**Run the UI locally against the deployed API** (Node 22+):
 
 ```sh
-uv run python db/apply_schema.py
-CORPUS_BUCKET=askwri-corpus-<account id> uv run python -m askwri.ingest.load <pdf folders>
+cd web && npm install
+# web/.env.local: NEXT_PUBLIC_ASKWRI_API_URL and NEXT_PUBLIC_ASKWRI_API_KEY (see docs/developer-reference.md)
+npm run dev            # http://localhost:3000 (without the URL it uses a built-in mock)
 ```
 
-The agent's tools read the pipeline's tables through two views in `db/schema.sql`
-(`documents_v`, `chunks_v`) that add the page, the "title › section" address, the publication
-type (from the WRI DOI, else the sorter's type) and the date confidence. Questions are embedded
-with Cohere Embed v4 (`ASKWRI_EMBEDDING_MODEL=us.cohere.embed-v4:0`), as the pipeline embeds
-passages.
-
-**Link documents.** After loading, rebuild the citation links between documents (a document's
-DOI, wri.org address or title found in another's text, with the sentence, page and a relation
-label from the small model). They feed the `links` tool and the citation flow visual.
+**Ask the agent from a terminal** (Python 3.12 with `uv`, AWS credentials for the account):
 
 ```sh
-ASKWRI_SMALL_MODEL=global.anthropic.claude-haiku-4-5-20251001-v1:0 uv run python -m askwri.links
+uv sync
+uv run python -m askwri.agent.ask "How do cities protect people from extreme heat?"   # --deep, --language es
 ```
 
-**Ask the agent.** `uv run python -m askwri.agent.ask "How do cities protect people from extreme heat?"`
-prints its progress and the cited answer (`--deep` for Deep research, `--language es` for a
-translated answer, `--session <id>` to ask a follow-up such as "now in Spanish"). To run the
-agent on your machine instead, start `uv run python -m askwri.agent` with the `ASKWRI_*`
-variables the runtime gets (see `infra/modules/agent/main.tf`) and add `--local`.
-
-`ASKWRI_EMBEDDING_MODEL` must be the same model as Terraform's `embedding_model_id`. Model IDs
-are Terraform variables (`embedding_model_id`, `rerank_model_id`, `small_model_id`,
-`large_model_id`), never
-constants in code; the Lambdas get them as environment variables.
-
-`backend.hcl` and `terraform.tfvars` hold account-specific values and are gitignored; never
-commit the account ID or ARNs. Sandbox credentials expire: on `ExpiredToken`, refresh them
-before planning again.
-
-`db/apply_schema.py` uses the RDS Data API, so it also runs from CloudShell without VPC access.
-It is safe to rerun.
-
-| Resource | Name | Notes |
-|---|---|---|
-| VPC | `askwri-vpc` (10.20.0.0/16) | Private subnets `askwri-app-a/b` and `askwri-db-a/b`; no internet route, no NAT |
-| VPC endpoints | `askwri-vpce-*` | S3 (gateway), bedrock-runtime, bedrock-agent-runtime, secretsmanager, logs |
-| Security groups | `askwri-sg-lambda`, `askwri-sg-db`, `askwri-sg-endpoints` | Only Lambda to Aurora (5432) and Lambda to endpoints/S3 (443) |
-| Corpus bucket | `askwri-corpus-<account-id>` | `raw/` PDFs, `figures/` PNGs, `text/`, `eval/`; private, encrypted, TLS only; objects readable only by the deploy role and the askwri-* roles |
-| Database | `askwri-db` | Aurora PostgreSQL 18 Serverless v2 with pgvector; Data API on; pauses after an hour idle (resume takes 15 s or more; set `db_min_capacity = 0.5` for demos) |
-| Secret | `askwri/db` | Master credentials, used only by the Data API. Lambdas sign in with IAM database auth as `askwri_ingest` or `askwri_tools` |
-| Tool Lambdas | `askwri-tool-search`, `-passage`, `-coverage`, `-authors`, `-translate` | In the app subnets; role `askwri-tools-role` (database as `askwri_tools`, the embedding, rerank and small models). Search is hybrid: pgvector + full text, fused, then reranked |
-| Gateway | `askwri-gateway` | AgentCore Gateway: the six tools over MCP (search, get_passage, coverage, authors, translate, links). Callers need a token from Cognito `askwri-auth` (client `askwri-gateway-client`, credentials in secret `askwri/gateway-client`); the gateway invokes the tools as `askwri-gateway-role` |
-| Agent | `askwri_agent` (AgentCore Runtime) | One agent, deployed as a code package from `askwri-artifacts-<account-id>` (no Docker). Role `askwri-agent-role`; memory `askwri_memory` (7-day session events); guardrail `askwri-guardrail` (contextual grounding). Runtime and memory names use `_` because they can't contain `-` |
-| Tracing | CloudWatch Transaction Search | Account-wide: X-Ray sends spans to CloudWatch Logs, so agent traces appear under CloudWatch GenAI Observability |
-| Resource group | `askwri-rg` | Lists every resource tagged `Project = AskWRI` |
-
-Interface endpoints and Aurora bill by the hour. After the event, tear everything down with
-`cd infra && terraform destroy`, then check that `askwri-rg` is empty.
-
-## Chat UI (`web/`)
-
-A Next.js app built from the AskWRI design system (WRI Design System colors and spacing): one
-search box with a Deep research toggle, answers with `[n]` citation markers, source cards, a
-side panel with the report or the source at its cited page, and the helpful decline. It builds
-to static files for S3 + CloudFront. Needs Node 22+.
+**Tests:**
 
 ```sh
-cd web
-npm install
-npm run dev        # http://localhost:3000
-npm test           # citation, export and mock-data checks (Node's built-in test runner)
-npm run lint       # type check
-npm run build      # static site in web/out/
+uv run pytest                        # Python: ingestion, search, citations, agent, API
+cd web && npm test && npm run lint   # UI logic and type check
 ```
 
-**Mock agent.** Until the API exists (runbook phase 5), the UI talks to a mock in
-`web/src/mock/` and shows a "Mock data" badge. Its titles, authors and figures are
-placeholders, not real WRI publications. Questions about transport (buses, transit, BRT) get a
-cited answer, or a streamed report with Deep research on; anything else gets the decline;
-"Now make it in Spanish" after a report reuses it, machine-translated. Everything goes through
-the contract in `web/src/lib/agent.ts`.
+**Deploy everything:** [docs/REPRODUCE.md](docs/REPRODUCE.md), step by step.
 
-**Real agent.** Put the API's URL and key in `web/.env.local` (gitignored) and restart
-`npm run dev`; the "Mock data" badge disappears:
+## Repository layout
 
-```sh
-NEXT_PUBLIC_ASKWRI_API_URL=<terraform output api_url>
-NEXT_PUBLIC_ASKWRI_API_KEY=<value of the askwri/api-key secret>
+```
+askwri/ingest/     ingestion pipeline: sort, parse, chunk, audit, labels, figures, embed, load
+askwri/tools/      tool Lambdas behind AgentCore Gateway (search, passage, authors, coverage, links, translate)
+askwri/agent/      the agent on AgentCore Runtime: loop, citations and verification, fact-check, lens, visuals, memory
+askwri/api/        the HTTP API Lambda: streaming chat, sign-in checks, PDF links, admin endpoints
+askwri/answer/     the first stand-alone Quick answer (kept for reference; the agent replaced it)
+askwri/links.py    citation links between documents     askwri/spaces.py  topic counts for the sidebar
+db/                schema.sql and helpers (applied through the RDS Data API)
+eval/              30-question test set and the end-to-end evaluation runner (+ AgentCore judges)
+evals/             search-only evaluation (passage relevance graded by a model)
+infra/             Terraform: network, storage, database, tools, gateway, agent, api, users, web, evaluation
+web/               Next.js UI: chat, side panel, visuals, admin page
+scripts/           deploy-web.sh, record_demo_chats.py, setup.sh
+docs/              overview, reproduce, handoff, design, developer reference, demo scripts, task notes
+tests/             Python tests
 ```
 
-Get them with `terraform -chdir=infra output -raw api_url` and
-`aws secretsmanager get-secret-value --secret-id askwri/api-key --query SecretString --output text`.
-The API allows browser calls from `http://localhost:3000` (Terraform `allowed_origins`) and from
-the hosted UI's CloudFront origin.
-Without the URL the UI uses the mock; delete `web/src/mock/` when it is no longer wanted.
+## Documentation
 
-**Hosted UI.** Terraform's `web` module serves the static build from the private bucket
-`askwri-web-<account-id>` through CloudFront (Origin Access Control, HTTPS only, managed
-security headers). After `terraform apply`, publish a build with:
+| Document | For |
+|---|---|
+| [USER-GUIDE.md](USER-GUIDE.md) | Anyone using AskWRI |
+| [docs/PROJECT-OVERVIEW.md](docs/PROJECT-OVERVIEW.md) | What we built, the strategies and decisions, results, lessons |
+| [docs/REPRODUCE.md](docs/REPRODUCE.md) | Deploying the whole system from an empty AWS account |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | Current state, known issues and next steps |
+| [docs/developer-reference.md](docs/developer-reference.md) | Every module, command and setting in detail |
+| [docs/askwri-solution-design.md](docs/askwri-solution-design.md) | The original solution design |
+| [docs/ingestion-architecture.md](docs/ingestion-architecture.md), [docs/richer-metadata.md](docs/richer-metadata.md) | Ingestion and labels |
+| [docs/evaluation-spec.md](docs/evaluation-spec.md) | How quality is evaluated |
+| [docs/ui-handoff.md](docs/ui-handoff.md) | UI behaviour each feature must keep |
+| [docs/data-and-qa.txt](docs/data-and-qa.txt), [docs/demo-final-script.txt](docs/demo-final-script.txt) | Data summary, Q&A prep, demo script |
+| [docs/tasks/](docs/tasks/) | One file per task: goal, decisions, handoff notes |
+| [AGENTS.md](AGENTS.md) | Rules for contributors and AI coding tools |
 
-```sh
-AWS_PROFILE=<team profile> scripts/deploy-web.sh   # prints the URL (terraform output web_url)
-```
+## Contributing
 
-**Sign-in.** The hosted UI is invite-only: people sign in on Cognito's managed login page
-(user pool `askwri-users`, authorization code with PKCE) and the UI sends their access token to
-askwri-api, which checks it with Cognito. The shared API key is no longer in the bundle; servers
-(the evaluation runner) still send it. Add a person, and make them an admin:
-
-```sh
-POOL=$(terraform -chdir=infra output -raw user_pool_id)
-aws cognito-idp admin-create-user --user-pool-id "$POOL" --username person@example.org \
-  --user-attributes Name=email,Value=person@example.org Name=email_verified,Value=true
-aws cognito-idp admin-add-user-to-group --user-pool-id "$POOL" --username person@example.org \
-  --group-name askwri-admins   # admins only
-```
-
-Cognito emails a temporary password; the first sign-in sets a new one. Locally (`npm run dev`)
-there is no sign-in: without `NEXT_PUBLIC_ASKWRI_AUTH_DOMAIN` the UI sends
-`NEXT_PUBLIC_ASKWRI_API_KEY` as before. The static files themselves are public; every answer,
-PDF link and admin number needs a signed-in user.
-
-**Admin page (`/admin/`).** The latest evaluation run next to live numbers: what WRI asked us
-to show (claims cited, recall@5, precision@5, unanswerable questions declined, time to a
-useful source), what questions cost (estimated from tokens), and whether quality holds. The API
-logs every question to the DynamoDB table `askwri-query-log` (kept 90 days) and serves
-`GET /admin/overview?source=user|eval&window=24h|7d|30d` and `GET /admin/review?id=<id>`.
-Only members of the `askwri-admins` group can open it. Set
-`NEXT_PUBLIC_TRACE_URL_TEMPLATE` (with `{session}`) to link each question to its trace.
-
-## The rules
-
-- `main` is protected, so every change goes in through a pull request.
-- Write only the code the task needs. `review` flags anything extra.
-- Commits that contain secrets are blocked.
-- Your own AI tool settings stay on your machine (git ignores them).
-
-The full rules for people and agents are in [AGENTS.md](AGENTS.md).
-
-## FAQ
-
-**`/setup` shows FAIL lines.**
-Each FAIL line prints its fix. Your AI runs the fixes it can. Logins you have to run
-yourself (in Claude Code, type the command with a `!` in front, e.g.
-`! gh auth refresh --scopes repo,workflow`). Then run `/setup` again.
-
-**Push fails with "Permission denied" or 403.**
-You aren't a collaborator yet. Send your GitHub username to the repo owner (jayparmar16).
-
-**Push to `main` fails with "protected branch".**
-That's expected: work goes on a branch. Move your commits to a new branch, then reset your
-local `main`:
-`git switch -c my-task && git branch -f main origin/main`
-
-**How do I see who's working on what?**
-Each open draft PR is a task someone has claimed. Run `gh pr list` or open the Pull
-requests tab.
-
-**How do I take over a task someone handed off?**
-Run `/claim-task` and name the PR. Their notes are under "Handoff" in
-`docs/tasks/<branch>.md`.
-
-**My commit was blocked by "Detect hardcoded secrets".**
-Take the secret out of the file. Put it in `.env` (ignored by git) or your AWS profile, then
-commit again. If it was already pushed, rotate it. Don't use `--no-verify`.
-
-**My commit failed with "files were modified by this hook".**
-ruff fixed the formatting for you. Run `git add` on those files and commit again.
-
-**"check for added large files" failed.**
-Documents and data go in S3, not git.
-
-**`/create-pr` stopped because review found "hard" issues.**
-Ask your AI to fix them, then run `/create-pr` again. If you think a finding is wrong, say
-why and tell it to go ahead.
-
-**`main` changed while I was working.**
-`/create-pr` merges the latest `main` into your branch. If there are conflicts, it works
-through them with you.
-
-**How does my PR get merged?**
-A teammate (or you) reads it on GitHub and clicks Merge. AI agents never merge.
-
-**Can I change my own Claude or Codex settings, MCP servers, or add personal skills?**
-Yes. Put them in `CLAUDE.local.md`, `AGENTS.override.md`, `.claude/settings*.json`,
-`.mcp.json`, `.codex/`, or your home folder (`~/.claude`, `~/.codex`). Git ignores all of
-these. Changes to the shared skills or `AGENTS.md` go through a PR.
-
-**AWS says "Unable to locate credentials" or "ExpiredToken".**
-Sandbox credentials expire. Run `aws sso login`, or export fresh sandbox credentials, then
-run `/setup` again.
-
-**Bedrock says a model isn't available in my region.**
-Use the model's cross-region inference profile ID (it starts with `us.`, `eu.` or
-`global.`) instead of the plain model ID.
-
-**I'm on Windows and the skills don't show up in Claude Code.**
-`.claude/skills` is a symlink, which Windows only creates if Developer Mode is on. Turn on
-Developer Mode, run `git config --global core.symlinks true`, and clone again. Or use WSL.
+Work goes on a branch and into `main` through a pull request; secrets are blocked by a commit
+hook. The team workflow (Claude Code or Codex skills `setup`, `claim-task`, `handoff`, `review`,
+`create-pr`) and the code rules are in [AGENTS.md](AGENTS.md). Troubleshooting:
+[docs/developer-reference.md](docs/developer-reference.md#faq).
